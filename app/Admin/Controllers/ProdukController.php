@@ -22,6 +22,74 @@ use function Termwind\style;
 
 class ProdukController extends Controller
 {
+    public function createProdukForm($request)
+    {
+        $form = new Form(new Produk);
+        $form->builder()->setTitle('Tambah Produk')->setMode('edit');
+        $form->tab('Informasi Produk', function (Form $form) {
+            $form->text('nama', __('Nama produk'))->withoutIcon()->required();
+            $form->select('default_unit', 'Satuan')->required()->setWidth(4)->options((new Dynamic)->setTable('toko_griyanaura.lv_unit')->select('kode_unit as id', 'nama as text')->pluck('text', 'id')->toArray());
+            $form->ckeditor('deskripsi');
+            $form->switch('in_stok', 'Produk di-stok?')->states([
+                'on' => ['value' => 1, 'text' => 'Iya', 'color' => 'success'],
+                'off' => ['value' => 0, 'text' => 'Tidak', 'color' => 'danger']
+            ])->default(true);
+            // $form->html('<div>')->plain();
+            $form->html(function ($form) {
+                $form->
+            });
+            $form->select('produkattribut', 'Attribut Produk')->setGroupClass('col-lg-6')->options((new Dynamic())->setTable('toko_griyanaura.lv_attribut')->select('id_attribut as id', 'nama as text')->pluck('text', 'id')->toArray());
+            $form->select('produkattribut', 'Attribut Produk')->setGroupClass('col-lg-6')->options((new Dynamic())->setTable('toko_griyanaura.lv_attribut')->select('id_attribut as id', 'nama as text')->pluck('text', 'id')->toArray());
+            // $form->html('</div>')->plain(); 
+            $form->html('<button type="button">Generate</button>');
+            $form->divider();
+            $form->hasMany('produkVarian', '', function (NestedForm $form) {
+                $keyName = 'kode_produkvarian_new';
+                if ($form->model()) {
+                    $row = $form->model();
+                    $key = $form->getKey();
+                } else {
+                    $key = 'new___LA_KEY__';
+                }
+                $form->text('kode_produkvarian')->withoutIcon()->customFormat(function ($x) {
+                    return $x;
+                })->required()->setElementName("produkVarian[{$key}][{$keyName}]");
+                $form->currency('hargajual', 'Harga Jual')->symbol('Rp');
+                $form->currency('default_hargabeli', 'Harga Beli')->symbol('Rp');
+                $form->text('stok', 'Stok')->attribute('type', 'number')->attribute('step','.01')->style('min-width', '80px')->default(0)->withoutIcon()->disable();
+                $form->text('minstok', 'Min Stok')->attribute('type', 'number')->attribute('step','.01')->style('min-width', '80px')->default('0.00')->withoutIcon();
+            })->value([
+                [
+                    'kode_produkvarian' => ''
+                ]
+            ])->useTable();
+        })->tab('Akuntansi', function (Form $form) {
+            $form->select('default_akunpersediaan', __('Akun persediaan'))
+                ->required()
+                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('select2')
+                ->ajax(route(admin_get_route('ajax.akun')))
+                ->default('1301')
+                ;
+
+            $form->select('default_akunpemasukan', __('Akun pemasukan'))
+                ->required()
+                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('select2')
+                ->ajax(route(admin_get_route('ajax.akun')))
+                ->default('4001')
+                ;
+
+            $form->select('default_akunbiaya', __('Akun Biaya'))
+                ->required()
+                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('select2')
+                ->ajax(route(admin_get_route('ajax.akun')))
+                ->default('5002')
+                ;
+        });
+        return $form;
+    }
     public function editProdukForm($id, $request)
     {
         $form = new Form(new Produk);
@@ -29,6 +97,7 @@ class ProdukController extends Controller
         $form->builder()->setTitle($data->nama)->setMode('edit');
         $form->tab('Informasi Produk', function (Form $form) use ($data) {
             $form->text('nama', __('Nama produk'))->withoutIcon()->required()->value($data->nama);
+            $form->select('default_unit', 'Satuan')->required()->setWidth(4)->options((new Dynamic)->setTable('toko_griyanaura.lv_unit')->select('kode_unit as id', 'nama as text')->pluck('text', 'id')->toArray())->value($data->default_unit);
             $form->ckeditor('deskripsi')->value($data->deskripsi);
             $form->switch('in_stok', 'Produk di-stok?')->disable()->states([
                 'on' => ['value' => 1, 'text' => 'Iya', 'color' => 'success'],
@@ -75,7 +144,7 @@ class ProdukController extends Controller
                 if ($data->in_stok) {
                     $form->currency('default_hargabeli', 'Harga Beli')->symbol('Rp');
                     // $form->date('pertanggal', 'Per Tanggal');
-                    $form->text('stok', 'Stok')->attribute('type', 'number')->attribute('step','.01')->style('min-width', '80px')->withoutIcon()->disable();
+                    $form->text('stok', 'Stok')->attribute('type', 'number')->attribute('step','.01')->style('min-width', '80px')->default(0)->withoutIcon()->disable();
                     $form->text('minstok', 'Min Stok')->attribute('type', 'number')->attribute('step','.01')->style('min-width', '80px')->default('0.00')->withoutIcon();
                 }
             })->value($data->produkVarian->toArray())->useTable();
@@ -106,10 +175,9 @@ class ProdukController extends Controller
         });
         return $form;
     }
-    public function editProduk(Content $content, Request $request, $id)
-    {
+    public function createProduk(Content $content, Request $request) {
         $style = 
-<<<SCRIPT
+<<<STYLE
             .input-group { 
                 width: 100%; 
             }
@@ -132,7 +200,7 @@ class ProdukController extends Controller
                 background: white;
                 z-index: 10;
             }
-            [id^="has-many-"] .form-group {
+            [id^="has-many-"] .form-group:has(.add) {
                 width: 100%;
                 position: -webkit-sticky;
                 position: sticky;
@@ -140,7 +208,53 @@ class ProdukController extends Controller
                 background: white;
                 z-index: 10;
             }
+STYLE;
+        $selectScript =
+<<<SCRIPT
+            $('.has-many-produkVarian tbody tr:first-child td .remove').removeClass('remove').addClass('disabled remove-disabled');
 SCRIPT;
+        Admin::style($style);
+        Admin::script($selectScript);
+        return $content
+            ->title('Produk')
+            ->description('Tambah')
+            ->body($this->createProdukForm($request->all()));
+    }
+    public function editProduk(Content $content, Request $request, $id)
+    {
+        $style = 
+<<<STYLE
+            .input-group { 
+                width: 100%; 
+            }
+            [id^="has-many-"] {
+                position: relative;
+                overflow: auto;
+                white-space: nowrap;
+            }
+            [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0px;
+                background: white;
+                z-index: 20;
+            }
+            [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
+                position: -webkit-sticky;
+                position: sticky;
+                right: 0px;
+                background: white;
+                z-index: 10;
+            }
+            [id^="has-many-"] .form-group:has(.add) {
+                width: 100%;
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0px;
+                background: white;
+                z-index: 10;
+            }
+STYLE;
         $selectScript =
 <<<SCRIPT
             $('[varian-filter]').change(function () {
@@ -151,9 +265,15 @@ SCRIPT;
                 $('#has-many-produkVarian table tbody tr').each(function (k, tr) {
                     $(tr).addClass('d-none');
                 })
-                $('#has-many-produkVarian table tbody td select').each(function (k, select) {
-                    if (attrValFilter.includes(select.dataset.value)) {
-                        $(select).closest('tr').removeClass('d-none');
+                $('#has-many-produkVarian table tbody tr').each(function (k, row) {
+                    let cond = true;
+                    $(row).find('td select[varian]').each(function (i, select) {
+                        if (attrValFilter[i] != select.dataset.value && attrValFilter[i] != '' && select.dataset.value != '') {
+                            cond = false;
+                        } 
+                    });
+                    if (cond) {
+                        $(row).removeClass('d-none');
                     }
                 });
             });
