@@ -19,8 +19,10 @@
  */
 
 use App\Admin\Extensions\Form\CKEditor;
+use App\Admin\Extensions\Form\TableHasMany;
 use Encore\Admin\Form;
 
 Encore\Admin\Form::forget(['map', 'editor']);
 Encore\Admin\Admin::css(asset('/vendor/laravel-admin/bootstrap-utilities/bootstrap-utilities.min.css'));
 Form::extend('ckeditor', CKEditor::class);
+Form::extend('tablehasmany', TableHasMany::class);

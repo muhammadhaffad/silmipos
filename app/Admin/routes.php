@@ -26,6 +26,6 @@ Route::group([
     Route::post('/acdadc/{a}/cek', [CobaController::class, 'cobaHandle'])->name('test.handler');
     Route::prefix('ajax')->group(function () {
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');
-        Route::get('/attribut-value/{idAttribut}', [AjaxController::class, 'attributValue'])->name('ajax.attribut-value');
+        Route::get('/attribut-value/{idAttribut?}', [AjaxController::class, 'attributValue'])->name('ajax.attribut-value');
     });
 });
