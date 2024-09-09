@@ -20,7 +20,10 @@ class Produk extends Model
     public function produkAttribut()
     {
         return $this->hasMany(ProdukAttribut::class, 'id_produk', 'id_produk')
+            ->join('toko_griyanaura.ms_produkattributvarian as pav', 'toko_griyanaura.ms_produkattribut.id_produkattribut', 'pav.id_produkattribut')
             ->join('toko_griyanaura.lv_attribut as att', 'toko_griyanaura.ms_produkattribut.id_attribut', 'att.id_attribut')
+            ->join('toko_griyanaura.lv_attributvalue as attval', 'toko_griyanaura.ms_produkattributvarian.id_attributvalue', 'attval.id_attributvalue')
+            ->groupBy('toko_griyanaura.ms_produkattribut.id_produkattribut')
             ->select('toko_griyanaura.ms_produkattribut.*', 'att.nama');
     }
 

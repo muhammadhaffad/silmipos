@@ -29,7 +29,7 @@ class ProdukController extends Controller
         $form = new Form(new Produk);
         $data = $form->model()->with('produkAttribut', 'produkVarian')->find($id);
         $form->builder()->setResourceId($id);
-        $form->builder()->setMode('edit');
+        $form->builder()->setTitle($data->nama)->setMode('edit');
         $form->tools(function (Tools $tools) use ($id) {
             $tools->disableList();
             $tools->disableView();
@@ -46,12 +46,12 @@ class ProdukController extends Controller
             $footer->disableSubmit();
         });
         $form->tab('Produk', function (Form $form) use ($data) {
-            $form->display('SKU', __('SKU'))->setWidth(2)->value($data->produkVarian[0]->kode_produkvarian)->setView('admin.display');
-            $form->display('nama', __('Nama produk'))->value($data->nama)->setView('admin.display');
+            $form->display('SKU', __('SKU'))->setWidth(2)->value($data->produkVarian[0]->kode_produkvarian);
+            $form->display('nama', __('Nama produk'))->value($data->nama);
             $form->select('default_unit', 'Satuan')->setWidth(2)->options((new Dynamic)->setTable('toko_griyanaura.lv_unit')->select('kode_unit as id', 'nama as text')->pluck('text', 'id')->toArray())->disable()->value($data->default_unit);
-            $form->display('deskripsi')->attribute('style', 'height:300px;overflow:auto;')->value($data->deskripsi)->setView('admin.display');
-            $form->display('hargajual', 'Harga Jual')->attribute('align', 'right')->value('Rp ' . number_format($data->produkVarian[0]->hargajual))->setWidth(2)->setView('admin.display');
-            $form->display('hargabeli', 'Harga Beli')->attribute('align', 'right')->value('Rp ' . number_format($data->produkVarian[0]->default_hargabeli))->setWidth(2)->setView('admin.display');
+            $form->display('deskripsi')->attribute('style', 'height:300px;overflow:auto;')->value($data->deskripsi);
+            $form->display('hargajual', 'Harga Jual')->attribute('align', 'right')->value('Rp ' . number_format($data->produkVarian[0]->hargajual))->setWidth(2);
+            $form->display('hargabeli', 'Harga Beli')->attribute('align', 'right')->value('Rp ' . number_format($data->produkVarian[0]->default_hargabeli))->setWidth(2);
             $form->switch('in_stok', 'Produk di-stok?')->disable()->states([
                 'on' => ['value' => 1, 'text' => 'Iya', 'color' => 'success'],
                 'off' => ['value' => 0, 'text' => 'Tidak', 'color' => 'danger']
@@ -63,22 +63,22 @@ class ProdukController extends Controller
             }
             // $varianOptions = $data->produkVarian->pluck('varian', 'varian_id')->toArray();
             $form->tablehasmany('produkVarian', 'Varian', function (NestedForm $form) use ($data, $optionsVarian) {
-                $form->display('kode_produkvarian', 'SKU')->setView('admin.display');
+                $form->display('kode_produkvarian', 'SKU');
                 $form->display('varian', 'Varian')->customFormat(function ($value) {
                     return $value ?: '--Tidak ada--';
-                })->setView('admin.display');
+                });
                 $form->display('hargajual', 'Harga Jual')->attribute('align', 'right')->customFormat(function ($value) {
                     return 'Rp ' . number_format($value);
-                })->setView('admin.display');
+                });
                 $form->display('default_hargabeli', 'Harga Beli')->attribute('align', 'right')->customFormat(function ($value) {
                     return 'Rp ' . number_format($value);
-                })->setView('admin.display');
+                });
                 $form->display('stok', 'Stok')->customFormat(function ($value) {
                     return number_format($value);
-                })->setView('admin.display');
+                });
                 $form->display('minstok', 'Min. Stok')->customFormat(function ($value) {
                     return number_format($value);
-                })->setView('admin.display');
+                });
             })->disableCreate()->disableDelete()->value($data->produkVarian->toArray())->useTable();
         })->tab('Akunting', function (Form $form) use ($data) {
             $form->select('default_akunpersediaan', __('Akun persediaan'))
@@ -87,6 +87,7 @@ class ProdukController extends Controller
                 ->attribute('select2')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('1301')
+                ->disable()
                 ->value($data->default_akunpersediaan);
 
             $form->select('default_akunpemasukan', __('Akun pemasukan'))
@@ -95,6 +96,7 @@ class ProdukController extends Controller
                 ->attribute('select2')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('4001')
+                ->disable()
                 ->value($data->default_akunpemasukan);
 
             $form->select('default_akunbiaya', __('Akun Biaya'))
@@ -103,6 +105,7 @@ class ProdukController extends Controller
                 ->attribute('select2')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('5002')
+                ->disable()
                 ->value($data->default_akunbiaya);
         });
         return $form;
@@ -112,9 +115,9 @@ class ProdukController extends Controller
         $form = new Form(new Produk);
         $form->builder()->setTitle('Tambah Produk')->setMode('create');
         $form->tab('Produk', function (Form $form) {
-            $form->text('kode_produk', __('SKU'))->placeholder('[AUTO]')->withoutIcon()->setWidth(4);
+            $form->text('kode_produk', __('SKU'))->placeholder('[AUTO]')->withoutIcon()->setWidth(2);
             $form->text('nama', __('Nama produk'))->withoutIcon()->required();
-            $form->select('default_unit', 'Satuan')->required()->setWidth(4)->options((new Dynamic)->setTable('toko_griyanaura.lv_unit')->select('kode_unit as id', 'nama as text')->pluck('text', 'id')->toArray());
+            $form->select('default_unit', 'Satuan')->required()->setWidth(2)->options((new Dynamic)->setTable('toko_griyanaura.lv_unit')->select('kode_unit as id', 'nama as text')->pluck('text', 'id')->toArray());
             $form->ckeditor('deskripsi');
             $form->currency('hargajual', 'Harga jual')->symbol('Rp');
             $form->currency('default_hargabeli', 'Harga beli')->symbol('Rp');

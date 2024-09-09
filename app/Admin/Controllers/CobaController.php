@@ -6,6 +6,7 @@ use App\Admin\Actions\Table\InlineCancelEdit;
 use App\Admin\Actions\Table\InlineDelete;
 use App\Admin\Actions\Table\InlineEdit;
 use App\Admin\Actions\Table\InlineSave;
+use App\Models\Produk;
 use App\Models\ProdukVarian;
 use Encore\Admin\Actions\Action;
 use Encore\Admin\Actions\Response;
@@ -19,6 +20,7 @@ use Encore\Admin\Layout\Content;
 use Encore\Admin\Layout\Row;
 use Encore\Admin\Show;
 use Encore\Admin\Widgets\Form as WidgetsForm;
+use Encore\Admin\Widgets\Table;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -84,14 +86,39 @@ class CobaController extends AdminController
     }
     protected function grid2()
     {
-        $grid = new Grid(new ProdukVarian());
+        $grid = new Grid(new Produk());
+        $grid->model()->with('produkVarian');
         $grid->setName('table2');
         $grid->filter(function ($filter) {
             $filter->expand();
             $filter->disableIdFilter();
             $filter->like('kode_produkvarian', 'Kode Produk');
         });
-        $grid->column('kode_produkvarian', __('Kode Produk'));
+        $grid->column('nama', __('Nama'))->expand(function ($model) {
+            $produkVarian = $model->produkVarian->map(function ($varian) {
+                return [
+                    $varian['kode_produkvarian'], 
+                    $varian['varian'], 
+                    'Rp ' . number_format($varian['hargajual']), 
+                    (fmod($varian['stok'], 1) !== 0.00) ? $varian['stok'] : (int)$varian['stok'] 
+                ];
+            });
+            return new Table(['SKU', 'Varian', 'Harga jual', 'Stok'], $produkVarian->toArray());
+        });
+        $grid->column('produkAttribut', 'Attribut');
+        $grid->column('rentangHargaJual', 'Harga jual')->display(function () {
+            $min = min(array_column($this['produkVarian']->toArray(), 'hargajual'));
+            $max = max(array_column($this['produkVarian']->toArray(), 'hargajual'));
+            return 'Rp ' . number_format($min) . ' s/d ' . 'Rp ' . number_format($max);
+        });
+        $grid->column('totalVarian', 'Total varian')->display(function () {
+            $count = count($this['produkVarian']->toArray());
+            return "<span class='label label-primary'>{$count} varian</span>";
+        });
+        $grid->column('totalStok', 'Total stok')->display(function () {
+            $totalStok = array_sum(array_column($this['produkVarian']->toArray(), 'stok'));
+            return "<span class='label label-warning'>{$totalStok}</span>";
+        });
         return $grid;
     }
 
@@ -129,12 +156,12 @@ class CobaController extends AdminController
             ->title($this->title())
             ->description('List')
             ->row(function (Row $row) {
-                $row->column(6, function (Column $column) {
-                    $column->row($this->grid());
-                });
                 // $row->column(6, function (Column $column) {
-                //     $column->row($this->grid2());
+                //     $column->row($this->grid());
                 // });
+                $row->column(12, function (Column $column) {
+                    $column->row($this->grid2());
+                });
             });
     }
 

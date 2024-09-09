@@ -24,9 +24,13 @@
     },
     "autoload": {
         "exclude-from-classmap": [
-            "vendor/encore/laravel-admin/src/Form/Tools.php"
+            "vendor/encore/laravel-admin/src/Form/Tools.php",
+            "vendor/encore/laravel-admin/src/Form/Field/Display.php"
         ],
-        "files": ["app/Overrides/Encore/Tools.php"],
+        "files": [
+            "app/Overrides/Encore/Admin/Form/Tools.php",
+            "app/Overrides/Encore/Admin/Form/Field/Display.php"
+        ],
         "psr-4": {
             "App\\": "app/",
             "Database\\Factories\\": "database/factories/",
