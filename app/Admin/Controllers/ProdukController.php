@@ -2,7 +2,7 @@
 
 namespace App\Admin\Controllers;
 
-use App\Admin\Forms\Produk\AkuntansiProduk;
+use App\Admin\Forms\Produk\AkuntingProduk;
 use App\Admin\Forms\Produk\InformasiProduk;
 use App\Http\Controllers\Controller;
 use App\Models\Dynamic;
@@ -10,7 +10,9 @@ use App\Models\Produk;
 use Encore\Admin\Admin;
 // use App\Admin\Form\Form;
 use Encore\Admin\Form;
+use Encore\Admin\Form\Footer;
 use Encore\Admin\Form\NestedForm;
+use Encore\Admin\Form\Tools;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Widgets\Form as WidgetsForm;
 use Encore\Admin\Widgets\Tab;
@@ -22,11 +24,94 @@ use function Termwind\style;
 
 class ProdukController extends Controller
 {
+    public function showProdukForm($id)
+    {
+        $form = new Form(new Produk);
+        $data = $form->model()->with('produkAttribut', 'produkVarian')->find($id);
+        $form->builder()->setResourceId($id);
+        $form->builder()->setMode('edit');
+        $form->tools(function (Tools $tools) use ($id) {
+            $tools->disableList();
+            $tools->disableView();
+            $tools->disableDelete();
+            $tools->append($tools->renderDelete(route(admin_get_route('produk.edit'), ['id' => $id])));
+            $tools->append($tools->renderEdit(route(admin_get_route('produk.edit'), ['id' => $id])));
+            $tools->append($tools->renderList(route(admin_get_route('produk.list'))));
+        });
+        $form->footer(function (Footer $footer) {
+            $footer->disableCreatingCheck();
+            $footer->disableEditingCheck();
+            $footer->disableViewCheck();
+            $footer->disableReset();
+            $footer->disableSubmit();
+        });
+        $form->tab('Produk', function (Form $form) use ($data) {
+            $form->display('SKU', __('SKU'))->setWidth(2)->value($data->produkVarian[0]->kode_produkvarian)->setView('admin.display');
+            $form->display('nama', __('Nama produk'))->value($data->nama)->setView('admin.display');
+            $form->select('default_unit', 'Satuan')->setWidth(2)->options((new Dynamic)->setTable('toko_griyanaura.lv_unit')->select('kode_unit as id', 'nama as text')->pluck('text', 'id')->toArray())->disable()->value($data->default_unit);
+            $form->display('deskripsi')->attribute('style', 'height:300px;overflow:auto;')->value($data->deskripsi)->setView('admin.display');
+            $form->display('hargajual', 'Harga Jual')->attribute('align', 'right')->value('Rp ' . number_format($data->produkVarian[0]->hargajual))->setWidth(2)->setView('admin.display');
+            $form->display('hargabeli', 'Harga Beli')->attribute('align', 'right')->value('Rp ' . number_format($data->produkVarian[0]->default_hargabeli))->setWidth(2)->setView('admin.display');
+            $form->switch('in_stok', 'Produk di-stok?')->disable()->states([
+                'on' => ['value' => 1, 'text' => 'Iya', 'color' => 'success'],
+                'off' => ['value' => 0, 'text' => 'Tidak', 'color' => 'danger']
+            ])->value($data->in_stok);
+            $form->divider();
+            $optionsVarian = array();
+            foreach ($data->produkAttribut as $attribut) {
+                $optionsVarian[$attribut['id_produkattribut']] = (new Dynamic)->setTable('toko_griyanaura.ms_produkattributvarian as pav')->join('toko_griyanaura.lv_attributvalue as av', 'pav.id_attributvalue', 'av.id_attributvalue')->where('id_produkattribut', $attribut['id_produkattribut'])->select('av.id_attributvalue as id', 'av.nama as text')->pluck('text', 'id')->toArray();
+            }
+            // $varianOptions = $data->produkVarian->pluck('varian', 'varian_id')->toArray();
+            $form->tablehasmany('produkVarian', 'Varian', function (NestedForm $form) use ($data, $optionsVarian) {
+                $form->display('kode_produkvarian', 'SKU')->setView('admin.display');
+                $form->display('varian', 'Varian')->customFormat(function ($value) {
+                    return $value ?: '--Tidak ada--';
+                })->setView('admin.display');
+                $form->display('hargajual', 'Harga Jual')->attribute('align', 'right')->customFormat(function ($value) {
+                    return 'Rp ' . number_format($value);
+                })->setView('admin.display');
+                $form->display('default_hargabeli', 'Harga Beli')->attribute('align', 'right')->customFormat(function ($value) {
+                    return 'Rp ' . number_format($value);
+                })->setView('admin.display');
+                $form->display('stok', 'Stok')->customFormat(function ($value) {
+                    return number_format($value);
+                })->setView('admin.display');
+                $form->display('minstok', 'Min. Stok')->customFormat(function ($value) {
+                    return number_format($value);
+                })->setView('admin.display');
+            })->disableCreate()->disableDelete()->value($data->produkVarian->toArray())->useTable();
+        })->tab('Akunting', function (Form $form) use ($data) {
+            $form->select('default_akunpersediaan', __('Akun persediaan'))
+                ->required()
+                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('select2')
+                ->ajax(route(admin_get_route('ajax.akun')))
+                ->default('1301')
+                ->value($data->default_akunpersediaan);
+
+            $form->select('default_akunpemasukan', __('Akun pemasukan'))
+                ->required()
+                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('select2')
+                ->ajax(route(admin_get_route('ajax.akun')))
+                ->default('4001')
+                ->value($data->default_akunpemasukan);
+
+            $form->select('default_akunbiaya', __('Akun Biaya'))
+                ->required()
+                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('select2')
+                ->ajax(route(admin_get_route('ajax.akun')))
+                ->default('5002')
+                ->value($data->default_akunbiaya);
+        });
+        return $form;
+    }
     public function createProdukForm($request)
     {
         $form = new Form(new Produk);
         $form->builder()->setTitle('Tambah Produk')->setMode('edit');
-        $form->tab('Informasi Produk', function (Form $form) {
+        $form->tab('Produk', function (Form $form) {
             $form->text('kode_produk', __('SKU'))->placeholder('[AUTO]')->withoutIcon()->setWidth(4);
             $form->text('nama', __('Nama produk'))->withoutIcon()->required();
             $form->select('default_unit', 'Satuan')->required()->setWidth(4)->options((new Dynamic)->setTable('toko_griyanaura.lv_unit')->select('kode_unit as id', 'nama as text')->pluck('text', 'id')->toArray());
@@ -85,7 +170,7 @@ class ProdukController extends Controller
                 ]
             ])->useTable();
             $form->html('</div>')->plain();
-        })->tab('Akuntansi', function (Form $form) {
+        })->tab('Akunting', function (Form $form) {
             $form->select('default_akunpersediaan', __('Akun persediaan'))
                 ->required()
                 ->attribute('data-url', route('admin.ajax.akun'))
@@ -116,8 +201,17 @@ class ProdukController extends Controller
     {
         $form = new Form(new Produk);
         $data = $form->model()->with('produkAttribut', 'produkVarian')->find($id);
+        $form->tools(function (Tools $tools) use ($id) {
+            $tools->disableList();
+            $tools->disableView();
+            $tools->disableDelete();
+            $tools->append($tools->renderDelete(route(admin_get_route('produk.edit'), ['id' => $id])));
+            $tools->append($tools->renderView(route(admin_get_route('produk.detail'), ['id' => $id])));
+            $tools->append($tools->renderList(route(admin_get_route('produk.list'))));
+        });
+        $form->builder()->setResourceId($id);
         $form->builder()->setTitle($data->nama)->setMode('edit');
-        $form->tab('Informasi Produk', function (Form $form) use ($data) {
+        $form->tab('Produk', function (Form $form) use ($data) {
             $form->text('nama', __('Nama produk'))->withoutIcon()->required()->value($data->nama);
             $form->select('default_unit', 'Satuan')->required()->setWidth(4)->options((new Dynamic)->setTable('toko_griyanaura.lv_unit')->select('kode_unit as id', 'nama as text')->pluck('text', 'id')->toArray())->value($data->default_unit);
             $form->ckeditor('deskripsi')->value($data->deskripsi);
@@ -170,7 +264,7 @@ class ProdukController extends Controller
                     $form->text('minstok', 'Min Stok')->attribute('type', 'number')->attribute('step','.01')->style('min-width', '80px')->default('0.00')->withoutIcon();
                 }
             })->value($data->produkVarian->toArray())->useTable();
-        })->tab('Akuntansi', function (Form $form) use ($data) {
+        })->tab('Akunting', function (Form $form) use ($data) {
             $form->select('default_akunpersediaan', __('Akun persediaan'))
                 ->required()
                 ->attribute('data-url', route('admin.ajax.akun'))
@@ -196,6 +290,55 @@ class ProdukController extends Controller
                 ->value($data->default_akunbiaya);
         });
         return $form;
+    }
+    public function showProduk(Content $content, $id) {
+        $style =
+<<<STYLE
+            .input-group { 
+                width: 100%; 
+            }
+            table.has-many-produkAttribut tbody td:nth-child(1) div {
+                width:150px;
+            }
+            table.has-many-produkAttribut tbody td:nth-child(2) div {
+                width:300px;
+            }
+            [id^="has-many-"] {
+                position: relative;
+                overflow: auto;
+                white-space: nowrap;
+            }
+            [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0px;
+                background: white;
+                z-index: 20;
+            }
+            [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
+                position: -webkit-sticky;
+                position: sticky;
+                right: 0px;
+                background: white;
+                z-index: 10;
+            }
+            [id^="has-many-"] .form-group:has(.add) {
+                width: 100%;
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0px;
+                background: white;
+                z-index: 10;
+            }
+            .box-footer {
+                display: none;
+            }
+STYLE;
+        Admin::style($style);
+        return $content
+            ->title('Produk')
+            ->description('Detail')
+            ->body($this->showProdukForm($id));
     }
     public function createProduk(Content $content, Request $request) {
         $style = 
@@ -288,6 +431,7 @@ STYLE;
             function addProdukVarian() {
                 let hargaBeli = $('input[name="default_hargabeli"]').val();
                 let hargaJual = $('input[name="hargajual"]').val();
+                let minStok = $('input[name="minstok"]').val();
                 var tpl = $('template.produkVarian-tpl');
                 index++;
                 var template = tpl.html().replace(/__LA_KEY__/g, index);
@@ -296,6 +440,9 @@ STYLE;
                 $('.has-many-produkVarian-forms').append(template);
                 $('.produkVarian.hargajual').inputmask({"alias":"currency","radixPoint":".","prefix":"","removeMaskOnSubmit":true});
                 $('.produkVarian.default_hargabeli').inputmask({"alias":"currency","radixPoint":".","prefix":"","removeMaskOnSubmit":true});
+                $('input[name="produkVarian[new_'+index+'][hargajual]"]').val(hargaJual);
+                $('input[name="produkVarian[new_'+index+'][default_hargabeli]"]').val(hargaBeli);
+                $('input[name="produkVarian[new_'+index+'][minstok]"]').val(minStok);
                 return false;
             }
             $('input[name="kode_produk"]').on('change', function () {
@@ -342,6 +489,18 @@ STYLE;
                     $('input[name="default_hargabeli"]').attr('disabled', false);
                     $('#produk-varian-section').addClass('d-none');
                 }
+            });
+            $('#has-many-produkVarian tr:first-child input#kode_produkvarian').on('change', function () {
+                $('input[name="kode_produk"]').val($(this).val());
+            });
+            $('#has-many-produkVarian tr:first-child input#hargajual').on('change', function () {
+                $('input[name="hargajual"]').val($(this).val());
+            });
+            $('#has-many-produkVarian tr:first-child input#default_hargabeli').on('change', function () {
+                $('input[name="default_hargabeli"]').val($(this).val());
+            });
+            $('#has-many-produkVarian tr:first-child input#minstok').on('change', function () {
+                $('input[name="minstok"]').val($(this).val());
             });
             $('.has-many-produkAttribut tbody tr:first-child td .remove').removeClass('remove').addClass('disabled remove-disabled');
             $('.has-many-produkVarian tbody tr:first-child td .remove').removeClass('remove').addClass('disabled remove-disabled');
@@ -516,6 +675,7 @@ SCRIPT;
     }
     public function updateProduk($id, Request $request)
     {
+        echo $request->deskripsi;
         dump($request->all());
         // return $this->createProdukForm()->update($id);
     }

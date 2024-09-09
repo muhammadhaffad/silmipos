@@ -20,8 +20,12 @@ Route::group([
 
     Route::get('/', 'HomeController@index')->name('home');
     Route::get('/coba-table', 'CobaController@cobaTable');
-    Route::get('/product/create', [ProdukController::class, 'createProduk']);
-    Route::get('/product/edit/{id}', [ProdukController::class, 'editProduk']);
+    Route::get('/product', function () {
+        return 'HELLO';
+    })->name('produk.list');
+    Route::get('/product/detail/{id}', [ProdukController::class, 'showProduk'])->name('produk.detail');
+    Route::get('/product/create', [ProdukController::class, 'createProduk'])->name('produk.create');
+    Route::get('/product/edit/{id}', [ProdukController::class, 'editProduk'])->name('produk.edit');
     Route::put('/product/update/{id}', [ProdukController::class, 'updateProduk'])->name('produk.update');
     Route::post('/acdadc/{a}/cek', [CobaController::class, 'cobaHandle'])->name('test.handler');
     Route::prefix('ajax')->group(function () {
