@@ -110,7 +110,7 @@ class ProdukController extends Controller
     public function createProdukForm($request)
     {
         $form = new Form(new Produk);
-        $form->builder()->setTitle('Tambah Produk')->setMode('edit');
+        $form->builder()->setTitle('Tambah Produk')->setMode('create');
         $form->tab('Produk', function (Form $form) {
             $form->text('kode_produk', __('SKU'))->placeholder('[AUTO]')->withoutIcon()->setWidth(4);
             $form->text('nama', __('Nama produk'))->withoutIcon()->required();
@@ -334,7 +334,51 @@ class ProdukController extends Controller
                 display: none;
             }
 STYLE;
+        $selectScript = 
+<<<SCRIPT
+            $('[varian-filter]').change(function () {
+                let attrValFilter = [];
+                $('[varian-filter]').each(function (k, varian) {
+                    attrValFilter.push(varian.value);
+                })
+                $('#has-many-produkVarian table tbody tr').each(function (k, tr) {
+                    $(tr).addClass('d-none');
+                })
+                $('#has-many-produkVarian table tbody tr').each(function (k, row) {
+                    let cond = true;
+                    $(row).find('td select[varian]').each(function (i, select) {
+                        if (attrValFilter[i] != select.dataset.value && attrValFilter[i] != '' && select.dataset.value != '') {
+                            cond = false;
+                        } 
+                    });
+                    if (cond) {
+                        $(row).removeClass('d-none');
+                    }
+                });
+            });
+            $('[select2].form-control').each(function () {
+                const select = this;
+                const defaultValue = select.dataset.value.split(',');
+                const defaultUrl = select.dataset.url;
+                defaultValue.forEach(function (value) {
+                    $.ajax({
+                        type: 'GET',
+                        url: defaultUrl + '?id=' + value
+                    }).then(function (data) {
+                        const option = new Option(data.text, data.id, true, true);
+                        $(select).append(option).trigger('change');
+                        $(select).trigger({
+                            type: 'select2:select',
+                            params: {
+                                data: data
+                            }
+                        });
+                    });
+                })
+            });
+SCRIPT;
         Admin::style($style);
+        Admin::script($selectScript);
         return $content
             ->title('Produk')
             ->description('Detail')
