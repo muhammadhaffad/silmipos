@@ -1,14 +1,13 @@
 <?php
 
-namespace App\Admin\Actions\Table;
+namespace App\Admin\Actions\Grid;
 
 use Encore\Admin\Actions\RowAction;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Http\Request;
 
-class InlineSave extends RowAction
+class InlineDelete extends RowAction
 {
-    public $name = 'Save';
+    public $name = 'Delete';
     public $tableName = '';
     public $route = '';
 
@@ -55,10 +54,11 @@ class InlineSave extends RowAction
         SCRIPT;   
     }
 
-    public function handle(Model $model, Request $request)
+    public function handle(Model $model)
     {
         // $model ...
         
         return $this->response()->success('Success message.')->refresh();
     }
+
 }

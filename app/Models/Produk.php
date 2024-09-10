@@ -20,11 +20,12 @@ class Produk extends Model
     public function produkAttribut()
     {
         return $this->hasMany(ProdukAttribut::class, 'id_produk', 'id_produk')
-            ->join('toko_griyanaura.ms_produkattributvarian as pav', 'toko_griyanaura.ms_produkattribut.id_produkattribut', 'pav.id_produkattribut')
+            ->select('toko_griyanaura.ms_produkattribut.*', 'att.nama', DB::raw("string_agg(attval.nama, ',' order by attval.id_attributvalue) as varian"))
+            ->join(DB::raw('(select id_produkattribut, id_attributvalue from "toko_griyanaura"."ms_produkattributvarian" group by id_produkattribut, id_attributvalue) as pav'), 'toko_griyanaura.ms_produkattribut.id_produkattribut', 'pav.id_produkattribut')
             ->join('toko_griyanaura.lv_attribut as att', 'toko_griyanaura.ms_produkattribut.id_attribut', 'att.id_attribut')
-            ->join('toko_griyanaura.lv_attributvalue as attval', 'toko_griyanaura.ms_produkattributvarian.id_attributvalue', 'attval.id_attributvalue')
-            ->groupBy('toko_griyanaura.ms_produkattribut.id_produkattribut')
-            ->select('toko_griyanaura.ms_produkattribut.*', 'att.nama');
+            ->join('toko_griyanaura.lv_attributvalue as attval', 'pav.id_attributvalue', 'attval.id_attributvalue')
+            ->groupBy('toko_griyanaura.ms_produkattribut.id_produkattribut', 'att.nama')
+            ->orderBy('id_attribut');
     }
 
     public function produkVarian()

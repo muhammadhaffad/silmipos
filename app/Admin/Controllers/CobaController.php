@@ -2,10 +2,10 @@
 
 namespace App\Admin\Controllers;
 
-use App\Admin\Actions\Table\InlineCancelEdit;
-use App\Admin\Actions\Table\InlineDelete;
-use App\Admin\Actions\Table\InlineEdit;
-use App\Admin\Actions\Table\InlineSave;
+use App\Admin\Actions\Grid\InlineCancelEdit;
+use App\Admin\Actions\Grid\InlineDelete;
+use App\Admin\Actions\Grid\InlineEdit;
+use App\Admin\Actions\Grid\InlineSave;
 use App\Models\Produk;
 use App\Models\ProdukVarian;
 use Encore\Admin\Actions\Action;
@@ -15,6 +15,7 @@ use Encore\Admin\Controllers\Dashboard;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
+use Encore\Admin\Grid\Column\Sorter;
 use Encore\Admin\Layout\Column;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Layout\Row;
@@ -88,6 +89,33 @@ class CobaController extends AdminController
     {
         $grid = new Grid(new Produk());
         $grid->model()->with('produkVarian');
+        if (@request()->get('_customSort')['column'] == 'hargajual') {
+            $grid->model()
+                ->leftJoin(DB::raw('(select id_produk, min(hargajual) as minhargajual, max(hargajual) as maxhargajual from toko_griyanaura.ms_produkvarian group by id_produk) as pv'), 'toko_griyanaura.ms_produk.id_produk', 'pv.id_produk');
+            if (@request()->get('_customSort')['type'] == 'asc') {
+                $grid->model()->orderByRaw('pv.minhargajual asc');
+            } else if (@request()->get('_customSort')['type'] == 'desc') {
+                $grid->model()->orderByRaw('pv.minhargajual desc');
+            }
+        }
+        if (@request()->get('_customSort')['column'] == 'totalvarian') {
+            $grid->model()
+                ->leftJoin(DB::raw('(select id_produk, count(kode_produkvarian) as totalvarian from toko_griyanaura.ms_produkvarian group by id_produk) as pv'), 'toko_griyanaura.ms_produk.id_produk', 'pv.id_produk');
+            if (@request()->get('_customSort')['type'] == 'asc') {
+                $grid->model()->orderByRaw('pv.totalvarian asc');
+            } else if (@request()->get('_customSort')['type'] == 'desc') {
+                $grid->model()->orderByRaw('pv.totalvarian desc');
+            }
+        }
+        if (@request()->get('_customSort')['column'] == 'totalstok') {
+            $grid->model()
+                ->leftJoin(DB::raw('(select id_produk, sum(stok) as totalstok from toko_griyanaura.ms_produkvarian group by id_produk) as pv'), 'toko_griyanaura.ms_produk.id_produk', 'pv.id_produk');
+            if (@request()->get('_customSort')['type'] == 'asc') {
+                $grid->model()->orderByRaw('pv.totalstok asc');
+            } else if (@request()->get('_customSort')['type'] == 'desc') {
+                $grid->model()->orderByRaw('pv.totalstok desc');
+            }
+        }
         $grid->setName('table2');
         $grid->filter(function ($filter) {
             $filter->expand();
@@ -104,21 +132,27 @@ class CobaController extends AdminController
                 ];
             });
             return new Table(['SKU', 'Varian', 'Harga jual', 'Stok'], $produkVarian->toArray());
+        })->sortable();
+        $grid->column('produkAttribut', 'Attribut')->display(function ($value) {
+            $varian = [];
+            foreach($value as $attr) {
+                $varian[] = '<b>' . $attr['nama'] . '</b> : ' . $attr['varian'];
+            }
+            return implode("&nbsp;&nbsp;&nbsp;", $varian);
         });
-        $grid->column('produkAttribut', 'Attribut');
-        $grid->column('rentangHargaJual', 'Harga jual')->display(function () {
+        $grid->column('hargajual', 'Harga jual')->display(function () {
             $min = min(array_column($this['produkVarian']->toArray(), 'hargajual'));
             $max = max(array_column($this['produkVarian']->toArray(), 'hargajual'));
             return 'Rp ' . number_format($min) . ' s/d ' . 'Rp ' . number_format($max);
-        });
-        $grid->column('totalVarian', 'Total varian')->display(function () {
+        })->addHeader(new Sorter('_customSort', 'hargajual', null));
+        $grid->column('totalvarian', 'Total varian')->display(function () {
             $count = count($this['produkVarian']->toArray());
             return "<span class='label label-primary'>{$count} varian</span>";
-        });
-        $grid->column('totalStok', 'Total stok')->display(function () {
+        })->addHeader(new Sorter('_customSort', 'totalvarian', null));
+        $grid->column('totalstok', 'Total stok')->display(function () {
             $totalStok = array_sum(array_column($this['produkVarian']->toArray(), 'stok'));
             return "<span class='label label-warning'>{$totalStok}</span>";
-        });
+        })->addHeader(new Sorter('_customSort', 'totalstok', null));
         return $grid;
     }
 
@@ -156,9 +190,9 @@ class CobaController extends AdminController
             ->title($this->title())
             ->description('List')
             ->row(function (Row $row) {
-                // $row->column(6, function (Column $column) {
-                //     $column->row($this->grid());
-                // });
+                $row->column(6, function (Column $column) {
+                    $column->row($this->grid());
+                });
                 $row->column(12, function (Column $column) {
                     $column->row($this->grid2());
                 });

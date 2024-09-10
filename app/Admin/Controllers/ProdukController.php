@@ -13,7 +13,12 @@ use Encore\Admin\Form;
 use Encore\Admin\Form\Footer;
 use Encore\Admin\Form\NestedForm;
 use Encore\Admin\Form\Tools;
+use Encore\Admin\Grid;
+use Encore\Admin\Grid\Column\Sorter;
+use Encore\Admin\Grid\Displayers\Actions;
+use Encore\Admin\Layout\Column;
 use Encore\Admin\Layout\Content;
+use Encore\Admin\Layout\Row;
 use Encore\Admin\Widgets\Form as WidgetsForm;
 use Encore\Admin\Widgets\Tab;
 use Encore\Admin\Widgets\Table;
@@ -24,6 +29,80 @@ use function Termwind\style;
 
 class ProdukController extends Controller
 {
+    protected function listProdukGrid()
+    {
+        $grid = new Grid(new Produk());
+        $grid->model()->with('produkVarian');
+        if (@request()->get('_customSort')['column'] == 'hargajual') {
+            $grid->model()
+                ->leftJoin(DB::raw('(select id_produk, min(hargajual) as minhargajual, max(hargajual) as maxhargajual from toko_griyanaura.ms_produkvarian group by id_produk) as pv'), 'toko_griyanaura.ms_produk.id_produk', 'pv.id_produk');
+            if (@request()->get('_customSort')['type'] == 'asc') {
+                $grid->model()->orderByRaw('pv.minhargajual asc');
+            } else if (@request()->get('_customSort')['type'] == 'desc') {
+                $grid->model()->orderByRaw('pv.minhargajual desc');
+            }
+        }
+        if (@request()->get('_customSort')['column'] == 'totalvarian') {
+            $grid->model()
+                ->leftJoin(DB::raw('(select id_produk, count(kode_produkvarian) as totalvarian from toko_griyanaura.ms_produkvarian group by id_produk) as pv'), 'toko_griyanaura.ms_produk.id_produk', 'pv.id_produk');
+            if (@request()->get('_customSort')['type'] == 'asc') {
+                $grid->model()->orderByRaw('pv.totalvarian asc');
+            } else if (@request()->get('_customSort')['type'] == 'desc') {
+                $grid->model()->orderByRaw('pv.totalvarian desc');
+            }
+        }
+        if (@request()->get('_customSort')['column'] == 'totalstok') {
+            $grid->model()
+                ->leftJoin(DB::raw('(select id_produk, sum(stok) as totalstok from toko_griyanaura.ms_produkvarian group by id_produk) as pv'), 'toko_griyanaura.ms_produk.id_produk', 'pv.id_produk');
+            if (@request()->get('_customSort')['type'] == 'asc') {
+                $grid->model()->orderByRaw('pv.totalstok asc');
+            } else if (@request()->get('_customSort')['type'] == 'desc') {
+                $grid->model()->orderByRaw('pv.totalstok desc');
+            }
+        }
+        $grid->setName('table2');
+        $grid->filter(function ($filter) {
+            $filter->expand();
+            $filter->disableIdFilter();
+            $filter->like('kode_produkvarian', 'Kode Produk');
+        });
+        $grid->column('nama', __('Nama'))->expand(function ($model) {
+            $produkVarian = $model->produkVarian->map(function ($varian) {
+                return [
+                    $varian['kode_produkvarian'], 
+                    $varian['varian'], 
+                    'Rp ' . number_format($varian['hargajual']), 
+                    (fmod($varian['stok'], 1) !== 0.00) ? $varian['stok'] : (int)$varian['stok'] 
+                ];
+            });
+            return new Table(['SKU', 'Varian', 'Harga jual', 'Stok'], $produkVarian->toArray());
+        })->sortable();
+        $grid->column('produkAttribut', 'Attribut')->display(function ($value) {
+            $varian = [];
+            foreach($value as $attr) {
+                $varian[] = '<b>' . $attr['nama'] . '</b> : ' . $attr['varian'];
+            }
+            return implode("&nbsp;&nbsp;&nbsp;", $varian);
+        });
+        $grid->column('hargajual', 'Harga jual')->display(function () {
+            $min = min(array_column($this['produkVarian']->toArray(), 'hargajual'));
+            $max = max(array_column($this['produkVarian']->toArray(), 'hargajual'));
+            return 'Rp ' . number_format($min) . ' s/d ' . 'Rp ' . number_format($max);
+        })->addHeader(new Sorter('_customSort', 'hargajual', null));
+        $grid->column('totalvarian', 'Total varian')->display(function () {
+            $count = count($this['produkVarian']->toArray());
+            return "<span class='label label-primary'>{$count} varian</span>";
+        })->addHeader(new Sorter('_customSort', 'totalvarian', null));
+        $grid->column('totalstok', 'Total stok')->display(function () {
+            $totalStok = array_sum(array_column($this['produkVarian']->toArray(), 'stok'));
+            return "<span class='label label-warning'>{$totalStok}</span>";
+        })->addHeader(new Sorter('_customSort', 'totalstok', null));
+        $grid->actions(function (Actions $actions) {
+            // $actions->disableAll();
+            // $actions->append($actions->renderView(route(admin_get_route('produk.detail'), $this->row->id_produk)));
+        });
+        return $grid;
+    }
     public function showProdukForm($id)
     {
         $form = new Form(new Produk);
@@ -293,6 +372,20 @@ class ProdukController extends Controller
                 ->value($data->default_akunbiaya);
         });
         return $form;
+    }
+
+    public function listProduk(Request $request, Content $content) {
+        return $content
+            ->title('Produk')
+            ->description('Daftar')
+            ->row(function (Row $row) {
+                // $row->column(6, function (Column $column) {
+                //     $column->row($this->grid());
+                // });
+                $row->column(12, function (Column $column) {
+                    $column->row($this->listProdukGrid());
+                });
+            });
     }
     public function showProduk(Content $content, $id) {
         $style =

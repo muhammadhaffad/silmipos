@@ -1,6 +1,6 @@
 <?php
 
-use App\Admin\Actions\Table\InlineDelete;
+use App\Admin\Actions\Grid\InlineDelete;
 use App\Admin\Controllers\AjaxController;
 use App\Admin\Controllers\CobaController;
 use Illuminate\Support\Facades\Route;
@@ -23,6 +23,7 @@ Route::group([
     Route::get('/product', function () {
         return 'HELLO';
     })->name('produk.list');
+    Route::get('/product', [ProdukController::class, 'listProduk'])->name('produk.list');
     Route::get('/product/detail/{id}', [ProdukController::class, 'showProduk'])->name('produk.detail');
     Route::get('/product/create', [ProdukController::class, 'createProduk'])->name('produk.create');
     Route::get('/product/edit/{id}', [ProdukController::class, 'editProduk'])->name('produk.edit');

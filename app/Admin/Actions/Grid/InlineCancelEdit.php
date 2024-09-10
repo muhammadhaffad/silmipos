@@ -1,13 +1,13 @@
 <?php
 
-namespace App\Admin\Actions\Table;
+namespace App\Admin\Actions\Grid;
 
 use Encore\Admin\Actions\RowAction;
 use Illuminate\Database\Eloquent\Model;
 
-class InlineEdit extends RowAction
+class InlineCancelEdit extends RowAction
 {
-    public $name = 'Edit';
+    public $name = 'Cancel';
     public $tableName = '';
 
     public function __construct($tableName = '')
@@ -24,10 +24,9 @@ class InlineEdit extends RowAction
 
     public function href()
     {
-        // dump($this->row['kode_produkvarian']);
         $currentQuery = request()->query();
-        $newQueries = [$this->tableName.'_inline_edit' => $this->getKey()];
-        $allQueries = array_merge($currentQuery, $newQueries);
-        return request()->fullUrlWithQuery($allQueries);
+        $currentQuery[$this->tableName.'_inline_edit'] = null;
+        return request()->fullUrlWithQuery($currentQuery);
     }
+
 }
