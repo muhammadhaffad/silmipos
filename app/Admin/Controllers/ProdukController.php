@@ -2,6 +2,9 @@
 
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Grid\Delete;
+use App\Admin\Actions\Grid\Edit;
+use App\Admin\Actions\Grid\Show;
 use App\Admin\Forms\Produk\AkuntingProduk;
 use App\Admin\Forms\Produk\InformasiProduk;
 use App\Http\Controllers\Controller;
@@ -16,6 +19,9 @@ use Encore\Admin\Form\Tools;
 use Encore\Admin\Grid;
 use Encore\Admin\Grid\Column\Sorter;
 use Encore\Admin\Grid\Displayers\Actions;
+use Encore\Admin\Grid\Displayers\DropdownActions;
+use Encore\Admin\Grid\Filter;
+use Encore\Admin\Grid\Filter\Group;
 use Encore\Admin\Layout\Column;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Layout\Row;
@@ -33,13 +39,16 @@ class ProdukController extends Controller
     {
         $grid = new Grid(new Produk());
         $grid->model()->with('produkVarian');
+        if (!request()->get('_sort') and !request()->get('_customSort')) {
+            $grid->model()->orderByDesc('inserted_at');
+        }
         if (@request()->get('_customSort')['column'] == 'hargajual') {
             $grid->model()
                 ->leftJoin(DB::raw('(select id_produk, min(hargajual) as minhargajual, max(hargajual) as maxhargajual from toko_griyanaura.ms_produkvarian group by id_produk) as pv'), 'toko_griyanaura.ms_produk.id_produk', 'pv.id_produk');
             if (@request()->get('_customSort')['type'] == 'asc') {
-                $grid->model()->orderByRaw('pv.minhargajual asc');
-            } else if (@request()->get('_customSort')['type'] == 'desc') {
                 $grid->model()->orderByRaw('pv.minhargajual desc');
+            } else if (@request()->get('_customSort')['type'] == 'desc') {
+                $grid->model()->orderByRaw('pv.minhargajual asc');
             }
         }
         if (@request()->get('_customSort')['column'] == 'totalvarian') {
@@ -60,11 +69,23 @@ class ProdukController extends Controller
                 $grid->model()->orderByRaw('pv.totalstok desc');
             }
         }
-        $grid->setName('table2');
-        $grid->filter(function ($filter) {
+        $grid->filter(function (Filter $filter) {
             $filter->expand();
             $filter->disableIdFilter();
-            $filter->like('kode_produkvarian', 'Kode Produk');
+            $filter->column(1/2, function (Filter $filter) {
+                $filter->like('nama', 'Produk')->placeholder('Nama produk');
+                $filter->group('nama', function (Group $group) {
+                    $group->gt('greater than');
+                    $group->lt('less than');
+                });
+                // $filter->where(function () use ($filter) {
+                //     $gridName = $filter->getName() ? ($filter->getName() . '_') : '';
+                //     // dd(request()->get($gridName . 'nama'));
+                // }, 'Attribut', 'attribut')->select((new Dynamic())->setTable('toko_griyanaura.lv_attribut')->select('id_attribut as id', 'nama as text')->pluck('text', 'id')->toArray());
+                // $filter->where(function () use ($filter) {
+                //     // dd(request()->get($gridName . 'nama'));
+                // }, 'Varian', 'attribut_value')->multipleSelect()->ajax(route(admin_get_route('ajax.attribut-value'), ['idAttribut' => 1]));
+            });
         });
         $grid->column('nama', __('Nama'))->expand(function ($model) {
             $produkVarian = $model->produkVarian->map(function ($varian) {
@@ -97,9 +118,13 @@ class ProdukController extends Controller
             $totalStok = array_sum(array_column($this['produkVarian']->toArray(), 'stok'));
             return "<span class='label label-warning'>{$totalStok}</span>";
         })->addHeader(new Sorter('_customSort', 'totalstok', null));
-        $grid->actions(function (Actions $actions) {
-            // $actions->disableAll();
-            // $actions->append($actions->renderView(route(admin_get_route('produk.detail'), $this->row->id_produk)));
+        $grid->actions(function (DropdownActions $actions) {
+            $actions->disableDelete();
+            $actions->disableEdit();
+            $actions->disableView();
+            $actions->add(new Show);
+            $actions->add(new Edit);
+            $actions->add(new Delete(route(admin_get_route('produk.delete'), $this->row->id_produk)));
         });
         return $grid;
     }
@@ -375,6 +400,13 @@ class ProdukController extends Controller
     }
 
     public function listProduk(Request $request, Content $content) {
+        $style = 
+<<<STYLE
+    .filter-box .box-footer .row .col-md-2 {
+        display : none;
+    }    
+STYLE;
+        Admin::style($style);
         return $content
             ->title('Produk')
             ->description('Daftar')

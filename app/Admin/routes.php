@@ -28,6 +28,9 @@ Route::group([
     Route::get('/product/create', [ProdukController::class, 'createProduk'])->name('produk.create');
     Route::get('/product/edit/{id}', [ProdukController::class, 'editProduk'])->name('produk.edit');
     Route::put('/product/update/{id}', [ProdukController::class, 'updateProduk'])->name('produk.update');
+    Route::post('/product/delete/{id}', function () {
+        return 'test';
+    })->name('produk.delete');
     Route::post('/acdadc/{a}/cek', [CobaController::class, 'cobaHandle'])->name('test.handler');
     Route::prefix('ajax')->group(function () {
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');
