@@ -24,4 +24,11 @@ class AjaxController extends Controller
         }
         return (new Dynamic())->setTable('toko_griyanaura.lv_attributvalue')->where('id_attribut', $idAttribut)->where(DB::raw('nama'), 'ilike', "%$q%")->paginate(null, ['id_attributvalue as id', "nama as text"]);
     }
+    public function getVarians(Request $request) {
+        $q = $request->get('q');
+        if ($request->get('id')) {
+            return (new Dynamic())->setTable('toko_griyanaura.lv_attributvalue as attval')->join('toko_griyanaura.lv_attribut as att', 'att.id_attribut', 'attval.id_attribut')->where(DB::raw('attval.id_attributvalue'), $request->get('id'))->first(['id_attributvalue as id', DB::raw("'<b>' || att.nama || '</b> : ' || attval.nama as text")]);    
+        }
+        return (new Dynamic())->setTable('toko_griyanaura.lv_attributvalue as attval')->join('toko_griyanaura.lv_attribut as att', 'att.id_attribut', 'attval.id_attribut')->where(DB::raw('attval.nama'), 'ilike', "%$q%")->paginate(null, ['id_attributvalue as id', DB::raw("'<b>' || att.nama || '</b> : ' || attval.nama as text")]);
+    }
 }

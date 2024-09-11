@@ -39,8 +39,18 @@ class ProdukController extends Controller
     {
         $grid = new Grid(new Produk());
         $grid->model()->with('produkVarian');
+        $grid->model()->join(DB::raw('(select kode_unit, nama as namaunit from toko_griyanaura.lv_unit) as u'), 'toko_griyanaura.ms_produk.default_unit', 'u.kode_unit');
         if (!request()->get('_sort') and !request()->get('_customSort')) {
-            $grid->model()->orderByDesc('inserted_at');
+            $grid->model()->orderByDesc('toko_griyanaura.ms_produk.inserted_at');
+        }
+        if (request()->get('produk')) {
+            $grid->model()->where('nama', 'ilike', "%".request()->get('produk')."%");
+        }
+        if (!empty(request()->get('varian')[0])) {
+            $grid->model()->whereHas('produkVarian', function ($query) {
+                $query->leftJoin('toko_griyanaura.ms_produkattributvarian as pav', 'pav.kode_produkvarian', 'toko_griyanaura.ms_produkvarian.kode_produkvarian')
+                    ->whereIn('pav.id_attributvalue', request()->get('varian'));
+            });
         }
         if (@request()->get('_customSort')['column'] == 'hargajual') {
             $grid->model()
@@ -73,18 +83,21 @@ class ProdukController extends Controller
             $filter->expand();
             $filter->disableIdFilter();
             $filter->column(1/2, function (Filter $filter) {
-                $filter->like('nama', 'Produk')->placeholder('Nama produk');
-                $filter->group('nama', function (Group $group) {
-                    $group->gt('greater than');
-                    $group->lt('less than');
-                });
-                // $filter->where(function () use ($filter) {
-                //     $gridName = $filter->getName() ? ($filter->getName() . '_') : '';
-                //     // dd(request()->get($gridName . 'nama'));
-                // }, 'Attribut', 'attribut')->select((new Dynamic())->setTable('toko_griyanaura.lv_attribut')->select('id_attribut as id', 'nama as text')->pluck('text', 'id')->toArray());
-                // $filter->where(function () use ($filter) {
-                //     // dd(request()->get($gridName . 'nama'));
-                // }, 'Varian', 'attribut_value')->multipleSelect()->ajax(route(admin_get_route('ajax.attribut-value'), ['idAttribut' => 1]));
+                $filter->where(function () {}, 'Produk', 'produk');
+                $filter->where(function () {}, 'Varian', 'varian')->multipleSelect()->setResource(route(admin_get_route('ajax.varians')))->config('allowClear', false)->ajax(route(admin_get_route('ajax.varians')));
+            });
+            $filter->column(1/2, function (Filter $filter) {
+                $filter->where(function ($query) {
+                    if ($this->input == '1') {
+                        $query->where('in_stok', DB::raw('true'));
+                    } else if ($this->input == '2') {
+                        $query->where('in_stok', false);
+                    }
+                }, 'Tipe produk', 'tipe')->select([
+                    '*' => 'Semua',
+                    '1' => 'Inventori',
+                    '2' => 'Non inventori'
+                ])->default('*');
             });
         });
         $grid->column('nama', __('Nama'))->expand(function ($model) {
@@ -105,6 +118,7 @@ class ProdukController extends Controller
             }
             return implode("&nbsp;&nbsp;&nbsp;", $varian);
         });
+        $grid->column('namaunit', 'Unit')->sortable();
         $grid->column('hargajual', 'Harga jual')->display(function () {
             $min = min(array_column($this['produkVarian']->toArray(), 'hargajual'));
             $max = max(array_column($this['produkVarian']->toArray(), 'hargajual'));
@@ -124,6 +138,7 @@ class ProdukController extends Controller
             $actions->disableView();
             $actions->add(new Show);
             $actions->add(new Edit);
+            // dump($this);
             $actions->add(new Delete(route(admin_get_route('produk.delete'), $this->row->id_produk)));
         });
         return $grid;
@@ -406,14 +421,35 @@ class ProdukController extends Controller
         display : none;
     }    
 STYLE;
+        $selectScript = 
+<<<SCRIPT
+    $('[select2].form-control').each(function () {
+        const select = this;
+        const defaultValue = select.dataset.value.split(',');
+        const defaultUrl = select.dataset.url;
+        defaultValue.forEach(function (value) {
+            $.ajax({
+                type: 'GET',
+                url: defaultUrl + '?id=' + value
+            }).then(function (data) {
+                const option = new Option(data.text, data.id, true, true);
+                $(select).append(option).trigger('change');
+                $(select).trigger({
+                    type: 'select2:select',
+                    params: {
+                        data: data
+                    }
+                });
+            });
+        })
+    });
+SCRIPT;
         Admin::style($style);
+        Admin::script($selectScript);
         return $content
             ->title('Produk')
             ->description('Daftar')
             ->row(function (Row $row) {
-                // $row->column(6, function (Column $column) {
-                //     $column->row($this->grid());
-                // });
                 $row->column(12, function (Column $column) {
                     $column->row($this->listProdukGrid());
                 });
