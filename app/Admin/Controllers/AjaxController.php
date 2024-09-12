@@ -17,8 +17,11 @@ class AjaxController extends Controller
         }
         return Akun::where(DB::raw('kode_akun || nama'), 'ilike', "%$q%")->paginate(null, ['kode_akun as id', DB::raw("kode_akun || ' - ' || nama as text")]);
     }
-    public function attributValue(Request $request, $idAttribut) {
+    public function attributValue(Request $request, $idAttribut = null) {
         $q = $request->get('q');
+        if (!$idAttribut) {
+            $idAttribut = DB::raw('id_attribut');
+        }
         if ($request->get('id')) {
             return (new Dynamic())->setTable('toko_griyanaura.lv_attributvalue')->where('id_attribut', $idAttribut)->where('id_attributvalue', '=', $request->get('id'))->first(['id_attributvalue as id', "nama as text"]);    
         }

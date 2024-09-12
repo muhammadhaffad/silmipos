@@ -44,7 +44,7 @@ class ProdukController extends Controller
             $grid->model()->orderByDesc('toko_griyanaura.ms_produk.inserted_at');
         }
         if (request()->get('produk')) {
-            $grid->model()->where('nama', 'ilike', "%".request()->get('produk')."%");
+            $grid->model()->where('nama', 'ilike', "%" . request()->get('produk') . "%");
         }
         if (!empty(request()->get('varian')[0])) {
             $grid->model()->whereHas('produkVarian', function ($query) {
@@ -82,11 +82,11 @@ class ProdukController extends Controller
         $grid->filter(function (Filter $filter) {
             $filter->expand();
             $filter->disableIdFilter();
-            $filter->column(1/2, function (Filter $filter) {
+            $filter->column(1 / 2, function (Filter $filter) {
                 $filter->where(function () {}, 'Produk', 'produk');
                 $filter->where(function () {}, 'Varian', 'varian')->multipleSelect()->setResource(route(admin_get_route('ajax.varians')))->config('allowClear', false)->ajax(route(admin_get_route('ajax.varians')));
             });
-            $filter->column(1/2, function (Filter $filter) {
+            $filter->column(1 / 2, function (Filter $filter) {
                 $filter->where(function ($query) {
                     if ($this->input == '1') {
                         $query->where('in_stok', DB::raw('true'));
@@ -103,17 +103,17 @@ class ProdukController extends Controller
         $grid->column('nama', __('Nama'))->expand(function ($model) {
             $produkVarian = $model->produkVarian->map(function ($varian) {
                 return [
-                    $varian['kode_produkvarian'], 
-                    $varian['varian'], 
-                    'Rp ' . number_format($varian['hargajual']), 
-                    (fmod($varian['stok'], 1) !== 0.00) ? $varian['stok'] : (int)$varian['stok'] 
+                    $varian['kode_produkvarian'],
+                    $varian['varian'],
+                    'Rp ' . number_format($varian['hargajual']),
+                    (fmod($varian['stok'], 1) !== 0.00) ? $varian['stok'] : (int)$varian['stok']
                 ];
             });
             return new Table(['SKU', 'Varian', 'Harga jual', 'Stok'], $produkVarian->toArray());
         })->sortable();
         $grid->column('produkAttribut', 'Attribut')->display(function ($value) {
             $varian = [];
-            foreach($value as $attr) {
+            foreach ($value as $attr) {
                 $varian[] = '<b>' . $attr['nama'] . '</b> : ' . $attr['varian'];
             }
             return implode("&nbsp;&nbsp;&nbsp;", $varian);
@@ -241,8 +241,8 @@ class ProdukController extends Controller
             $form->currency('hargajual', 'Harga jual')->symbol('Rp');
             $form->currency('default_hargabeli', 'Harga beli')->symbol('Rp');
             $form->switch('in_stok', 'Produk di-stok?')->states([
-            'on' => ['value' => 1, 'text' => 'Iya', 'color' => 'success'],
-            'off' => ['value' => 0, 'text' => 'Tidak', 'color' => 'danger']
+                'on' => ['value' => 1, 'text' => 'Iya', 'color' => 'success'],
+                'off' => ['value' => 0, 'text' => 'Tidak', 'color' => 'danger']
             ])->default(true);
             $form->text('minstok', 'Min. stok')->attribute('type', 'number')->withoutIcon()->width('100px');
             $form->switch('has_varian', 'Produk memiliki varian?')->states([
@@ -284,8 +284,8 @@ class ProdukController extends Controller
                 $form->html('<span id="varian">--Tidak Ada--</span>', 'Varian');
                 $form->currency('hargajual', 'Harga Jual')->symbol('Rp');
                 $form->currency('default_hargabeli', 'Harga Beli')->symbol('Rp');
-                $form->text('stok', 'Stok')->attribute('type', 'number')->attribute('step','.01')->style('min-width', '80px')->default(0)->withoutIcon()->disable();
-                $form->text('minstok', 'Min Stok')->attribute('type', 'number')->attribute('step','.01')->style('min-width', '80px')->default('0.00')->withoutIcon();
+                $form->text('stok', 'Stok')->attribute('type', 'number')->attribute('step', '.01')->style('min-width', '80px')->default(0)->withoutIcon()->disable();
+                $form->text('minstok', 'Min Stok')->attribute('type', 'number')->attribute('step', '.01')->style('min-width', '80px')->default('0.00')->withoutIcon();
             })->disableDelete()->disableCreate()->value([
                 [
                     'kode_produkvarian' => ''
@@ -299,7 +299,7 @@ class ProdukController extends Controller
                 ->attribute('select2')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('1301')
-                ;
+            ;
 
             $form->select('default_akunpemasukan', __('Akun pemasukan'))
                 ->required()
@@ -307,7 +307,7 @@ class ProdukController extends Controller
                 ->attribute('select2')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('4001')
-                ;
+            ;
 
             $form->select('default_akunbiaya', __('Akun Biaya'))
                 ->required()
@@ -315,7 +315,7 @@ class ProdukController extends Controller
                 ->attribute('select2')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('5002')
-                ;
+            ;
         });
         return $form;
     }
@@ -345,12 +345,17 @@ class ProdukController extends Controller
             $optionsVarian = array();
             foreach ($data->produkAttribut as $attribut) {
                 $optionsVarian[$attribut['id_produkattribut']] = (new Dynamic)->setTable('toko_griyanaura.ms_produkattributvarian as pav')->join('toko_griyanaura.lv_attributvalue as av', 'pav.id_attributvalue', 'av.id_attributvalue')->where('id_produkattribut', $attribut['id_produkattribut'])->select('av.id_attributvalue as id', 'av.nama as text')->pluck('text', 'id')->toArray();
-                $form->select($attribut->nama)->setWidth(4)
-                    ->attribute('varian-filter')
-                    ->options($optionsVarian[$attribut['id_produkattribut']]);
             }
             // $varianOptions = $data->produkVarian->pluck('varian', 'varian_id')->toArray();
-            $form->hasMany('produkVarian', '', function (NestedForm $form) use ($data, $optionsVarian) {
+            $attributs = (new Dynamic())->setTable('toko_griyanaura.lv_attribut as att')->select('id_attribut as id', 'nama as text')->pluck('text', 'id')->toArray();
+            $form->tablehasmany('produkAttribut', 'Varian', function (NestedForm $form) use ($attributs) {
+                $form->select('id_attribut', 'Attribut')
+                    ->attribute('data-index', $form->model()?->index)
+                    ->options($attributs);
+            })
+                ->value($data->produkAttribut->map(fn ($item, $index) => array_merge($item->toArray(), ['index' => $index]))->toArray())
+                ->useTable();
+            $form->tablehasmany('produkVarian', 'Produk varian', function (NestedForm $form) use ($data, $optionsVarian) {
                 $keyName = 'kode_produkvarian_new';
                 if ($form->model()) {
                     $row = $form->model();
@@ -361,29 +366,49 @@ class ProdukController extends Controller
                 $attributVarian = array_replace(...json_decode($row->varian_id ?? '[{}]', true));
                 if (isset($row)) {
                     /* Jika ada row, maka sama dengan data disable (tidak bisa diubah), otomatis select pakai options */
-                    $form->text('kode_produkvarian')->withoutIcon()->disable()->customFormat(function ($x) {
-                        return $x;
-                    })->setElementName("produkVarian[{$key}][{$keyName}]");
-                    foreach ($data->produkAttribut->toArray() as $attr) {
-                        $form->select($attr['id_produkattribut'], $attr['nama'])->placeholder($attr['nama'])->setScript('')->attribute('varian')->default($attributVarian[$attr['id_produkattribut']] ?? '')->options($optionsVarian[$attr['id_produkattribut']])->customFormat(function ($x) {
+                    $form->text('kode_produkvarian')
+                        ->withoutIcon()
+                        ->customFormat(function ($x) {
                             return $x;
-                        })->disable();
+                        })
+                        ->setElementName("produkVarian[{$key}][{$keyName}]");
+                    foreach ($data->produkAttribut->toArray() as $key => $attr) {
+                        $form->select($attr['id_produkattribut'], $attr['nama'])
+                            ->placeholder($attr['nama'])
+                            ->setScript('')
+                            ->attribute([
+                                'varian' => null, 
+                                'select2' => null, 
+                                'data-url' => route(admin_get_route('ajax.attribut-value'), $attr['id_attribut']),
+                                'data-index-varian' => $key
+                            ])
+                            ->default($attributVarian[$attr['id_produkattribut']] ?? '')
+                            ->options($optionsVarian[$attr['id_produkattribut']])
+                            ->customFormat(function ($x) {
+                                return $x;
+                            })
+                            ->ajax(route(admin_get_route('ajax.attribut-value')));
                     }
                 } else {
                     /* Jika tidak ada row, maka sama dengan tambah produk, otomatis select pakai ajax */
                     $form->text('kode_produkvarian')->withoutIcon()->customFormat(function ($x) {
                         return $x;
                     })->required()->setElementName("produkVarian[{$key}][{$keyName}]");
-                    foreach ($data->produkAttribut->toArray() as $attr) {
-                        $form->select($attr['id_produkattribut'], $attr['nama'])->placeholder($attr['nama'])->setScript('')->attribute('varian')->ajax(route(admin_get_route('ajax.attribut-value'), $attr['id_attribut']));
+                    foreach ($data->produkAttribut->toArray() as $key => $attr) {
+                        $form->select($attr['id_produkattribut'], $attr['nama'])
+                            ->placeholder($attr['nama'])
+                            ->attribute([
+                                'varian' => null, 
+                                'data-index' => $key
+                            ])
+                            ->ajax(route(admin_get_route('ajax.attribut-value') ));
                     }
                 }
                 $form->currency('hargajual', 'Harga Jual')->symbol('Rp');
                 if ($data->in_stok) {
                     $form->currency('default_hargabeli', 'Harga Beli')->symbol('Rp');
-                    // $form->date('pertanggal', 'Per Tanggal');
-                    $form->text('stok', 'Stok')->attribute('type', 'number')->attribute('step','.01')->style('min-width', '80px')->default(0)->withoutIcon()->disable();
-                    $form->text('minstok', 'Min Stok')->attribute('type', 'number')->attribute('step','.01')->style('min-width', '80px')->default('0.00')->withoutIcon();
+                    $form->text('stok', 'Stok')->attribute('type', 'number')->attribute('step', '.01')->style('min-width', '80px')->default(0)->withoutIcon()->disable();
+                    $form->text('minstok', 'Min Stok')->attribute('type', 'number')->attribute('step', '.01')->style('min-width', '80px')->default('0.00')->withoutIcon();
                 }
             })->value($data->produkVarian->toArray())->useTable();
         })->tab('Akunting', function (Form $form) use ($data) {
@@ -391,6 +416,7 @@ class ProdukController extends Controller
                 ->required()
                 ->attribute('data-url', route('admin.ajax.akun'))
                 ->attribute('select2')
+                ->attribute('akun')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('1301')
                 ->value($data->default_akunpersediaan);
@@ -399,6 +425,7 @@ class ProdukController extends Controller
                 ->required()
                 ->attribute('data-url', route('admin.ajax.akun'))
                 ->attribute('select2')
+                ->attribute('akun')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('4001')
                 ->value($data->default_akunpemasukan);
@@ -407,6 +434,7 @@ class ProdukController extends Controller
                 ->required()
                 ->attribute('data-url', route('admin.ajax.akun'))
                 ->attribute('select2')
+                ->attribute('akun')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('5002')
                 ->value($data->default_akunbiaya);
@@ -414,15 +442,16 @@ class ProdukController extends Controller
         return $form;
     }
 
-    public function listProduk(Request $request, Content $content) {
-        $style = 
-<<<STYLE
+    public function listProduk(Request $request, Content $content)
+    {
+        $style =
+            <<<STYLE
     .filter-box .box-footer .row .col-md-2 {
         display : none;
     }    
 STYLE;
-        $selectScript = 
-<<<SCRIPT
+        $selectScript =
+            <<<SCRIPT
     $('[select2].form-control').each(function () {
         const select = this;
         const defaultValue = select.dataset.value.split(',');
@@ -455,9 +484,10 @@ SCRIPT;
                 });
             });
     }
-    public function showProduk(Content $content, $id) {
+    public function showProduk(Content $content, $id)
+    {
         $style =
-<<<STYLE
+            <<<STYLE
             .input-group { 
                 width: 100%; 
             }
@@ -498,8 +528,8 @@ SCRIPT;
                 display: none;
             }
 STYLE;
-        $selectScript = 
-<<<SCRIPT
+        $selectScript =
+            <<<SCRIPT
             $('[varian-filter]').change(function () {
                 let attrValFilter = [];
                 $('[varian-filter]').each(function (k, varian) {
@@ -548,9 +578,10 @@ SCRIPT;
             ->description('Detail')
             ->body($this->showProdukForm($id));
     }
-    public function createProduk(Content $content, Request $request) {
-        $style = 
-<<<STYLE
+    public function createProduk(Content $content, Request $request)
+    {
+        $style =
+            <<<STYLE
             .input-group { 
                 width: 100%; 
             }
@@ -590,7 +621,7 @@ SCRIPT;
 STYLE;
         $routeAttrVal = route(admin_get_route('ajax.attribut-value'));
         $selectScript =
-<<<SCRIPT
+            <<<SCRIPT
             function generateKombinasiVarian () {
                 let attrVals = [];
                 $('.id_attributvalue').each(function (i, select) {
@@ -798,10 +829,13 @@ SCRIPT;
     }
     public function editProduk(Content $content, Request $request, $id)
     {
-        $style = 
-<<<STYLE
+        $style =
+            <<<STYLE
             .input-group { 
                 width: 100%; 
+            }
+            [id^="has-many-"] table td:has([varian]) {
+                min-width: 150px;
             }
             [id^="has-many-"] {
                 position: relative;
@@ -833,49 +867,53 @@ SCRIPT;
 STYLE;
         $selectScript =
 <<<SCRIPT
-            $('[varian-filter]').change(function () {
-                let attrValFilter = [];
-                $('[varian-filter]').each(function (k, varian) {
-                    attrValFilter.push(varian.value);
-                })
-                $('#has-many-produkVarian table tbody tr').each(function (k, tr) {
-                    $(tr).addClass('d-none');
-                })
-                $('#has-many-produkVarian table tbody tr').each(function (k, row) {
-                    let cond = true;
-                    $(row).find('td select[varian]').each(function (i, select) {
-                        if (attrValFilter[i] != select.dataset.value && attrValFilter[i] != '' && select.dataset.value != '') {
-                            cond = false;
-                        } 
+        $('[select2][akun].form-control').each(function () {
+            const select = this;
+            const defaultValue = select.dataset.value.split(',');
+            const defaultUrl = select.dataset.url;
+            defaultValue.forEach(function (value) {
+                $.ajax({
+                    type: 'GET',
+                    url: defaultUrl + '?id=' + value
+                }).then(function (data) {
+                    const option = new Option(data.text, data.id, true, true);
+                    $(select).append(option).trigger('change');
+                    $(select).trigger({
+                        type: 'select2:select',
+                        params: {
+                            data: data
+                        }
                     });
-                    if (cond) {
-                        $(row).removeClass('d-none');
-                    }
                 });
+            })
+        });
+        $('#has-many-produkAttribut').on('click', '.remove', function () {
+            const row = $(this).closest('tr');
+            const index = row.find('select').data('index');
+            const columnIndex = $('#has-many-produkVarian td').has('[data-index-varian="' + index + '"]').index();
+            $('#has-many-produkVarian thead tr').each(function() {
+                $(this).find('th').eq(columnIndex).addClass('hidden');
             });
-            $('[select2].form-control').each(function () {
-                const select = this;
-                const defaultValue = select.dataset.value.split(',');
-                const defaultUrl = select.dataset.url;
-                defaultValue.forEach(function (value) {
-                    $.ajax({
-                        type: 'GET',
-                        url: defaultUrl + '?id=' + value
-                    }).then(function (data) {
-                        const option = new Option(data.text, data.id, true, true);
-                        $(select).append(option).trigger('change');
-                        $(select).trigger({
-                            type: 'select2:select',
-                            params: {
-                                data: data
-                            }
-                        });
-                    });
-                })
+            $('#has-many-produkVarian tbody tr').each(function() {
+                $(this).find('td').eq(columnIndex).addClass('hidden');
             });
+        });
+
+        $('#has-many-produkAttribut').on('click', '.add', function () {
+            const nextIndex = $('#has-many-produkAttribut tbody tr').filter(':visible').last().find('select').data('index') + 1;
+            $('#has-many-produkAttribut tbody tr').filter(':visible').last().find('select').attr('data-index', nextIndex);
+            const columnIndex = $('#has-many-produkVarian td').has('[data-index-varian="' + nextIndex + '"]').index();
+            $('#has-many-produkVarian thead tr').each(function() {
+                $(this).find('th').eq(columnIndex).removeClass('hidden');
+            });
+            $('#has-many-produkVarian tbody tr').each(function() {
+                $(this).find('td').eq(columnIndex).removeClass('hidden');
+            });
+            return false;
+        });
 SCRIPT;
         Admin::style($style);
-        Admin::script($selectScript);
+        Admin::script($selectScript, true);
         return $content
             ->title('Produk')
             ->description('Tambah')
