@@ -352,8 +352,7 @@ class ProdukController extends Controller
                 $form->select('id_attribut', 'Attribut')
                     ->attribute('data-index', $form->model()?->index)
                     ->options($attributs);
-            })
-                ->value($data->produkAttribut->map(fn ($item, $index) => array_merge($item->toArray(), ['index' => $index]))->toArray())
+            })->value($data->produkAttribut->map(fn ($item, $index) => array_merge($item->toArray(), ['index' => $index]))->toArray())
                 ->useTable();
             $form->tablehasmany('produkVarian', 'Produk varian', function (NestedForm $form) use ($data, $optionsVarian) {
                 $keyName = 'kode_produkvarian_new';
@@ -379,6 +378,7 @@ class ProdukController extends Controller
                             ->attribute([
                                 'varian' => null, 
                                 'select2' => null, 
+                                'data-kode-produkvarian' => $row->kode_produkvarian,
                                 'data-url' => route(admin_get_route('ajax.attribut-value'), $attr['id_attribut']),
                                 'data-index-varian' => $key
                             ])
@@ -391,11 +391,13 @@ class ProdukController extends Controller
                     }
                 } else {
                     /* Jika tidak ada row, maka sama dengan tambah produk, otomatis select pakai ajax */
-                    $form->text('kode_produkvarian')->withoutIcon()->customFormat(function ($x) {
-                        return $x;
-                    })->required()->setElementName("produkVarian[{$key}][{$keyName}]");
+                    $form->text('kode_produkvarian')
+                        ->withoutIcon()
+                        ->required()
+                        ->setElementName("produkVarian[{$key}][{$keyName}]");
                     foreach ($data->produkAttribut->toArray() as $key => $attr) {
                         $form->select($attr['id_produkattribut'], $attr['nama'])
+                            ->setLabelClass(['varian index-varian-' . $key])
                             ->placeholder($attr['nama'])
                             ->attribute([
                                 'varian' => null, 
@@ -829,6 +831,7 @@ SCRIPT;
     }
     public function editProduk(Content $content, Request $request, $id)
     {
+        $urlAjaxAttrVal = route(admin_get_route('ajax.attribut-value'));
         $style =
 <<<STYLE
             .input-group { 
@@ -888,10 +891,11 @@ STYLE;
             })
         });
         $('#has-many-produkAttribut').on('click', '.remove', function () {
-            const row = $(this).closest('tr');
-            const index = row.find('select')[0].dataset.index;
-            const columnIndex = $('#has-many-produkVarian td').has('[data-index-varian="' + index + '"]').index();
+            const row = $(this).closest('tr'); // get baris yang ada tombol diklik
+            const index = row.find('select')[0].dataset.index; // get index
+            const columnIndex = $('#has-many-produkVarian thead th.index-varian-' + index).index();
             $('#has-many-produkVarian thead tr').each(function() {
+                $(this).find('th').eq(columnIndex).text('');
                 $(this).find('th').eq(columnIndex).addClass('hidden');
             });
             $('#has-many-produkVarian tbody tr').each(function() {
@@ -903,15 +907,81 @@ SCRIPT;
 <<<SCRIPT
         $('#has-many-produkAttribut').on('click', '.add', function () {
             const nextIndex = parseInt($('#has-many-produkAttribut tbody tr').filter(':visible').eq(-2).find('select')[0]?.dataset.index || '-1') + 1;
-            $('#has-many-produkAttribut tbody tr').filter(':visible').last().find('select').attr('data-index', nextIndex);
-            const columnIndex = $('#has-many-produkVarian td').has('[data-index-varian="' + nextIndex + '"]').index();
-            $('#has-many-produkVarian thead tr').each(function() {
-                $(this).find('th').eq(columnIndex).removeClass('hidden');
-            });
-            $('#has-many-produkVarian tbody tr').each(function() {
-                $(this).find('td').eq(columnIndex).removeClass('hidden');
-            });
-            
+            $('#has-many-produkAttribut tbody tr').filter(':visible').eq(-1).find('select').attr('data-index', nextIndex);
+            if ($('#has-many-produkVarian thead th.index-varian-' + nextIndex).length > 0) {
+                const columnIndex = $('#has-many-produkVarian thead th.index-varian-' + nextIndex).index();
+                $('#has-many-produkVarian thead tr').each(function() {
+                    $(this).find('th').eq(columnIndex).removeClass('hidden');
+                });
+                $('#has-many-produkVarian tbody tr').each(function() {
+                    let newAttribut = 'new_' + index;
+                    console.info($(this).find('td select').eq(columnIndex));
+                    let kodeProdukvarian = $(this).find('td').eq(columnIndex).find('select')[0].dataset.kodeProdukvarian;
+                    $(this).find('td').eq(columnIndex).find('input').attr('name', 'produkVarian['+kodeProdukvarian+']['+newAttribut+']');
+                    $(this).find('td').eq(columnIndex).find('select').attr('name', 'produkVarian['+kodeProdukvarian+']['+newAttribut+']');
+                    $(this).find('td').eq(columnIndex).removeClass('hidden');
+                });
+            } else {
+                let columnIndex = $('#has-many-produkVarian thead th.varian').last().index();
+                $('#has-many-produkVarian thead tr').each(function() {
+                    $(this).find('th').eq(columnIndex).after('<th class="varian index-varian-' + nextIndex + '">');
+                });
+                $('#has-many-produkVarian tbody tr').each(function() {
+                    let lastVarianCell = $(this).find('td').eq(columnIndex);
+                    let kodeProdukVarian = lastVarianCell.find('select')[0].dataset.kodeProdukvarian;
+                    let selectedValue = lastVarianCell.find('select')[0].value;
+                    let selectedIndex = lastVarianCell.find('select')[0].selectedIndex;
+                    let selectedValueText = lastVarianCell.find('select')[0].options[selectedIndex].text;
+                    let newAttribut = 'new_' + index;
+                    let newCell = `
+                    <td>
+                        <div class="form-group">
+                            <label for="`+ newAttribut +`" class="col-sm-0 varian hidden control-label">Warna</label>
+                            <div class="col-sm-12">
+                                <input type="hidden" name="produkVarian[`+ kodeProdukVarian +`][`+ newAttribut +`]">
+                                <select class="form-control produkVarian `+ newAttribut +`" style="width: 100%;" name="produkVarian[`+ kodeProdukVarian +`][`+ newAttribut +`]" varian="" data-kode-produkvarian="` + kodeProdukVarian + `" data-index-varian="`+ nextIndex +`" data-value="">
+                                    <option value="` + selectedValue + `" selected>` + selectedValueText + `</option>
+                                </select>
+                            </div>
+                        </div>
+                    </td>`;
+                    lastVarianCell.after(newCell);
+                    $(".produkVarian." + newAttribut).select2({
+                        ajax: {
+                            url: "{$urlAjaxAttrVal}",
+                            dataType: 'json',
+                            delay: 250,
+                            data: function (params) {
+                            return {
+                                q: params.term,
+                                page: params.page
+                            };
+                            },
+                            processResults: function (data, params) {
+                            params.page = params.page || 1;
+
+                            return {
+                                results: $.map(data.data, function (d) {
+                                        d.id = d.id;
+                                        d.text = d.text;
+                                        return d;
+                                        }),
+                                pagination: {
+                                more: data.next_page_url
+                                }
+                            };
+                            },
+                            cache: true
+                        },
+                        "allowClear":true,
+                        "placeholder": "",
+                        "minimumInputLength":1,
+                        escapeMarkup: function (markup) {
+                            return markup;
+                        }
+                    });
+                });
+            }
             return false;
         });
 SCRIPT;

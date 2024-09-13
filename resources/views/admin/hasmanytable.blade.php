@@ -14,7 +14,7 @@
                 <thead>
                 <tr>
                     @foreach($headers as $header)
-                        <th>{{ $header }}</th>
+                        <th class="{!! str_replace('hidden', '', $header['labelClass']) !!}">{{ $header['label'] }}</th>
                     @endforeach
 
                     <th class="hidden"></th>
