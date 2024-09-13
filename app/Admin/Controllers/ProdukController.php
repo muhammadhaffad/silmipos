@@ -445,13 +445,13 @@ class ProdukController extends Controller
     public function listProduk(Request $request, Content $content)
     {
         $style =
-            <<<STYLE
+<<<STYLE
     .filter-box .box-footer .row .col-md-2 {
         display : none;
     }    
 STYLE;
         $selectScript =
-            <<<SCRIPT
+<<<SCRIPT
     $('[select2].form-control').each(function () {
         const select = this;
         const defaultValue = select.dataset.value.split(',');
@@ -487,7 +487,7 @@ SCRIPT;
     public function showProduk(Content $content, $id)
     {
         $style =
-            <<<STYLE
+<<<STYLE
             .input-group { 
                 width: 100%; 
             }
@@ -529,7 +529,7 @@ SCRIPT;
             }
 STYLE;
         $selectScript =
-            <<<SCRIPT
+<<<SCRIPT
             $('[varian-filter]').change(function () {
                 let attrValFilter = [];
                 $('[varian-filter]').each(function (k, varian) {
@@ -581,7 +581,7 @@ SCRIPT;
     public function createProduk(Content $content, Request $request)
     {
         $style =
-            <<<STYLE
+<<<STYLE
             .input-group { 
                 width: 100%; 
             }
@@ -621,7 +621,7 @@ SCRIPT;
 STYLE;
         $routeAttrVal = route(admin_get_route('ajax.attribut-value'));
         $selectScript =
-            <<<SCRIPT
+<<<SCRIPT
             function generateKombinasiVarian () {
                 let attrVals = [];
                 $('.id_attributvalue').each(function (i, select) {
@@ -830,7 +830,7 @@ SCRIPT;
     public function editProduk(Content $content, Request $request, $id)
     {
         $style =
-            <<<STYLE
+<<<STYLE
             .input-group { 
                 width: 100%; 
             }
@@ -865,7 +865,7 @@ SCRIPT;
                 z-index: 10;
             }
 STYLE;
-        $selectScript =
+        $script = 
 <<<SCRIPT
         $('[select2][akun].form-control').each(function () {
             const select = this;
@@ -889,7 +889,7 @@ STYLE;
         });
         $('#has-many-produkAttribut').on('click', '.remove', function () {
             const row = $(this).closest('tr');
-            const index = row.find('select').data('index');
+            const index = row.find('select')[0].dataset.index;
             const columnIndex = $('#has-many-produkVarian td').has('[data-index-varian="' + index + '"]').index();
             $('#has-many-produkVarian thead tr').each(function() {
                 $(this).find('th').eq(columnIndex).addClass('hidden');
@@ -898,9 +898,11 @@ STYLE;
                 $(this).find('td').eq(columnIndex).addClass('hidden');
             });
         });
-
+SCRIPT;
+        $deferredScript =
+<<<SCRIPT
         $('#has-many-produkAttribut').on('click', '.add', function () {
-            const nextIndex = $('#has-many-produkAttribut tbody tr').filter(':visible').last().find('select').data('index') + 1;
+            const nextIndex = parseInt($('#has-many-produkAttribut tbody tr').filter(':visible').eq(-2).find('select')[0]?.dataset.index || '-1') + 1;
             $('#has-many-produkAttribut tbody tr').filter(':visible').last().find('select').attr('data-index', nextIndex);
             const columnIndex = $('#has-many-produkVarian td').has('[data-index-varian="' + nextIndex + '"]').index();
             $('#has-many-produkVarian thead tr').each(function() {
@@ -909,11 +911,14 @@ STYLE;
             $('#has-many-produkVarian tbody tr').each(function() {
                 $(this).find('td').eq(columnIndex).removeClass('hidden');
             });
+            
             return false;
         });
 SCRIPT;
+        
         Admin::style($style);
-        Admin::script($selectScript, true);
+        Admin::script($script, false);
+        Admin::script($deferredScript, true);
         return $content
             ->title('Produk')
             ->description('Tambah')
