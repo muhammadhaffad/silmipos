@@ -351,6 +351,7 @@ class ProdukController extends Controller
             $form->tablehasmany('produkAttribut', 'Varian', function (NestedForm $form) use ($attributs) {
                 $form->select('id_attribut', 'Attribut')
                     ->attribute('data-index', $form->model()?->index)
+                    ->required()
                     ->options($attributs);
             })->value($data->produkAttribut->map(fn ($item, $index) => array_merge($item->toArray(), ['index' => $index]))->toArray())
                 ->useTable();
@@ -373,13 +374,14 @@ class ProdukController extends Controller
                         ->setElementName("produkVarian[{$key}][{$keyName}]");
                     foreach ($data->produkAttribut->toArray() as $key => $attr) {
                         $form->select($attr['id_produkattribut'], $attr['nama'])
-                            ->placeholder($attr['nama'])
+                            ->placeholder('')
                             ->setScript('')
+                            ->required()
                             ->attribute([
                                 'varian' => null, 
                                 'select2' => null, 
                                 'data-kode-produkvarian' => $row->kode_produkvarian,
-                                'data-url' => route(admin_get_route('ajax.attribut-value'), $attr['id_attribut']),
+                                'data-url' => route(admin_get_route('ajax.attribut-value')),
                                 'data-index-varian' => $key
                             ])
                             ->default($attributVarian[$attr['id_produkattribut']] ?? '')
@@ -398,10 +400,13 @@ class ProdukController extends Controller
                     foreach ($data->produkAttribut->toArray() as $key => $attr) {
                         $form->select($attr['id_produkattribut'], $attr['nama'])
                             ->setLabelClass(['varian index-varian-' . $key])
-                            ->placeholder($attr['nama'])
+                            ->placeholder('')
                             ->attribute([
                                 'varian' => null, 
-                                'data-index' => $key
+                                'select2' => null,
+                                'data-index-varian' => $key,
+                                'data-kode-produkvarian' => 'new___LA_KEY__',
+                                'data-url' => route(admin_get_route('ajax.attribut-value'))
                             ])
                             ->ajax(route(admin_get_route('ajax.attribut-value') ));
                     }
@@ -900,89 +905,159 @@ STYLE;
             });
             $('#has-many-produkVarian tbody tr').each(function() {
                 $(this).find('td').eq(columnIndex).addClass('hidden');
+                $(this).find('td').eq(columnIndex).find('select').attr('required', false);
             });
+            let produkVarianTpl = $($('template.produkVarian-tpl')[0].content);
+            produkVarianTpl.find('td').eq(columnIndex).addClass('hidden');
         });
 SCRIPT;
         $deferredScript =
 <<<SCRIPT
+        $('#has-many-produkVarian').on('click', '.add', function () {
+            $(".produkVarian[varian]").select2({
+                ajax: {
+                    url: "{$urlAjaxAttrVal}",
+                    dataType: 'json',
+                    delay: 250,
+                    data: function (params) {
+                    return {
+                        q: params.term,
+                        page: params.page
+                    };
+                    },
+                    processResults: function (data, params) {
+                    params.page = params.page || 1;
+
+                    return {
+                        results: $.map(data.data, function (d) {
+                                d.id = d.id;
+                                d.text = d.text;
+                                return d;
+                                }),
+                        pagination: {
+                        more: data.next_page_url
+                        }
+                    };
+                    },
+                    cache: true
+                },
+                "allowClear":true,
+                "placeholder": "",
+                "minimumInputLength":1,
+                escapeMarkup: function (markup) {
+                    return markup;
+                }
+            });
+        });
         $('#has-many-produkAttribut').on('click', '.add', function () {
             const nextIndex = parseInt($('#has-many-produkAttribut tbody tr').filter(':visible').eq(-2).find('select')[0]?.dataset.index || '-1') + 1;
             $('#has-many-produkAttribut tbody tr').filter(':visible').eq(-1).find('select').attr('data-index', nextIndex);
+            
+            let newAttribut = 'new_' + index;
             if ($('#has-many-produkVarian thead th.index-varian-' + nextIndex).length > 0) {
+                /* Menggunakan kolom yang sudah dihapus */
                 const columnIndex = $('#has-many-produkVarian thead th.index-varian-' + nextIndex).index();
                 $('#has-many-produkVarian thead tr').each(function() {
                     $(this).find('th').eq(columnIndex).removeClass('hidden');
                 });
                 $('#has-many-produkVarian tbody tr').each(function() {
-                    let newAttribut = 'new_' + index;
-                    console.info($(this).find('td select').eq(columnIndex));
                     let kodeProdukvarian = $(this).find('td').eq(columnIndex).find('select')[0].dataset.kodeProdukvarian;
                     $(this).find('td').eq(columnIndex).find('input').attr('name', 'produkVarian['+kodeProdukvarian+']['+newAttribut+']');
                     $(this).find('td').eq(columnIndex).find('select').attr('name', 'produkVarian['+kodeProdukvarian+']['+newAttribut+']');
                     $(this).find('td').eq(columnIndex).removeClass('hidden');
                 });
+                let produkVarianTpl = $($('template.produkVarian-tpl')[0].content);
+                produkVarianTpl.find('td').eq(columnIndex).find('input').attr('name', 'produkVarian[new___LA_KEY__]['+newAttribut+']');    
+                produkVarianTpl.find('td').eq(columnIndex).find('select').attr('name', 'produkVarian[new___LA_KEY__]['+newAttribut+']');    
+                produkVarianTpl.find('td').eq(columnIndex).removeClass('hidden');
             } else {
                 let columnIndex = $('#has-many-produkVarian thead th.varian').last().index();
+                if(columnIndex == -1) {
+                    columnIndex = 0;
+                }
                 $('#has-many-produkVarian thead tr').each(function() {
                     $(this).find('th').eq(columnIndex).after('<th class="varian index-varian-' + nextIndex + '">');
                 });
                 $('#has-many-produkVarian tbody tr').each(function() {
                     let lastVarianCell = $(this).find('td').eq(columnIndex);
-                    let kodeProdukVarian = lastVarianCell.find('select')[0].dataset.kodeProdukvarian;
-                    let selectedValue = lastVarianCell.find('select')[0].value;
-                    let selectedIndex = lastVarianCell.find('select')[0].selectedIndex;
-                    let selectedValueText = lastVarianCell.find('select')[0].options[selectedIndex].text;
-                    let newAttribut = 'new_' + index;
+                    let kodeProdukVarian = $(this).find('td.hidden input').eq(0).val();
+                    console.info(lastVarianCell, kodeProdukVarian)
+                    let selectedValue = lastVarianCell.find('select')[0]?.value || '';
+                    let selectedIndex = lastVarianCell.find('select')[0]?.selectedIndex || 0;
+                    let selectedValueText = lastVarianCell.find('select')[0]?.options[selectedIndex].text;
                     let newCell = `
+                        <td>
+                            <div class="form-group">
+                                <label for="`+ newAttribut +`" class="col-sm-0 varian hidden control-label">Warna</label>
+                                <div class="col-sm-12">
+                                    <input type="hidden" name="produkVarian[`+ kodeProdukVarian +`][`+ newAttribut +`]">
+                                    <select required class="form-control produkVarian `+ newAttribut +`" style="width: 100%;" name="produkVarian[`+ kodeProdukVarian +`][`+ newAttribut +`]" varian="" data-kode-produkvarian="` + kodeProdukVarian + `" data-index-varian="`+ nextIndex +`" data-value="">
+                                        <option value="` + selectedValue + `" selected>` + selectedValueText + `</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </td>`;
+                    lastVarianCell.after(newCell);
+                });
+                let newCellTemplate = `
                     <td>
                         <div class="form-group">
-                            <label for="`+ newAttribut +`" class="col-sm-0 varian hidden control-label">Warna</label>
+                            <label for="`+ newAttribut +`" class="col-sm-0 varian hidden control-label"></label>
                             <div class="col-sm-12">
-                                <input type="hidden" name="produkVarian[`+ kodeProdukVarian +`][`+ newAttribut +`]">
-                                <select class="form-control produkVarian `+ newAttribut +`" style="width: 100%;" name="produkVarian[`+ kodeProdukVarian +`][`+ newAttribut +`]" varian="" data-kode-produkvarian="` + kodeProdukVarian + `" data-index-varian="`+ nextIndex +`" data-value="">
-                                    <option value="` + selectedValue + `" selected>` + selectedValueText + `</option>
+                                <input type="hidden" name="produkVarian[new___LA_KEY__][`+ newAttribut +`]">
+                                <select required class="form-control produkVarian `+ newAttribut +`" style="width: 100%;" name="produkVarian[new___LA_KEY__][`+ newAttribut +`]" varian="" data-kode-produkvarian="new___LA_KEY__" data-index-varian="`+ nextIndex +`" data-value="">
+                                    <option value=""></option>
                                 </select>
                             </div>
                         </div>
                     </td>`;
-                    lastVarianCell.after(newCell);
-                    $(".produkVarian." + newAttribut).select2({
-                        ajax: {
-                            url: "{$urlAjaxAttrVal}",
-                            dataType: 'json',
-                            delay: 250,
-                            data: function (params) {
-                            return {
-                                q: params.term,
-                                page: params.page
-                            };
-                            },
-                            processResults: function (data, params) {
-                            params.page = params.page || 1;
-
-                            return {
-                                results: $.map(data.data, function (d) {
-                                        d.id = d.id;
-                                        d.text = d.text;
-                                        return d;
-                                        }),
-                                pagination: {
-                                more: data.next_page_url
-                                }
-                            };
-                            },
-                            cache: true
+                let produkVarianTplCloned = $($('template.produkVarian-tpl').html());
+                produkVarianTplCloned.find('td').eq(columnIndex).after(newCellTemplate);
+                $('template.produkVarian-tpl').remove() // menghapus template lama, document fragment is suck!
+                $('#has-many-produkVarian').append('<template class="produkVarian-tpl"><tr class="has-many-produkVarian-form fields-group">' + produkVarianTplCloned.html() + '</tr></template>'); // membuat template baru
+                
+                $(".produkVarian." + newAttribut).select2({
+                    ajax: {
+                        url: "{$urlAjaxAttrVal}",
+                        dataType: 'json',
+                        delay: 250,
+                        data: function (params) {
+                        return {
+                            q: params.term,
+                            page: params.page
+                        };
                         },
-                        "allowClear":true,
-                        "placeholder": "",
-                        "minimumInputLength":1,
-                        escapeMarkup: function (markup) {
-                            return markup;
-                        }
-                    });
+                        processResults: function (data, params) {
+                        params.page = params.page || 1;
+
+                        return {
+                            results: $.map(data.data, function (d) {
+                                    d.id = d.id;
+                                    d.text = d.text;
+                                    return d;
+                                    }),
+                            pagination: {
+                            more: data.next_page_url
+                            }
+                        };
+                        },
+                        cache: true
+                    },
+                    "allowClear":true,
+                    "placeholder": "",
+                    "minimumInputLength":1,
+                    escapeMarkup: function (markup) {
+                        return markup;
+                    }
                 });
             }
+            
             return false;
+        });
+        $('#has-many-produkAttribut').on('change', 'select', function () {
+            let indexVarian = this.dataset.index;
+            let varianText = this.options[this.selectedIndex].text;
+            $('#has-many-produkVarian thead th.index-varian-' + indexVarian).text(varianText);
         });
 SCRIPT;
         
