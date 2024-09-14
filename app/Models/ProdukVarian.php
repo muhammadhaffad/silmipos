@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class ProdukVarian extends Model
 {
@@ -15,4 +16,12 @@ class ProdukVarian extends Model
     protected $table = 'toko_griyanaura.ms_produkvarian';
     protected $guarded = [];
     public $incrementing = false;
+
+    public function produkVarianHarga() {
+        return $this->hasMany(ProdukVarianHarga::class, 'kode_produkvarian', 'kode_produkvarian');
+    }
+
+    public function produkPersediaan() {
+        return $this->hasMany(ProdukPersediaan::class, 'kode_produkvarian', 'kode_produkvarian')->join(DB::raw("(select id_gudang, nama as nama_gudang from toko_griyanaura.lv_gudang) as gdg"), 'toko_griyanaura.ms_produkpersediaan.id_gudang', 'gdg.id_gudang');
+    }
 }

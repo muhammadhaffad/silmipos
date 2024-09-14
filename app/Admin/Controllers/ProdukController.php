@@ -38,7 +38,7 @@ class ProdukController extends Controller
     protected function listProdukGrid()
     {
         $grid = new Grid(new Produk());
-        $grid->model()->with('produkVarian');
+        $grid->model()->with('produkVarian.produkVarianHarga', 'produkVarian.produkPersediaan');
         $grid->model()->join(DB::raw('(select kode_unit, nama as namaunit from toko_griyanaura.lv_unit) as u'), 'toko_griyanaura.ms_produk.default_unit', 'u.kode_unit');
         if (!request()->get('_sort') and !request()->get('_customSort')) {
             $grid->model()->orderByDesc('toko_griyanaura.ms_produk.inserted_at');
@@ -54,7 +54,7 @@ class ProdukController extends Controller
         }
         if (@request()->get('_customSort')['column'] == 'hargajual') {
             $grid->model()
-                ->leftJoin(DB::raw('(select id_produk, min(hargajual) as minhargajual, max(hargajual) as maxhargajual from toko_griyanaura.ms_produkvarian group by id_produk) as pv'), 'toko_griyanaura.ms_produk.id_produk', 'pv.id_produk');
+                ->leftJoin(DB::raw("(select id_produk, min(pvh.hargajual) as minhargajual, max(pvh.hargajual) as maxhargajual from toko_griyanaura.ms_produkvarian pv join toko_griyanaura.ms_produkvarianharga pvh using (kode_produkvarian) where pvh.id_varianharga = 1 group by id_produk) as pv"), 'toko_griyanaura.ms_produk.id_produk', 'pv.id_produk');
             if (@request()->get('_customSort')['type'] == 'asc') {
                 $grid->model()->orderByRaw('pv.minhargajual desc');
             } else if (@request()->get('_customSort')['type'] == 'desc') {
@@ -72,19 +72,20 @@ class ProdukController extends Controller
         }
         if (@request()->get('_customSort')['column'] == 'totalstok') {
             $grid->model()
-                ->leftJoin(DB::raw('(select id_produk, sum(stok) as totalstok from toko_griyanaura.ms_produkvarian group by id_produk) as pv'), 'toko_griyanaura.ms_produk.id_produk', 'pv.id_produk');
+                ->leftJoin(DB::raw('(select pv.id_produk, sum(pp.stok) as totalstok from toko_griyanaura.ms_produkvarian pv join toko_griyanaura.ms_produkpersediaan pp using (kode_produkvarian) group by id_produk) as pv'), 'toko_griyanaura.ms_produk.id_produk', 'pv.id_produk');
             if (@request()->get('_customSort')['type'] == 'asc') {
                 $grid->model()->orderByRaw('pv.totalstok asc');
             } else if (@request()->get('_customSort')['type'] == 'desc') {
                 $grid->model()->orderByRaw('pv.totalstok desc');
             }
         }
+
         $grid->filter(function (Filter $filter) {
             $filter->expand();
             $filter->disableIdFilter();
             $filter->column(1 / 2, function (Filter $filter) {
                 $filter->where(function () {}, 'Produk', 'produk');
-                $filter->where(function () {}, 'Varian', 'varian')->multipleSelect()->setResource(route(admin_get_route('ajax.varians')))->config('allowClear', false)->ajax(route(admin_get_route('ajax.varians')));
+                $filter->where(function () {}, 'Varian', 'varian')->multipleSelect()->default('*')->setResource(route(admin_get_route('ajax.varians')))->config('allowClear', false)->ajax(route(admin_get_route('ajax.varians')));
             });
             $filter->column(1 / 2, function (Filter $filter) {
                 $filter->where(function ($query) {
@@ -100,6 +101,7 @@ class ProdukController extends Controller
                 ])->default('*');
             });
         });
+
         $grid->column('nama', __('Nama'))->expand(function ($model) {
             $produkVarian = $model->produkVarian->map(function ($varian) {
                 return [
@@ -120,8 +122,8 @@ class ProdukController extends Controller
         });
         $grid->column('namaunit', 'Unit')->sortable();
         $grid->column('hargajual', 'Harga jual')->display(function () {
-            $min = min(array_column($this['produkVarian']->toArray(), 'hargajual'));
-            $max = max(array_column($this['produkVarian']->toArray(), 'hargajual'));
+            $min = min(array_column($this['produkVarian']->map(function ($item) {return $item->produkVarianHarga->where('id_varianharga', 1)[0];})->toArray(), 'hargajual'));
+            $max = max(array_column($this['produkVarian']->map(function ($item) {return $item->produkVarianHarga->where('id_varianharga', 1)[0];})->toArray(), 'hargajual'));
             return 'Rp ' . number_format($min) . ' s/d ' . 'Rp ' . number_format($max);
         })->addHeader(new Sorter('_customSort', 'hargajual', null));
         $grid->column('totalvarian', 'Total varian')->display(function () {
@@ -129,7 +131,7 @@ class ProdukController extends Controller
             return "<span class='label label-primary'>{$count} varian</span>";
         })->addHeader(new Sorter('_customSort', 'totalvarian', null));
         $grid->column('totalstok', 'Total stok')->display(function () {
-            $totalStok = array_sum(array_column($this['produkVarian']->toArray(), 'stok'));
+            $totalStok = array_sum($this['produkVarian']->map(function($item) {return $item->produkPersediaan->sum('stok');})->toArray());
             return "<span class='label label-warning'>{$totalStok}</span>";
         })->addHeader(new Sorter('_customSort', 'totalstok', null));
         $grid->actions(function (DropdownActions $actions) {
@@ -141,6 +143,7 @@ class ProdukController extends Controller
             // dump($this);
             $actions->add(new Delete(route(admin_get_route('produk.delete'), $this->row->id_produk)));
         });
+
         return $grid;
     }
     public function showProdukForm($id)
@@ -322,7 +325,11 @@ class ProdukController extends Controller
     public function editProdukForm($id, $request)
     {
         $form = new Form(new Produk);
-        $data = $form->model()->with('produkAttribut', 'produkVarian')->find($id);
+        $data = $form->model()->with(['produkAttribut', 'produkVarian' => function ($relation) {
+            $relation->with(['produkVarianHarga' => function ($q) {
+                $q->where('id_varianharga', '1');
+            }]);
+        }])->find($id);
         $form->tools(function (Tools $tools) use ($id) {
             $tools->disableList();
             $tools->disableView();
@@ -411,10 +418,9 @@ class ProdukController extends Controller
                             ->ajax(route(admin_get_route('ajax.attribut-value') ));
                     }
                 }
-                $form->currency('hargajual', 'Harga Jual')->symbol('Rp');
+                $form->currency('produk_varian_harga.0.hargajual', 'Harga Jual')->removeElementClass('produk_varian_harga.0.hargajual')->addElementClass('hargajual')->symbol('Rp');
                 if ($data->in_stok) {
-                    $form->currency('default_hargabeli', 'Harga Beli')->symbol('Rp');
-                    $form->text('stok', 'Stok')->attribute('type', 'number')->attribute('step', '.01')->style('min-width', '80px')->default(0)->withoutIcon()->disable();
+                    $form->currency('produk_varian_harga.0.hargabeli', 'Harga Beli')->removeElementClass('produk_varian_harga.0.hargabeli')->addElementClass('hargabeli')->symbol('Rp');
                     $form->text('minstok', 'Min Stok')->attribute('type', 'number')->attribute('step', '.01')->style('min-width', '80px')->default('0.00')->withoutIcon();
                 }
             })->value($data->produkVarian->toArray())->useTable();
