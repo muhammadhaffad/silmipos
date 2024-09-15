@@ -52,13 +52,27 @@ class ProdukController extends Controller
                     ->whereIn('pav.id_attributvalue', request()->get('varian'));
             });
         }
+        if (@request()->get('_customSort')['column'] == 'nama') {
+            if (@request()->get('_customSort')['type'] == 'asc') {
+                $grid->model()->orderByRaw('nama asc');
+            } else if (@request()->get('_customSort')['type'] == 'desc') {
+                $grid->model()->orderByRaw('nama desc');
+            }
+        }
+        if (@request()->get('_customSort')['column'] == 'namaunit') {
+            if (@request()->get('_customSort')['type'] == 'asc') {
+                $grid->model()->orderByRaw('namaunit asc');
+            } else if (@request()->get('_customSort')['type'] == 'desc') {
+                $grid->model()->orderByRaw('namaunit desc');
+            }
+        }
         if (@request()->get('_customSort')['column'] == 'hargajual') {
             $grid->model()
-                ->leftJoin(DB::raw("(select id_produk, min(pvh.hargajual) as minhargajual, max(pvh.hargajual) as maxhargajual from toko_griyanaura.ms_produkvarian pv join toko_griyanaura.ms_produkvarianharga pvh using (kode_produkvarian) where pvh.id_varianharga = 1 group by id_produk) as pv"), 'toko_griyanaura.ms_produk.id_produk', 'pv.id_produk');
+                ->leftJoin(DB::raw("(select pv.id_produk, min(pvh.hargajual) as minhargajual, max(pvh.hargajual) as maxhargajual from toko_griyanaura.ms_produkvarian pv join toko_griyanaura.ms_produkvarianharga pvh using (kode_produkvarian) join toko_griyanaura.ms_produkharga ph using (id_produkharga) where ph.id_varianharga = 1 group by pv.id_produk) as pv"), 'toko_griyanaura.ms_produk.id_produk', 'pv.id_produk');
             if (@request()->get('_customSort')['type'] == 'asc') {
-                $grid->model()->orderByRaw('pv.minhargajual desc');
+                $grid->model()->orderByRaw('minhargajual asc');
             } else if (@request()->get('_customSort')['type'] == 'desc') {
-                $grid->model()->orderByRaw('pv.minhargajual asc');
+                $grid->model()->orderByRaw('minhargajual desc');
             }
         }
         if (@request()->get('_customSort')['column'] == 'totalvarian') {
@@ -112,7 +126,7 @@ class ProdukController extends Controller
                 ];
             });
             return new Table(['SKU', 'Varian', 'Harga jual', 'Stok'], $produkVarian->toArray());
-        })->sortable();
+        })->addHeader(new Sorter('_customSort', 'nama', null));
         $grid->column('produkAttribut', 'Attribut')->display(function ($value) {
             $varian = [];
             foreach ($value as $attr) {
@@ -120,7 +134,7 @@ class ProdukController extends Controller
             }
             return implode("&nbsp;&nbsp;&nbsp;", $varian);
         });
-        $grid->column('namaunit', 'Unit')->sortable();
+        $grid->column('namaunit', 'Unit')->addHeader(new Sorter('_customSort', 'namaunit', null));
         $grid->column('hargajual', 'Harga jual')->display(function () {
             $min = min(array_column($this['produkVarian']->map(function ($item) {return $item->produkVarianHarga->where('id_varianharga', 1)[0];})->toArray(), 'hargajual'));
             $max = max(array_column($this['produkVarian']->map(function ($item) {return $item->produkVarianHarga->where('id_varianharga', 1)[0];})->toArray(), 'hargajual'));
@@ -452,6 +466,52 @@ class ProdukController extends Controller
                 ->default('5002')
                 ->value($data->default_akunbiaya);
         });
+        return $form;
+    }
+
+    public function editHargaProdukForm($id, $request) {
+        $form = new Form(new Produk);
+        $data = $form->model()->with(['produkAttribut', 'produkHarga', 'produkVarian.produkVarianHarga'])->find($id);
+        $form->tools(function (Tools $tools) use ($id) {
+            $tools->disableList();
+            $tools->disableView();
+            $tools->disableDelete();
+            $tools->append($tools->renderDelete(route(admin_get_route('produk.edit'), ['id' => $id])));
+            $tools->append($tools->renderView(route(admin_get_route('produk.detail'), ['id' => $id])));
+            $tools->append($tools->renderList(route(admin_get_route('produk.list'))));
+        });
+        $form->builder()->setResourceId($id);
+        $form->builder()->setTitle($data->nama)->setMode('edit');
+        $form->display('nama', __('Nama produk'))->setWidth(4)->value($data->nama);
+        $form->select('default_unit', 'Satuan')->disable()->required()->setWidth(4)->options((new Dynamic)->setTable('toko_griyanaura.lv_unit')->select('kode_unit as id', 'nama as text')->pluck('text', 'id')->toArray())->value($data->default_unit);
+        $form->display('deskripsi')->setWidth(6)->value($data->deskripsi);
+        $form->switch('in_stok', 'Produk di-stok?')->disable()->states([
+            'on' => ['value' => 1, 'text' => 'Iya', 'color' => 'success'],
+            'off' => ['value' => 0, 'text' => 'Tidak', 'color' => 'danger']
+        ])->value($data->in_stok);
+        $form->divider();
+        $form->tablehasmany('produkHarga', 'Jenis Harga', function (NestedForm $form) {
+            $form->select('id_varianharga', 'Jenis')->options((new Dynamic())->setTable('toko_griyanaura.lv_varianharga')->select('id_varianharga as id', 'nama as text')->get()->pluck('text', 'id')->toArray());
+        })->value($data->produkHarga->toArray())->useTable();
+        $form->tablehasmany('produkVarian', 'Varian Produk', function (NestedForm $form)  use ($data) {
+            $form->text('kode_produkvarian')->withoutIcon()->readonly()->disable();
+            $form->text('varian')->withoutIcon()->readonly()->disable();
+            if ($form->model()) {
+                foreach ($data->produkHarga as $key => $jenisHarga) {
+                    $produkVarianHarga = array_filter($form->model()?->getAttribute('produk_varian_harga'), function ($varianHarga) use ($jenisHarga) { return $varianHarga['id_produkharga'] == $jenisHarga['id_produkharga']; })[0];
+                    $form->currency('harga_jual_' . $jenisHarga['id_produkharga'], 'Harga Jual ' . $jenisHarga['nama'])->symbol('Rp')->default($produkVarianHarga['hargajual']);
+                    $form->currency('harga_beli_' . $jenisHarga['id_produkharga'], 'Harga Beli ' . $jenisHarga['nama'])->symbol('Rp')->default($produkVarianHarga['hargabeli']);
+                }
+            } else {
+                foreach ($data->produkHarga as $key => $jenisHarga) {
+                    $form->currency('harga_jual_' . $jenisHarga['id_produkharga'], 'Harga Jual ' . $jenisHarga['nama'])->symbol('Rp');
+                    $form->currency('harga_beli_' . $jenisHarga['id_produkharga'], 'Harga Beli ' . $jenisHarga['nama'])->symbol('Rp');
+                }
+            }
+        })->value($data->produkVarian->toArray())
+        ->disableDelete()
+        ->disableCreate()
+        ->useTable();
         return $form;
     }
 
@@ -970,6 +1030,7 @@ SCRIPT;
                     let kodeProdukvarian = $(this).find('td').eq(columnIndex).find('select')[0].dataset.kodeProdukvarian;
                     $(this).find('td').eq(columnIndex).find('input').attr('name', 'produkVarian['+kodeProdukvarian+']['+newAttribut+']');
                     $(this).find('td').eq(columnIndex).find('select').attr('name', 'produkVarian['+kodeProdukvarian+']['+newAttribut+']');
+                    $(this).find('td').eq(columnIndex).find('select').attr('required', true);
                     $(this).find('td').eq(columnIndex).removeClass('hidden');
                 });
                 let produkVarianTpl = $($('template.produkVarian-tpl')[0].content);
@@ -1074,6 +1135,12 @@ SCRIPT;
             ->title('Produk')
             ->description('Tambah')
             ->body($this->editProdukForm($id, $request->all())->setAction(route(admin_get_route('produk.update'), ['id' => $id])));
+    }
+    public function editHargaProduk($id, Request $request, Content $content) {
+        return $content
+            ->title('Produk')
+            ->description('Tambah')
+            ->body($this->editHargaProdukForm($id, $request->all())->setAction(route(admin_get_route('produk.update'), ['id' => $id])));
     }
     public function updateProduk($id, Request $request)
     {

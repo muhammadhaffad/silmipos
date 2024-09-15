@@ -38,4 +38,9 @@ class Produk extends Model
             ->leftJoin('toko_griyanaura.lv_attribut as a', 'a.id_attribut', 'at.id_attribut')
             ->groupBy('toko_griyanaura.ms_produkvarian.kode_produkvarian');
     }
+
+    public function produkHarga()
+    {
+        return $this->hasMany(ProdukHarga::class, 'id_produk', 'id_produk')->join(DB::raw("(select id_varianharga, nama from toko_griyanaura.lv_varianharga) as vh"), 'toko_griyanaura.ms_produkharga.id_varianharga', 'vh.id_varianharga');
+    }
 }

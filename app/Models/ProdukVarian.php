@@ -18,7 +18,7 @@ class ProdukVarian extends Model
     public $incrementing = false;
 
     public function produkVarianHarga() {
-        return $this->hasMany(ProdukVarianHarga::class, 'kode_produkvarian', 'kode_produkvarian');
+        return $this->hasMany(ProdukVarianHarga::class, 'kode_produkvarian', 'kode_produkvarian')->join(DB::raw("(select id_produkharga, id_varianharga from toko_griyanaura.ms_produkharga) as ph"), 'toko_griyanaura.ms_produkvarianharga.id_produkharga', 'ph.id_produkharga');
     }
 
     public function produkPersediaan() {

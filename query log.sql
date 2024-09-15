@@ -32,21 +32,21 @@ alter table toko_griyanaura.lv_gudang
 	add column inserted_at timestamp(0) without time zone DEFAULT now(),
 	add column inserted_by character varying(50) DEFAULT 'postgres'::character varying,
 	add column updated_at timestamp(0) without time zone DEFAULT now(),
-	add column updated_by character varying(50) DEFAULT 'postgres'::character varying
+	add column updated_by character varying(50) DEFAULT 'postgres'::character varying;
 
-insert into toko_griyanaura.lv_gudang (nama) values ('Pusat')
+insert into toko_griyanaura.lv_gudang (nama) values ('Pusat');
 
 insert into toko_griyanaura.ms_produkvarianharga (kode_produkvarian, nama, hargajual, hargabeli) 
 select kode_produkvarian, 'Reguler', hargajual, default_hargabeli
-from toko_griyanaura.ms_produkvarian 
+from toko_griyanaura.ms_produkvarian;
 
 insert into toko_griyanaura.ms_persediaan (id_gudang, kode_produkvarian, minstok, stok, default_varianharga)
 select gdg.id_gudang, pv.kode_produkvarian, pv.minstok, pv.stok, pvh.id_produkvarianharga
 from toko_griyanaura.ms_produkvarian pv
 join (select * from toko_griyanaura.lv_gudang limit 1) gdg on true
-join (select * from toko_griyanaura.ms_produkvarianharga where nama='Reguler') pvh on pvh.kode_produkvarian = pv.kode_produkvarian
+join (select * from toko_griyanaura.ms_produkvarianharga where nama='Reguler') pvh on pvh.kode_produkvarian = pv.kode_produkvarian;
 
-ALTER TABLE toko_griyanaura.ms_persediaan RENAME TO ms_produkpersediaan
+ALTER TABLE toko_griyanaura.ms_persediaan RENAME TO ms_produkpersediaan;
 
 alter table toko_griyanaura.ms_produkpersediaan drop column minstok;
 
