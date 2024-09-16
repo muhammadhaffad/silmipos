@@ -10,6 +10,7 @@ use App\Admin\Forms\Produk\InformasiProduk;
 use App\Http\Controllers\Controller;
 use App\Models\Dynamic;
 use App\Models\Produk;
+use App\Services\Core\Produk\ProdukService;
 use Encore\Admin\Admin;
 // use App\Admin\Form\Form;
 use Encore\Admin\Form;
@@ -30,11 +31,18 @@ use Encore\Admin\Widgets\Tab;
 use Encore\Admin\Widgets\Table;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 use function Termwind\style;
 
 class ProdukController extends Controller
 {
+    protected $produkService;
+    public function __construct(ProdukService $produkService)
+    {
+        $this->produkService = $produkService;
+    }
     protected function listProdukGrid()
     {
         $grid = new Grid(new Produk());
@@ -266,19 +274,6 @@ class ProdukController extends Controller
                 'on' => ['value' => 1, 'text' => 'Iya', 'color' => 'success'],
                 'off' => ['value' => 0, 'text' => 'Tidak', 'color' => 'danger']
             ])->default(false);
-            /* $form->html(function (Form $form) {
-                $template = '<div class="row">';
-                $template .= $form->select('produkattribut', 'Varian Produk')
-                    ->setLabelClass(['d-none'])
-                    ->setGroupClass('col-md-6')->setWidth(12)
-                    ->options((new Dynamic())->setTable('toko_griyanaura.lv_attribut')->select('id_attribut as id', 'nama as text')->pluck('text', 'id')->toArray())->render();
-                $template .= $form->multipleSelect('attributvalue', 'Nilai Varian')
-                    ->setLabelClass(['d-none'])
-                    ->setGroupClass('col-md-6')->setWidth(12)->render();
-                // dd($template);
-                $template .= '</div>';
-                return $template;
-            }, 'Varian Produk'); */
             $form->html('<div id="produk-varian-section" class="d-none">')->plain();
             $form->divider();
             $form->tablehasmany('produkAttribut', 'Varian Produk', function (NestedForm $form) {
@@ -355,7 +350,7 @@ class ProdukController extends Controller
         $form->builder()->setResourceId($id);
         $form->builder()->setTitle($data->nama)->setMode('edit');
         $form->tab('Produk', function (Form $form) use ($data) {
-            $form->text('nama', __('Nama produk'))->withoutIcon()->required()->value($data->nama);
+            $form->text('nama', __('Nama produk'))->rules('required|min:5')->withoutIcon()->required()->value($data->nama);
             $form->select('default_unit', 'Satuan')->required()->setWidth(4)->options((new Dynamic)->setTable('toko_griyanaura.lv_unit')->select('kode_unit as id', 'nama as text')->pluck('text', 'id')->toArray())->value($data->default_unit);
             $form->ckeditor('deskripsi')->value($data->deskripsi);
             $form->switch('in_stok', 'Produk di-stok?')->disable()->states([
@@ -367,7 +362,6 @@ class ProdukController extends Controller
             foreach ($data->produkAttribut as $attribut) {
                 $optionsVarian[$attribut['id_produkattribut']] = (new Dynamic)->setTable('toko_griyanaura.ms_produkattributvarian as pav')->join('toko_griyanaura.lv_attributvalue as av', 'pav.id_attributvalue', 'av.id_attributvalue')->where('id_produkattribut', $attribut['id_produkattribut'])->select('av.id_attributvalue as id', 'av.nama as text')->pluck('text', 'id')->toArray();
             }
-            // $varianOptions = $data->produkVarian->pluck('varian', 'varian_id')->toArray();
             $attributs = (new Dynamic())->setTable('toko_griyanaura.lv_attribut as att')->select('id_attribut as id', 'nama as text')->pluck('text', 'id')->toArray();
             $form->tablehasmany('produkAttribut', 'Varian', function (NestedForm $form) use ($attributs) {
                 $form->select('id_attribut', 'Attribut')
@@ -491,8 +485,16 @@ class ProdukController extends Controller
         ])->value($data->in_stok);
         $form->divider();
         $form->tablehasmany('produkHarga', 'Jenis Harga', function (NestedForm $form) {
-            $form->select('id_varianharga', 'Jenis')->options((new Dynamic())->setTable('toko_griyanaura.lv_varianharga')->select('id_varianharga as id', 'nama as text')->get()->pluck('text', 'id')->toArray());
-        })->value($data->produkHarga->toArray())->useTable();
+            if($form->model()?->id_varianharga == 1) {
+                $form->select('id_varianharga', 'Jenis')->required()->disable()->options((new Dynamic())->setTable('toko_griyanaura.lv_varianharga')->select('id_varianharga as id', 'nama as text')->get()->pluck('text', 'id')->toArray())->attribute([
+                    'data-index' => $form->model()?->index
+                ]);
+            } else {
+                $form->select('id_varianharga', 'Jenis')->required()->options((new Dynamic())->setTable('toko_griyanaura.lv_varianharga')->select('id_varianharga as id', 'nama as text')->get()->pluck('text', 'id')->toArray())->attribute([
+                    'data-index' => $form->model()?->index
+                ]);
+            }
+        })->value($data->produkHarga->map(fn ($item, $index) => array_merge($item->toArray(), ['index' => $index]))->toArray())->useTable();
         $form->tablehasmany('produkVarian', 'Varian Produk', function (NestedForm $form)  use ($data) {
             $form->text('kode_produkvarian')->withoutIcon()->readonly()->disable();
             $form->text('varian')->withoutIcon()->readonly()->disable();
@@ -504,8 +506,8 @@ class ProdukController extends Controller
                 }
             } else {
                 foreach ($data->produkHarga as $key => $jenisHarga) {
-                    $form->currency('harga_jual_' . $jenisHarga['id_produkharga'], 'Harga Jual ' . $jenisHarga['nama'])->symbol('Rp');
-                    $form->currency('harga_beli_' . $jenisHarga['id_produkharga'], 'Harga Beli ' . $jenisHarga['nama'])->symbol('Rp');
+                    $form->currency('harga_jual_' . $jenisHarga['id_produkharga'], 'Harga Jual ' . $jenisHarga['nama'])->setLabelClass(['varianharga', 'index-varianharga-' . $key])->symbol('Rp');
+                    $form->currency('harga_beli_' . $jenisHarga['id_produkharga'], 'Harga Beli ' . $jenisHarga['nama'])->setLabelClass(['varianharga', 'index-varianharga-' . $key])->symbol('Rp');
                 }
             }
         })->value($data->produkVarian->toArray())
@@ -518,36 +520,36 @@ class ProdukController extends Controller
     public function listProduk(Request $request, Content $content)
     {
         $style =
-<<<STYLE
-    .filter-box .box-footer .row .col-md-2 {
-        display : none;
-    }    
-STYLE;
-        $selectScript =
-<<<SCRIPT
-    $('[select2].form-control').each(function () {
-        const select = this;
-        const defaultValue = select.dataset.value.split(',');
-        const defaultUrl = select.dataset.url;
-        defaultValue.forEach(function (value) {
-            $.ajax({
-                type: 'GET',
-                url: defaultUrl + '?id=' + value
-            }).then(function (data) {
-                const option = new Option(data.text, data.id, true, true);
-                $(select).append(option).trigger('change');
-                $(select).trigger({
-                    type: 'select2:select',
-                    params: {
-                        data: data
-                    }
-                });
+        <<<STYLE
+            .filter-box .box-footer .row .col-md-2 {
+                display : none;
+            }    
+        STYLE;
+        $script =
+        <<<SCRIPT
+            $('[select2].form-control').each(function () {
+                const select = this;
+                const defaultValue = select.dataset.value.split(',');
+                const defaultUrl = select.dataset.url;
+                defaultValue.forEach(function (value) {
+                    $.ajax({
+                        type: 'GET',
+                        url: defaultUrl + '?id=' + value
+                    }).then(function (data) {
+                        const option = new Option(data.text, data.id, true, true);
+                        $(select).append(option).trigger('change');
+                        $(select).trigger({
+                            type: 'select2:select',
+                            params: {
+                                data: data
+                            }
+                        });
+                    });
+                })
             });
-        })
-    });
-SCRIPT;
+        SCRIPT;
         Admin::style($style);
-        Admin::script($selectScript);
+        Admin::script($script);
         return $content
             ->title('Produk')
             ->description('Daftar')
@@ -560,92 +562,92 @@ SCRIPT;
     public function showProduk(Content $content, $id)
     {
         $style =
-<<<STYLE
-            .input-group { 
-                width: 100%; 
-            }
-            table.has-many-produkAttribut tbody td:nth-child(1) div {
-                width:150px;
-            }
-            table.has-many-produkAttribut tbody td:nth-child(2) div {
-                width:300px;
-            }
-            [id^="has-many-"] {
-                position: relative;
-                overflow: auto;
-                white-space: nowrap;
-            }
-            [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
-                position: -webkit-sticky;
-                position: sticky;
-                left: 0px;
-                background: white;
-                z-index: 20;
-            }
-            [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
-                position: -webkit-sticky;
-                position: sticky;
-                right: 0px;
-                background: white;
-                z-index: 10;
-            }
-            [id^="has-many-"] .form-group:has(.add) {
-                width: 100%;
-                position: -webkit-sticky;
-                position: sticky;
-                left: 0px;
-                background: white;
-                z-index: 10;
-            }
-            .box-footer {
-                display: none;
-            }
-STYLE;
-        $selectScript =
-<<<SCRIPT
-            $('[varian-filter]').change(function () {
-                let attrValFilter = [];
-                $('[varian-filter]').each(function (k, varian) {
-                    attrValFilter.push(varian.value);
-                })
-                $('#has-many-produkVarian table tbody tr').each(function (k, tr) {
-                    $(tr).addClass('d-none');
-                })
-                $('#has-many-produkVarian table tbody tr').each(function (k, row) {
-                    let cond = true;
-                    $(row).find('td select[varian]').each(function (i, select) {
-                        if (attrValFilter[i] != select.dataset.value && attrValFilter[i] != '' && select.dataset.value != '') {
-                            cond = false;
-                        } 
-                    });
-                    if (cond) {
-                        $(row).removeClass('d-none');
+        <<<STYLE
+                    .input-group { 
+                        width: 100%; 
                     }
-                });
-            });
-            $('[select2].form-control').each(function () {
-                const select = this;
-                const defaultValue = select.dataset.value.split(',');
-                const defaultUrl = select.dataset.url;
-                defaultValue.forEach(function (value) {
-                    $.ajax({
-                        type: 'GET',
-                        url: defaultUrl + '?id=' + value
-                    }).then(function (data) {
-                        const option = new Option(data.text, data.id, true, true);
-                        $(select).append(option).trigger('change');
-                        $(select).trigger({
-                            type: 'select2:select',
-                            params: {
-                                data: data
+                    table.has-many-produkAttribut tbody td:nth-child(1) div {
+                        width:150px;
+                    }
+                    table.has-many-produkAttribut tbody td:nth-child(2) div {
+                        width:300px;
+                    }
+                    [id^="has-many-"] {
+                        position: relative;
+                        overflow: auto;
+                        white-space: nowrap;
+                    }
+                    [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
+                        position: -webkit-sticky;
+                        position: sticky;
+                        left: 0px;
+                        background: white;
+                        z-index: 20;
+                    }
+                    [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
+                        position: -webkit-sticky;
+                        position: sticky;
+                        right: 0px;
+                        background: white;
+                        z-index: 10;
+                    }
+                    [id^="has-many-"] .form-group:has(.add) {
+                        width: 100%;
+                        position: -webkit-sticky;
+                        position: sticky;
+                        left: 0px;
+                        background: white;
+                        z-index: 10;
+                    }
+                    .box-footer {
+                        display: none;
+                    }
+        STYLE;
+        $script =
+        <<<SCRIPT
+                    $('[varian-filter]').change(function () {
+                        let attrValFilter = [];
+                        $('[varian-filter]').each(function (k, varian) {
+                            attrValFilter.push(varian.value);
+                        })
+                        $('#has-many-produkVarian table tbody tr').each(function (k, tr) {
+                            $(tr).addClass('d-none');
+                        })
+                        $('#has-many-produkVarian table tbody tr').each(function (k, row) {
+                            let cond = true;
+                            $(row).find('td select[varian]').each(function (i, select) {
+                                if (attrValFilter[i] != select.dataset.value && attrValFilter[i] != '' && select.dataset.value != '') {
+                                    cond = false;
+                                } 
+                            });
+                            if (cond) {
+                                $(row).removeClass('d-none');
                             }
                         });
                     });
-                })
-            });
-SCRIPT;
+                    $('[select2].form-control').each(function () {
+                        const select = this;
+                        const defaultValue = select.dataset.value.split(',');
+                        const defaultUrl = select.dataset.url;
+                        defaultValue.forEach(function (value) {
+                            $.ajax({
+                                type: 'GET',
+                                url: defaultUrl + '?id=' + value
+                            }).then(function (data) {
+                                const option = new Option(data.text, data.id, true, true);
+                                $(select).append(option).trigger('change');
+                                $(select).trigger({
+                                    type: 'select2:select',
+                                    params: {
+                                        data: data
+                                    }
+                                });
+                            });
+                        })
+                    });
+        SCRIPT;
         Admin::style($style);
-        Admin::script($selectScript);
+        Admin::script($script);
         return $content
             ->title('Produk')
             ->description('Detail')
@@ -654,247 +656,247 @@ SCRIPT;
     public function createProduk(Content $content, Request $request)
     {
         $style =
-<<<STYLE
-            .input-group { 
-                width: 100%; 
-            }
-            table.has-many-produkAttribut tbody td:nth-child(1) div {
-                width:150px;
-            }
-            table.has-many-produkAttribut tbody td:nth-child(2) div {
-                width:300px;
-            }
-            [id^="has-many-"] {
-                position: relative;
-                overflow: auto;
-                white-space: nowrap;
-            }
-            [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
-                position: -webkit-sticky;
-                position: sticky;
-                left: 0px;
-                background: white;
-                z-index: 20;
-            }
-            [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
-                position: -webkit-sticky;
-                position: sticky;
-                right: 0px;
-                background: white;
-                z-index: 10;
-            }
-            [id^="has-many-"] .form-group:has(.add) {
-                width: 100%;
-                position: -webkit-sticky;
-                position: sticky;
-                left: 0px;
-                background: white;
-                z-index: 10;
-            }
-STYLE;
-        $routeAttrVal = route(admin_get_route('ajax.attribut-value'));
-        $selectScript =
-<<<SCRIPT
-            function generateKombinasiVarian () {
-                let attrVals = [];
-                $('.id_attributvalue').each(function (i, select) {
-                    if ($(select).val()) {
-                        attrVals[i] = $(select).find('option:selected').toArray().map(item => item.text);
+        <<<STYLE
+                    .input-group { 
+                        width: 100%; 
                     }
-                });
-                function getCombinations(arr) {
-                    return arr.reduce((acc, curr) => {
-                        const combinations = [];
-                        acc.forEach(a => {
-                        curr.forEach(b => {
-                            combinations.push([...a, b]);
-                        });
-                        });
-                        return combinations;
-                    }, [[]]);
-                }
-                const combinations = getCombinations(attrVals);
-
-                $('#has-many-produkVarian tbody tr:not(:first)').each(function (i, varian) {
-                    removeProdukVarian(varian);
-                })
-                for (let i = 0; i < combinations.length - 1; i++) {
-                    addProdukVarian();
-                }
-                
-                combinations.forEach(function (kombinasi, i) {
-                    $('#has-many-produkVarian tbody #varian')[i].innerText = kombinasi.join('/');
-                });
-                if (combinations[0].length == 0) {
-                    $('#has-many-produkVarian tbody #varian')[0].innerText = '--Tidak Ada--';
-                }
-            }
-            function removeProdukVarian(varian) {
-                var first_input_name = $(varian).closest('.has-many-produkVarian-form').find('input[name]:first').attr('name');
-                if (first_input_name.match('produkVarian\\\[new_')) {
-                    $(varian).closest('.has-many-produkVarian-form').remove();
-                } else {
-                    $(varian).closest('.has-many-produkVarian-form').hide();
-                    $(varian).closest('.has-many-produkVarian-form').find('.fom-removed').val(1);
-                    $(varian).closest('.has-many-produkVarian-form').find('input').removeAttr('required');
-                }
-                return false;
-            }
-            function addProdukVarian() {
-                let hargaBeli = $('input[name="default_hargabeli"]').val();
-                let hargaJual = $('input[name="hargajual"]').val();
-                let minStok = $('input[name="minstok"]').val();
-                var tpl = $('template.produkVarian-tpl');
-                index++;
-                var template = tpl.html().replace(/__LA_KEY__/g, index);
-                $(template).find('input#hargajual')[0].value = hargaJual;
-                $(template).find('input#default_hargabeli')[0].value = hargaBeli;
-                $('.has-many-produkVarian-forms').append(template);
-                $('.produkVarian.hargajual').inputmask({"alias":"currency","radixPoint":".","prefix":"","removeMaskOnSubmit":true});
-                $('.produkVarian.default_hargabeli').inputmask({"alias":"currency","radixPoint":".","prefix":"","removeMaskOnSubmit":true});
-                $('input[name="produkVarian[new_'+index+'][hargajual]"]').val(hargaJual);
-                $('input[name="produkVarian[new_'+index+'][default_hargabeli]"]').val(hargaBeli);
-                $('input[name="produkVarian[new_'+index+'][minstok]"]').val(minStok);
-                return false;
-            }
-            $('input[name="kode_produk"]').on('change', function () {
-                $('#has-many-produkVarian tbody td:first-child input')[0].value = this.value;
-            });
-            $('input[name="hargajual"]').on('change', function () {
-                const hargajual = this.value;
-                $('#has-many-produkVarian tbody td:nth-child(3) input').each(function (i, inp) {
-                    inp.value = hargajual;
-                })
-            });
-            $('input[name="default_hargabeli"]').on('change', function () {
-                const hargabeli = this.value;
-                $('#has-many-produkVarian tbody td:nth-child(4) input').each(function (i, inp) {
-                    inp.value = hargabeli;
-                })
-            });
-            $('input[name="minstok"]').on('change', function () {
-                const minStok = this.value;
-                $('#has-many-produkVarian tbody td:nth-child(6) input').each(function (i, inp) {
-                    inp.value = minStok;
-                })
-            });
-            $('input[name="in_stok"]').on('change', function () { 
-                if (this.value == 'on') {
-                    $('input[name="minstok"]').closest('.form-group').removeClass('d-none');
-                    $('#has-many-produkVarian td:nth-last-child(-n + 3)').removeClass('d-none');
-                    $('#has-many-produkVarian th:nth-last-child(-n + 3)').removeClass('d-none');
-                } else {
-                    $('input[name="minstok"]').closest('.form-group').addClass('d-none'); 
-                    $('#has-many-produkVarian td:nth-last-child(-n + 3)').addClass('d-none');
-                    $('#has-many-produkVarian th:nth-last-child(-n + 3)').addClass('d-none');
-                }
-            });
-            $('input[name="has_varian"]').on('change', function () {
-                if (this.value == 'on') {
-                    $('input[name="kode_produk"]').attr('disabled', true);
-                    $('input[name="hargajual"]').attr('disabled', true);
-                    $('input[name="default_hargabeli"]').attr('disabled', true);
-                    $('#produk-varian-section').removeClass('d-none');
-                } else {
-                    $('input[name="kode_produk"]').attr('disabled', false);
-                    $('input[name="hargajual"]').attr('disabled', false);
-                    $('input[name="default_hargabeli"]').attr('disabled', false);
-                    $('#produk-varian-section').addClass('d-none');
-                }
-            });
-            $('#has-many-produkVarian tr:first-child input#kode_produkvarian').on('change', function () {
-                $('input[name="kode_produk"]').val($(this).val());
-            });
-            $('#has-many-produkVarian tr:first-child input#hargajual').on('change', function () {
-                $('input[name="hargajual"]').val($(this).val());
-            });
-            $('#has-many-produkVarian tr:first-child input#default_hargabeli').on('change', function () {
-                $('input[name="default_hargabeli"]').val($(this).val());
-            });
-            $('#has-many-produkVarian tr:first-child input#minstok').on('change', function () {
-                $('input[name="minstok"]').val($(this).val());
-            });
-            $('.has-many-produkAttribut tbody tr:first-child td .remove').removeClass('remove').addClass('disabled remove-disabled');
-            $('.has-many-produkVarian tbody tr:first-child td .remove').removeClass('remove').addClass('disabled remove-disabled');
-            $(document).on('change', ".id_attributvalue", generateKombinasiVarian);
-            $('#has-many-produkAttribut').on('click', '.remove', function () {
-                var first_input_name = $(this).closest('.has-many-produkAttribut-form').find('input[name]:first').attr('name');
-                if (first_input_name.match('produkAttribut\\\[new_')) {
-                    $(this).closest('.has-many-produkAttribut-form').remove();
-                } else {
-                    $(this).closest('.has-many-produkAttribut-form').hide();
-                    $(this).closest('.has-many-produkAttribut-form').find('.fom-removed').val(1);
-                    $(this).closest('.has-many-produkAttribut-form').find('input').removeAttr('required');
-                }
-                generateKombinasiVarian();
-                return false;
-            });
-            $(document).off('change', ".id_attribut");
-            $(document).on('change', ".id_attribut", function () {
-                var target = $(this).closest('tr').find('.id_attributvalue');
-                target.removeClass('produkAttribut'); //hapus class tsb. agar select tidak teroverwrite ketika tambah row
-                target.find("option").remove();
-                $(target).select2({
-                ajax: {
-                    url: "$routeAttrVal/"+this.value,
-                    dataType: 'json',
-                    delay: 250,
-                    data: function (params) {
-                    return {
-                        q: params.term,
-                        page: params.page
-                    };
-                    },
-                    processResults: function (data, params) {
-                    params.page = params.page || 1;
-
-                    return {
-                        results: $.map(data.data, function (d) {
-                                d.id = d.id;
-                                d.text = d.text;
-                                return d;
-                                }),
-                        pagination: {
-                        more: data.next_page_url
-                        }
-                    };
-                    },
-                    cache: true
-                },
-                "placeholder":"Nilai Varian",
-                "minimumInputLength":1,
-                escapeMarkup: function (markup) {
-                    return markup;
-                }
-                });
-                if (target.data('value')) {
-                    $(target).val(target.data('value'));
-                }
-                $(target).trigger('change');
-            });
-            $('[select2].form-control').each(function () {
-                const select = this;
-                const defaultValue = select.dataset.value.split(',');
-                const defaultUrl = select.dataset.url;
-                defaultValue.forEach(function (value) {
-                    $.ajax({
-                        type: 'GET',
-                        url: defaultUrl + '?id=' + value
-                    }).then(function (data) {
-                        const option = new Option(data.text, data.id, true, true);
-                        $(select).append(option).trigger('change');
-                        $(select).trigger({
-                            type: 'select2:select',
-                            params: {
-                                data: data
+                    table.has-many-produkAttribut tbody td:nth-child(1) div {
+                        width:150px;
+                    }
+                    table.has-many-produkAttribut tbody td:nth-child(2) div {
+                        width:300px;
+                    }
+                    [id^="has-many-"] {
+                        position: relative;
+                        overflow: auto;
+                        white-space: nowrap;
+                    }
+                    [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
+                        position: -webkit-sticky;
+                        position: sticky;
+                        left: 0px;
+                        background: white;
+                        z-index: 20;
+                    }
+                    [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
+                        position: -webkit-sticky;
+                        position: sticky;
+                        right: 0px;
+                        background: white;
+                        z-index: 10;
+                    }
+                    [id^="has-many-"] .form-group:has(.add) {
+                        width: 100%;
+                        position: -webkit-sticky;
+                        position: sticky;
+                        left: 0px;
+                        background: white;
+                        z-index: 10;
+                    }
+        STYLE;
+        $routeAttrVal = route(admin_get_route('ajax.attribut-value'));
+        $script =
+        <<<SCRIPT
+                    function generateKombinasiVarian () {
+                        let attrVals = [];
+                        $('.id_attributvalue').each(function (i, select) {
+                            if ($(select).val()) {
+                                attrVals[i] = $(select).find('option:selected').toArray().map(item => item.text);
                             }
                         });
+                        function getCombinations(arr) {
+                            return arr.reduce((acc, curr) => {
+                                const combinations = [];
+                                acc.forEach(a => {
+                                curr.forEach(b => {
+                                    combinations.push([...a, b]);
+                                });
+                                });
+                                return combinations;
+                            }, [[]]);
+                        }
+                        const combinations = getCombinations(attrVals);
+
+                        $('#has-many-produkVarian tbody tr:not(:first)').each(function (i, varian) {
+                            removeProdukVarian(varian);
+                        })
+                        for (let i = 0; i < combinations.length - 1; i++) {
+                            addProdukVarian();
+                        }
+                        
+                        combinations.forEach(function (kombinasi, i) {
+                            $('#has-many-produkVarian tbody #varian')[i].innerText = kombinasi.join('/');
+                        });
+                        if (combinations[0].length == 0) {
+                            $('#has-many-produkVarian tbody #varian')[0].innerText = '--Tidak Ada--';
+                        }
+                    }
+                    function removeProdukVarian(varian) {
+                        var first_input_name = $(varian).closest('.has-many-produkVarian-form').find('input[name]:first').attr('name');
+                        if (first_input_name.match('produkVarian\\\[new_')) {
+                            $(varian).closest('.has-many-produkVarian-form').remove();
+                        } else {
+                            $(varian).closest('.has-many-produkVarian-form').hide();
+                            $(varian).closest('.has-many-produkVarian-form').find('.fom-removed').val(1);
+                            $(varian).closest('.has-many-produkVarian-form').find('input').removeAttr('required');
+                        }
+                        return false;
+                    }
+                    function addProdukVarian() {
+                        let hargaBeli = $('input[name="default_hargabeli"]').val();
+                        let hargaJual = $('input[name="hargajual"]').val();
+                        let minStok = $('input[name="minstok"]').val();
+                        var tpl = $('template.produkVarian-tpl');
+                        index++;
+                        var template = tpl.html().replace(/__LA_KEY__/g, index);
+                        $(template).find('input#hargajual')[0].value = hargaJual;
+                        $(template).find('input#default_hargabeli')[0].value = hargaBeli;
+                        $('.has-many-produkVarian-forms').append(template);
+                        $('.produkVarian.hargajual').inputmask({"alias":"currency","radixPoint":".","prefix":"","removeMaskOnSubmit":true});
+                        $('.produkVarian.default_hargabeli').inputmask({"alias":"currency","radixPoint":".","prefix":"","removeMaskOnSubmit":true});
+                        $('input[name="produkVarian[new_'+index+'][hargajual]"]').val(hargaJual);
+                        $('input[name="produkVarian[new_'+index+'][default_hargabeli]"]').val(hargaBeli);
+                        $('input[name="produkVarian[new_'+index+'][minstok]"]').val(minStok);
+                        return false;
+                    }
+                    $('input[name="kode_produk"]').on('change', function () {
+                        $('#has-many-produkVarian tbody td:first-child input')[0].value = this.value;
                     });
-                })
-            });
-SCRIPT;
+                    $('input[name="hargajual"]').on('change', function () {
+                        const hargajual = this.value;
+                        $('#has-many-produkVarian tbody td:nth-child(3) input').each(function (i, inp) {
+                            inp.value = hargajual;
+                        })
+                    });
+                    $('input[name="default_hargabeli"]').on('change', function () {
+                        const hargabeli = this.value;
+                        $('#has-many-produkVarian tbody td:nth-child(4) input').each(function (i, inp) {
+                            inp.value = hargabeli;
+                        })
+                    });
+                    $('input[name="minstok"]').on('change', function () {
+                        const minStok = this.value;
+                        $('#has-many-produkVarian tbody td:nth-child(6) input').each(function (i, inp) {
+                            inp.value = minStok;
+                        })
+                    });
+                    $('input[name="in_stok"]').on('change', function () { 
+                        if (this.value == 'on') {
+                            $('input[name="minstok"]').closest('.form-group').removeClass('d-none');
+                            $('#has-many-produkVarian td:nth-last-child(-n + 3)').removeClass('d-none');
+                            $('#has-many-produkVarian th:nth-last-child(-n + 3)').removeClass('d-none');
+                        } else {
+                            $('input[name="minstok"]').closest('.form-group').addClass('d-none'); 
+                            $('#has-many-produkVarian td:nth-last-child(-n + 3)').addClass('d-none');
+                            $('#has-many-produkVarian th:nth-last-child(-n + 3)').addClass('d-none');
+                        }
+                    });
+                    $('input[name="has_varian"]').on('change', function () {
+                        if (this.value == 'on') {
+                            $('input[name="kode_produk"]').attr('disabled', true);
+                            $('input[name="hargajual"]').attr('disabled', true);
+                            $('input[name="default_hargabeli"]').attr('disabled', true);
+                            $('#produk-varian-section').removeClass('d-none');
+                        } else {
+                            $('input[name="kode_produk"]').attr('disabled', false);
+                            $('input[name="hargajual"]').attr('disabled', false);
+                            $('input[name="default_hargabeli"]').attr('disabled', false);
+                            $('#produk-varian-section').addClass('d-none');
+                        }
+                    });
+                    $('#has-many-produkVarian tr:first-child input#kode_produkvarian').on('change', function () {
+                        $('input[name="kode_produk"]').val($(this).val());
+                    });
+                    $('#has-many-produkVarian tr:first-child input#hargajual').on('change', function () {
+                        $('input[name="hargajual"]').val($(this).val());
+                    });
+                    $('#has-many-produkVarian tr:first-child input#default_hargabeli').on('change', function () {
+                        $('input[name="default_hargabeli"]').val($(this).val());
+                    });
+                    $('#has-many-produkVarian tr:first-child input#minstok').on('change', function () {
+                        $('input[name="minstok"]').val($(this).val());
+                    });
+                    $('.has-many-produkAttribut tbody tr:first-child td .remove').removeClass('remove').addClass('disabled remove-disabled');
+                    $('.has-many-produkVarian tbody tr:first-child td .remove').removeClass('remove').addClass('disabled remove-disabled');
+                    $(document).on('change', ".id_attributvalue", generateKombinasiVarian);
+                    $('#has-many-produkAttribut').on('click', '.remove', function () {
+                        var first_input_name = $(this).closest('.has-many-produkAttribut-form').find('input[name]:first').attr('name');
+                        if (first_input_name.match('produkAttribut\\\[new_')) {
+                            $(this).closest('.has-many-produkAttribut-form').remove();
+                        } else {
+                            $(this).closest('.has-many-produkAttribut-form').hide();
+                            $(this).closest('.has-many-produkAttribut-form').find('.fom-removed').val(1);
+                            $(this).closest('.has-many-produkAttribut-form').find('input').removeAttr('required');
+                        }
+                        generateKombinasiVarian();
+                        return false;
+                    });
+                    $(document).off('change', ".id_attribut");
+                    $(document).on('change', ".id_attribut", function () {
+                        var target = $(this).closest('tr').find('.id_attributvalue');
+                        target.removeClass('produkAttribut'); //hapus class tsb. agar select tidak teroverwrite ketika tambah row
+                        target.find("option").remove();
+                        $(target).select2({
+                        ajax: {
+                            url: "$routeAttrVal/"+this.value,
+                            dataType: 'json',
+                            delay: 250,
+                            data: function (params) {
+                            return {
+                                q: params.term,
+                                page: params.page
+                            };
+                            },
+                            processResults: function (data, params) {
+                            params.page = params.page || 1;
+
+                            return {
+                                results: $.map(data.data, function (d) {
+                                        d.id = d.id;
+                                        d.text = d.text;
+                                        return d;
+                                        }),
+                                pagination: {
+                                more: data.next_page_url
+                                }
+                            };
+                            },
+                            cache: true
+                        },
+                        "placeholder":"Nilai Varian",
+                        "minimumInputLength":1,
+                        escapeMarkup: function (markup) {
+                            return markup;
+                        }
+                        });
+                        if (target.data('value')) {
+                            $(target).val(target.data('value'));
+                        }
+                        $(target).trigger('change');
+                    });
+                    $('[select2].form-control').each(function () {
+                        const select = this;
+                        const defaultValue = select.dataset.value.split(',');
+                        const defaultUrl = select.dataset.url;
+                        defaultValue.forEach(function (value) {
+                            $.ajax({
+                                type: 'GET',
+                                url: defaultUrl + '?id=' + value
+                            }).then(function (data) {
+                                const option = new Option(data.text, data.id, true, true);
+                                $(select).append(option).trigger('change');
+                                $(select).trigger({
+                                    type: 'select2:select',
+                                    params: {
+                                        data: data
+                                    }
+                                });
+                            });
+                        })
+                    });
+        SCRIPT;
         Admin::style($style);
-        Admin::script($selectScript);
+        Admin::script($script);
         return $content
             ->title('Produk')
             ->description('Tambah')
@@ -904,229 +906,232 @@ SCRIPT;
     {
         $urlAjaxAttrVal = route(admin_get_route('ajax.attribut-value'));
         $style =
-<<<STYLE
-            .input-group { 
-                width: 100%; 
-            }
-            [id^="has-many-"] table td:has([varian]) {
-                min-width: 150px;
-            }
-            [id^="has-many-"] {
-                position: relative;
-                overflow: auto;
-                white-space: nowrap;
-            }
-            [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
-                position: -webkit-sticky;
-                position: sticky;
-                left: 0px;
-                background: white;
-                z-index: 20;
-            }
-            [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
-                position: -webkit-sticky;
-                position: sticky;
-                right: 0px;
-                background: white;
-                z-index: 10;
-            }
-            [id^="has-many-"] .form-group:has(.add) {
-                width: 100%;
-                position: -webkit-sticky;
-                position: sticky;
-                left: 0px;
-                background: white;
-                z-index: 10;
-            }
-STYLE;
+        <<<STYLE
+                    .input-group { 
+                        width: 100%; 
+                    }
+                    [id^="has-many-"] table td:has([varian]) {
+                        min-width: 150px;
+                    }
+                    [id^="has-many-"] {
+                        position: relative;
+                        overflow: auto;
+                        white-space: nowrap;
+                    }
+                    [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
+                        position: -webkit-sticky;
+                        position: sticky;
+                        left: 0px;
+                        background: white;
+                        z-index: 20;
+                    }
+                    [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
+                        position: -webkit-sticky;
+                        position: sticky;
+                        right: 0px;
+                        background: white;
+                        z-index: 10;
+                    }
+                    [id^="has-many-"] .form-group:has(.add) {
+                        width: 100%;
+                        position: -webkit-sticky;
+                        position: sticky;
+                        left: 0px;
+                        background: white;
+                        z-index: 10;
+                    }
+        STYLE;
         $script = 
-<<<SCRIPT
-        $('[select2][akun].form-control').each(function () {
-            const select = this;
-            const defaultValue = select.dataset.value.split(',');
-            const defaultUrl = select.dataset.url;
-            defaultValue.forEach(function (value) {
-                $.ajax({
-                    type: 'GET',
-                    url: defaultUrl + '?id=' + value
-                }).then(function (data) {
-                    const option = new Option(data.text, data.id, true, true);
-                    $(select).append(option).trigger('change');
-                    $(select).trigger({
-                        type: 'select2:select',
-                        params: {
-                            data: data
+        <<<SCRIPT
+                $('[select2][akun].form-control').each(function () {
+                    const select = this;
+                    const defaultValue = select.dataset.value.split(',');
+                    const defaultUrl = select.dataset.url;
+                    defaultValue.forEach(function (value) {
+                        $.ajax({
+                            type: 'GET',
+                            url: defaultUrl + '?id=' + value
+                        }).then(function (data) {
+                            const option = new Option(data.text, data.id, true, true);
+                            $(select).append(option).trigger('change');
+                            $(select).trigger({
+                                type: 'select2:select',
+                                params: {
+                                    data: data
+                                }
+                            });
+                        });
+                    })
+                });
+                $('#has-many-produkAttribut').on('click', '.remove', function () {
+                    const row = $(this).closest('tr'); // get baris yang ada tombol diklik
+                    const index = row.find('select')[0].dataset.index; // get index
+                    const columnIndex = $('#has-many-produkVarian thead th.index-varian-' + index).index();
+                    $('#has-many-produkVarian thead tr').each(function() {
+                        $(this).find('th').eq(columnIndex).text('');
+                        $(this).find('th').eq(columnIndex).addClass('hidden');
+                    });
+                    $('#has-many-produkVarian tbody tr').each(function() {
+                        $(this).find('td').eq(columnIndex).addClass('hidden');
+                        $(this).find('td').eq(columnIndex).find('select').attr('required', false);
+                    });
+                    let produkVarianTpl = $($('template.produkVarian-tpl')[0].content);
+                    produkVarianTpl.find('td').eq(columnIndex).addClass('hidden');
+                });
+        SCRIPT;
+        $deferredScript =
+        <<<SCRIPT
+                $('#has-many-produkVarian').on('click', '.add', function () {
+                    $(".produkVarian[varian]").select2({
+                        ajax: {
+                            url: "{$urlAjaxAttrVal}",
+                            dataType: 'json',
+                            delay: 250,
+                            data: function (params) {
+                            return {
+                                q: params.term,
+                                page: params.page
+                            };
+                            },
+                            processResults: function (data, params) {
+                            params.page = params.page || 1;
+
+                            return {
+                                results: $.map(data.data, function (d) {
+                                        d.id = d.id;
+                                        d.text = d.text;
+                                        return d;
+                                        }),
+                                pagination: {
+                                more: data.next_page_url
+                                }
+                            };
+                            },
+                            cache: true
+                        },
+                        "allowClear":true,
+                        "placeholder": "",
+                        "minimumInputLength":1,
+                        escapeMarkup: function (markup) {
+                            return markup;
                         }
                     });
                 });
-            })
-        });
-        $('#has-many-produkAttribut').on('click', '.remove', function () {
-            const row = $(this).closest('tr'); // get baris yang ada tombol diklik
-            const index = row.find('select')[0].dataset.index; // get index
-            const columnIndex = $('#has-many-produkVarian thead th.index-varian-' + index).index();
-            $('#has-many-produkVarian thead tr').each(function() {
-                $(this).find('th').eq(columnIndex).text('');
-                $(this).find('th').eq(columnIndex).addClass('hidden');
-            });
-            $('#has-many-produkVarian tbody tr').each(function() {
-                $(this).find('td').eq(columnIndex).addClass('hidden');
-                $(this).find('td').eq(columnIndex).find('select').attr('required', false);
-            });
-            let produkVarianTpl = $($('template.produkVarian-tpl')[0].content);
-            produkVarianTpl.find('td').eq(columnIndex).addClass('hidden');
-        });
-SCRIPT;
-        $deferredScript =
-<<<SCRIPT
-        $('#has-many-produkVarian').on('click', '.add', function () {
-            $(".produkVarian[varian]").select2({
-                ajax: {
-                    url: "{$urlAjaxAttrVal}",
-                    dataType: 'json',
-                    delay: 250,
-                    data: function (params) {
-                    return {
-                        q: params.term,
-                        page: params.page
-                    };
-                    },
-                    processResults: function (data, params) {
-                    params.page = params.page || 1;
-
-                    return {
-                        results: $.map(data.data, function (d) {
-                                d.id = d.id;
-                                d.text = d.text;
-                                return d;
-                                }),
-                        pagination: {
-                        more: data.next_page_url
+                $('#has-many-produkVarian').on('click', '.remove', function () {
+                    $(this).closest('tr').find('[required]').attr('required', false);
+                });
+                $('#has-many-produkAttribut').on('click', '.add', function () {
+                    const nextIndex = parseInt($('#has-many-produkAttribut tbody tr').filter(':visible').eq(-2).find('select')[0]?.dataset.index || '-1') + 1;
+                    $('#has-many-produkAttribut tbody tr').filter(':visible').eq(-1).find('select').attr('data-index', nextIndex);
+                    
+                    let newAttribut = 'new_' + index;
+                    if ($('#has-many-produkVarian thead th.index-varian-' + nextIndex).length > 0) {
+                        /* Menggunakan kolom yang sudah dihapus */
+                        const columnIndex = $('#has-many-produkVarian thead th.index-varian-' + nextIndex).index();
+                        $('#has-many-produkVarian thead tr').each(function() {
+                            $(this).find('th').eq(columnIndex).removeClass('hidden');
+                        });
+                        $('#has-many-produkVarian tbody tr').filter(':visible').each(function() {
+                            let kodeProdukvarian = $(this).find('td').eq(columnIndex).find('select')[0].dataset.kodeProdukvarian;
+                            $(this).find('td').eq(columnIndex).find('input').attr('name', 'produkVarian['+kodeProdukvarian+']['+newAttribut+']');
+                            $(this).find('td').eq(columnIndex).find('select').attr('name', 'produkVarian['+kodeProdukvarian+']['+newAttribut+']');
+                            $(this).find('td').eq(columnIndex).find('select').attr('required', true);
+                            $(this).find('td').eq(columnIndex).removeClass('hidden');
+                        });
+                        let produkVarianTpl = $($('template.produkVarian-tpl')[0].content);
+                        produkVarianTpl.find('td').eq(columnIndex).find('input').attr('name', 'produkVarian[new___LA_KEY__]['+newAttribut+']');    
+                        produkVarianTpl.find('td').eq(columnIndex).find('select').attr('name', 'produkVarian[new___LA_KEY__]['+newAttribut+']');    
+                        produkVarianTpl.find('td').eq(columnIndex).removeClass('hidden');
+                    } else {
+                        let columnIndex = $('#has-many-produkVarian thead th.varian').last().index();
+                        if(columnIndex == -1) {
+                            columnIndex = 0;
                         }
-                    };
-                    },
-                    cache: true
-                },
-                "allowClear":true,
-                "placeholder": "",
-                "minimumInputLength":1,
-                escapeMarkup: function (markup) {
-                    return markup;
-                }
-            });
-        });
-        $('#has-many-produkAttribut').on('click', '.add', function () {
-            const nextIndex = parseInt($('#has-many-produkAttribut tbody tr').filter(':visible').eq(-2).find('select')[0]?.dataset.index || '-1') + 1;
-            $('#has-many-produkAttribut tbody tr').filter(':visible').eq(-1).find('select').attr('data-index', nextIndex);
-            
-            let newAttribut = 'new_' + index;
-            if ($('#has-many-produkVarian thead th.index-varian-' + nextIndex).length > 0) {
-                /* Menggunakan kolom yang sudah dihapus */
-                const columnIndex = $('#has-many-produkVarian thead th.index-varian-' + nextIndex).index();
-                $('#has-many-produkVarian thead tr').each(function() {
-                    $(this).find('th').eq(columnIndex).removeClass('hidden');
-                });
-                $('#has-many-produkVarian tbody tr').each(function() {
-                    let kodeProdukvarian = $(this).find('td').eq(columnIndex).find('select')[0].dataset.kodeProdukvarian;
-                    $(this).find('td').eq(columnIndex).find('input').attr('name', 'produkVarian['+kodeProdukvarian+']['+newAttribut+']');
-                    $(this).find('td').eq(columnIndex).find('select').attr('name', 'produkVarian['+kodeProdukvarian+']['+newAttribut+']');
-                    $(this).find('td').eq(columnIndex).find('select').attr('required', true);
-                    $(this).find('td').eq(columnIndex).removeClass('hidden');
-                });
-                let produkVarianTpl = $($('template.produkVarian-tpl')[0].content);
-                produkVarianTpl.find('td').eq(columnIndex).find('input').attr('name', 'produkVarian[new___LA_KEY__]['+newAttribut+']');    
-                produkVarianTpl.find('td').eq(columnIndex).find('select').attr('name', 'produkVarian[new___LA_KEY__]['+newAttribut+']');    
-                produkVarianTpl.find('td').eq(columnIndex).removeClass('hidden');
-            } else {
-                let columnIndex = $('#has-many-produkVarian thead th.varian').last().index();
-                if(columnIndex == -1) {
-                    columnIndex = 0;
-                }
-                $('#has-many-produkVarian thead tr').each(function() {
-                    $(this).find('th').eq(columnIndex).after('<th class="varian index-varian-' + nextIndex + '">');
-                });
-                $('#has-many-produkVarian tbody tr').each(function() {
-                    let lastVarianCell = $(this).find('td').eq(columnIndex);
-                    let kodeProdukVarian = $(this).find('td.hidden input').eq(0).val();
-                    console.info(lastVarianCell, kodeProdukVarian)
-                    let selectedValue = lastVarianCell.find('select')[0]?.value || '';
-                    let selectedIndex = lastVarianCell.find('select')[0]?.selectedIndex || 0;
-                    let selectedValueText = lastVarianCell.find('select')[0]?.options[selectedIndex].text;
-                    let newCell = `
-                        <td>
-                            <div class="form-group">
-                                <label for="`+ newAttribut +`" class="col-sm-0 varian hidden control-label">Warna</label>
-                                <div class="col-sm-12">
-                                    <input type="hidden" name="produkVarian[`+ kodeProdukVarian +`][`+ newAttribut +`]">
-                                    <select required class="form-control produkVarian `+ newAttribut +`" style="width: 100%;" name="produkVarian[`+ kodeProdukVarian +`][`+ newAttribut +`]" varian="" data-kode-produkvarian="` + kodeProdukVarian + `" data-index-varian="`+ nextIndex +`" data-value="">
-                                        <option value="` + selectedValue + `" selected>` + selectedValueText + `</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </td>`;
-                    lastVarianCell.after(newCell);
-                });
-                let newCellTemplate = `
-                    <td>
-                        <div class="form-group">
-                            <label for="`+ newAttribut +`" class="col-sm-0 varian hidden control-label"></label>
-                            <div class="col-sm-12">
-                                <input type="hidden" name="produkVarian[new___LA_KEY__][`+ newAttribut +`]">
-                                <select required class="form-control produkVarian `+ newAttribut +`" style="width: 100%;" name="produkVarian[new___LA_KEY__][`+ newAttribut +`]" varian="" data-kode-produkvarian="new___LA_KEY__" data-index-varian="`+ nextIndex +`" data-value="">
-                                    <option value=""></option>
-                                </select>
-                            </div>
-                        </div>
-                    </td>`;
-                let produkVarianTplCloned = $($('template.produkVarian-tpl').html());
-                produkVarianTplCloned.find('td').eq(columnIndex).after(newCellTemplate);
-                $('template.produkVarian-tpl').remove() // menghapus template lama, document fragment is suck!
-                $('#has-many-produkVarian').append('<template class="produkVarian-tpl"><tr class="has-many-produkVarian-form fields-group">' + produkVarianTplCloned.html() + '</tr></template>'); // membuat template baru
-                
-                $(".produkVarian." + newAttribut).select2({
-                    ajax: {
-                        url: "{$urlAjaxAttrVal}",
-                        dataType: 'json',
-                        delay: 250,
-                        data: function (params) {
-                        return {
-                            q: params.term,
-                            page: params.page
-                        };
-                        },
-                        processResults: function (data, params) {
-                        params.page = params.page || 1;
+                        $('#has-many-produkVarian thead tr').each(function() {
+                            $(this).find('th').eq(columnIndex).after('<th class="varian index-varian-' + nextIndex + '">');
+                        });
+                        $('#has-many-produkVarian tbody tr').filter(':visible').each(function() {
+                            let lastVarianCell = $(this).find('td').eq(columnIndex);
+                            let kodeProdukVarian = $(this).find('td.hidden input').eq(0).val();
+                            console.info(lastVarianCell, kodeProdukVarian)
+                            let selectedValue = lastVarianCell.find('select')[0]?.value || '';
+                            let selectedIndex = lastVarianCell.find('select')[0]?.selectedIndex || 0;
+                            let selectedValueText = lastVarianCell.find('select')[0]?.options[selectedIndex].text;
+                            let newCell = `
+                                <td>
+                                    <div class="form-group">
+                                        <label for="`+ newAttribut +`" class="col-sm-0 varian hidden control-label">Warna</`+`label>
+                                        <div class="col-sm-12">
+                                            <input type="hidden" name="produkVarian[`+ kodeProdukVarian +`][`+ newAttribut +`]">
+                                            <select required class="form-control produkVarian `+ newAttribut +`" style="width: 100%;" name="produkVarian[`+ kodeProdukVarian +`][`+ newAttribut +`]" varian="" data-kode-produkvarian="` + kodeProdukVarian + `" data-index-varian="`+ nextIndex +`" data-value="">
+                                                <option value="` + selectedValue + `" selected>` + selectedValueText + `</option>
+                                            </select>
+                                        </`+`div>
+                                    </`+`div>
+                                </td>`;
+                            lastVarianCell.after(newCell);
+                        });
+                        let newCellTemplate = `
+                            <td>
+                                <div class="form-group">
+                                    <label for="`+ newAttribut +`" class="col-sm-0 varian hidden control-label"></`+`label>
+                                    <div class="col-sm-12">
+                                        <input type="hidden" name="produkVarian[new___LA_KEY__][`+ newAttribut +`]">
+                                        <select required class="form-control produkVarian `+ newAttribut +`" style="width: 100%;" name="produkVarian[new___LA_KEY__][`+ newAttribut +`]" varian="" data-kode-produkvarian="new___LA_KEY__" data-index-varian="`+ nextIndex +`" data-value="">
+                                            <option value=""></option>
+                                        </select>
+                                    </`+`div>
+                                </`+`div>
+                            </td>`;
+                        let produkVarianTplCloned = $($('template.produkVarian-tpl').html());
+                        produkVarianTplCloned.find('td').eq(columnIndex).after(newCellTemplate);
+                        $('template.produkVarian-tpl').remove() // menghapus template lama, document fragment is suck!
+                        $('#has-many-produkVarian').append('<template class="produkVarian-tpl"><tr class="has-many-produkVarian-form fields-group">' + produkVarianTplCloned.html() + '</tr></template>'); // membuat template baru
+                        
+                        $(".produkVarian." + newAttribut).select2({
+                            ajax: {
+                                url: "{$urlAjaxAttrVal}",
+                                dataType: 'json',
+                                delay: 250,
+                                data: function (params) {
+                                return {
+                                    q: params.term,
+                                    page: params.page
+                                };
+                                },
+                                processResults: function (data, params) {
+                                params.page = params.page || 1;
 
-                        return {
-                            results: $.map(data.data, function (d) {
-                                    d.id = d.id;
-                                    d.text = d.text;
-                                    return d;
-                                    }),
-                            pagination: {
-                            more: data.next_page_url
+                                return {
+                                    results: $.map(data.data, function (d) {
+                                            d.id = d.id;
+                                            d.text = d.text;
+                                            return d;
+                                            }),
+                                    pagination: {
+                                    more: data.next_page_url
+                                    }
+                                };
+                                },
+                                cache: true
+                            },
+                            "allowClear":true,
+                            "placeholder": "",
+                            "minimumInputLength":1,
+                            escapeMarkup: function (markup) {
+                                return markup;
                             }
-                        };
-                        },
-                        cache: true
-                    },
-                    "allowClear":true,
-                    "placeholder": "",
-                    "minimumInputLength":1,
-                    escapeMarkup: function (markup) {
-                        return markup;
+                        });
                     }
+                    
+                    return false;
                 });
-            }
-            
-            return false;
-        });
-        $('#has-many-produkAttribut').on('change', 'select', function () {
-            let indexVarian = this.dataset.index;
-            let varianText = this.options[this.selectedIndex].text;
-            $('#has-many-produkVarian thead th.index-varian-' + indexVarian).text(varianText);
-        });
-SCRIPT;
+                $('#has-many-produkAttribut').on('change', 'select', function () {
+                    let indexVarian = this.dataset.index;
+                    let varianText = this.options[this.selectedIndex].text;
+                    $('#has-many-produkVarian thead th.index-varian-' + indexVarian).text(varianText);
+                });
+        SCRIPT;
         
         Admin::style($style);
         Admin::script($script, false);
@@ -1137,6 +1142,201 @@ SCRIPT;
             ->body($this->editProdukForm($id, $request->all())->setAction(route(admin_get_route('produk.update'), ['id' => $id])));
     }
     public function editHargaProduk($id, Request $request, Content $content) {
+        $style = 
+        <<<STYLE
+                    .duplicate {
+                        border-color: red !important;
+                    }
+                    .input-group { 
+                        width: 100%; 
+                    }
+                    [id^="has-many-"] table td {
+                        min-width: 150px;
+                    }
+                    [id^="has-many-"] {
+                        position: relative;
+                        overflow: auto;
+                        white-space: nowrap;
+                    }
+                    [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
+                        position: -webkit-sticky;
+                        position: sticky;
+                        left: 0px;
+                        background: white;
+                        z-index: 20;
+                    }
+                    [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
+                        position: -webkit-sticky;
+                        position: sticky;
+                        right: 0px;
+                        background: white;
+                        z-index: 10;
+                    }
+                    [id^="has-many-"] .form-group:has(.add) {
+                        width: 100%;
+                        position: -webkit-sticky;
+                        position: sticky;
+                        left: 0px;
+                        background: white;
+                        z-index: 10;
+                    }
+        STYLE;
+        $script = 
+        <<<SCRIPT
+            function checkDuplicateHarga() {
+                let valueCount = {};
+                $('#has-many-produkHarga select').filter(':visible').each(function () {
+                    let value = $(this).val();
+                    valueCount[value] = (valueCount[value] || 0) + 1;
+                });
+                console.info(valueCount);
+                $('#has-many-produkHarga select').filter(':visible').each(function () {
+                    let value = $(this).val();
+                    if (valueCount[value] > 1) {
+                        $(this).next().find('span.select2-selection').addClass('duplicate');
+                    } else {
+                        $(this).next().find('span.select2-selection').removeClass('duplicate');
+                    }
+                });
+            }
+            function disableButtons() {
+                let removeButtons = $('#has-many-produkHarga tbody .btn');  // Ambil semua elemen tombol
+                
+                if (removeButtons.length === 1) {
+                    // Jika hanya ada satu tombol, disable tombol tersebut
+                    removeButtons.removeClass('remove').addClass('remove-disable disabled');
+                } else {
+                    // Disable semua tombol kecuali yang terakhir
+                    removeButtons.slice(0, -1).removeClass('remove').addClass('remove-disable disabled');  // Tombol selain terakhir di-disable
+                    removeButtons.last().addClass('remove').removeClass('remove-disable disabled');  // Tombol terakhir diaktifkan
+                }
+            }
+            disableButtons();
+            checkDuplicateHarga();
+            $('#has-many-produkHarga tbody').on('change', 'select', function () {
+                checkDuplicateHarga();
+            });
+            $('#has-many-produkHarga').on('change', 'select', function () {
+                let indexVarian = this.dataset.index;
+                let varianText = this.options[this.selectedIndex].text;
+                $('#has-many-produkVarian thead th.index-varianharga-' + indexVarian).each(function(k,el) {
+                    let harga;
+                    if (k == 0) {
+                        harga = 'Harga Jual ';
+                    } else {
+                        harga = 'Harga Beli ';
+                    }
+                    $(this).text(harga + varianText);
+                });
+            });
+            $('#has-many-produkHarga').on('click', '.remove', function () {
+                const row = $(this).closest('tr'); // get baris yang ada tombol diklik
+                const index = row.find('select')[0].dataset.index; // get index
+                const columnIndex = $('#has-many-produkVarian thead th.index-varianharga-' + index).index();
+                $('#has-many-produkVarian thead tr').each(function() {
+                    $(this).find('th').eq(columnIndex).text('Harga Jual ');
+                    $(this).find('th').eq(columnIndex).addClass('hidden');
+                    $(this).find('th').eq(columnIndex+1).text('Harga Beli ');
+                    $(this).find('th').eq(columnIndex+1).addClass('hidden');
+                });
+                $('#has-many-produkVarian tbody tr').each(function() {
+                    $(this).find('td').eq(columnIndex).addClass('hidden');
+                    $(this).find('td').eq(columnIndex).find('input').attr('required', false);
+                    $(this).find('td').eq(columnIndex+1).addClass('hidden');
+                    $(this).find('td').eq(columnIndex+1).find('input').attr('required', false);
+                });
+            });
+        SCRIPT;
+        $deferredScript = 
+        <<<SCRIPT
+            $('#has-many-produkHarga').on('click', '.remove', function () {
+                checkDuplicateHarga();
+                disableButtons();
+            });
+            $('#has-many-produkHarga').on('click', '.add', function () {
+                const nextIndex = parseInt($('#has-many-produkHarga tbody tr').filter(':visible').eq(-2).find('select')[0]?.dataset.index || '-1') + 1;
+                $('#has-many-produkHarga tbody tr').filter(':visible').eq(-1).find('select').attr('data-index', nextIndex);
+                
+                let newAttribut = 'new_' + index;
+                if ($('#has-many-produkVarian thead th.index-varianharga-' + nextIndex).length > 0) {
+                    /* Menggunakan kolom yang sudah dihapus */
+                    const columnIndex = $('#has-many-produkVarian thead th.index-varianharga-' + nextIndex).index();
+                    $('#has-many-produkVarian thead tr').each(function() {
+                        $(this).find('th').eq(columnIndex).removeClass('hidden');
+                        $(this).find('th').eq(columnIndex+1).removeClass('hidden');
+                    });
+                    $('#has-many-produkVarian tbody tr').filter(':visible').each(function() {
+                        let kodeProdukvarian = $(this).find('input').first().val();
+                        $(this).find('td').eq(columnIndex).find('input').attr('name', 'produkVarian['+kodeProdukvarian+']['+newAttribut+']').attr('required', true);
+                        $(this).find('td').eq(columnIndex).removeClass('hidden');
+                        $(this).find('td').eq(columnIndex+1).find('input').attr('name', 'produkVarian['+kodeProdukvarian+']['+newAttribut+']').attr('required', true);
+                        $(this).find('td').eq(columnIndex+1).removeClass('hidden');
+                    });
+                } else {
+                    let columnIndex = $('#has-many-produkVarian thead th.varianharga').last().index();
+                    if(columnIndex == -1) {
+                        columnIndex = 0;
+                    }
+                    $('#has-many-produkVarian thead tr').each(function() {
+                        $(this).find('th').eq(columnIndex).after('<th class="varianharga index-varianharga-' + nextIndex + '">Harga Jual </th>');
+                        $(this).find('th').eq(columnIndex+1).after('<th class="varianharga index-varianharga-' + nextIndex + '">Harga Beli </th>');
+                    });
+                    $('#has-many-produkVarian tbody tr').filter(':visible').each(function() {
+                        let kodeProdukvarian = $(this).find('input').first().val();
+                        let lastCell = $(this).find('td').eq(columnIndex);
+
+                        let lastHargaJual = $(this).find('td').eq(columnIndex-1);
+                        let valueJual = lastHargaJual.find('input')[0]?.value || '';
+                        let lastHargaBeli = $(this).find('td').eq(columnIndex);
+                        let valueBeli = lastHargaBeli.find('input')[0]?.value || '';
+
+                        let newCellJual = `
+                            <td>
+                                <div class="form-group ">
+                                    <label for="harga_jual_`+newAttribut+`" class="col-sm-0 hidden control-label">Harga Jual<`+`/label>
+                                    <div class="col-sm-12">
+                                        <div class="input-group"><span class="input-group-addon">Rp<`+`/span>
+                                            
+                                            <input style="width: 120px; text-align: right;" type="text" id="harga_jual_`+newAttribut+`" name="produkVarian[`+kodeProdukvarian+`][harga_jual_`+newAttribut+`]" value="`+valueJual+`" class="form-control produkVarian harga_jual_`+newAttribut+`" placeholder="Input Harga Jual">
+
+                                            
+                                        <`+`/div>
+
+                                        
+                                    <`+`/div>
+                                <`+`/div>
+                            <`+`/td>
+                        `;
+                        let newCellBeli = `
+                            <td>
+                                <div class="form-group ">
+                                    <label for="harga_beli_`+newAttribut+`" class="col-sm-0 hidden control-label">Harga Beli<`+`/label>
+                                    <div class="col-sm-12">
+                                        <div class="input-group"><span class="input-group-addon">Rp<`+`/span>
+                                            
+                                            <input style="width: 120px; text-align: right;" type="text" id="harga_beli_`+newAttribut+`" name="produkVarian[`+kodeProdukvarian+`][harga_beli_`+newAttribut+`]" value="`+valueBeli+`" class="form-control produkVarian harga_beli_`+newAttribut+`" placeholder="Input Harga Beli">
+
+                                            
+                                        <`+`/div>
+
+                                        
+                                    <`+`/div>
+                                <`+`/div>
+                            <`+`/td>
+                        `;
+                        lastCell.after(newCellBeli).after(newCellJual); // harus dibalik urutannya
+                    });
+                    $('.produkVarian.harga_jual_'+newAttribut).inputmask({"alias":"currency","radixPoint":".","prefix":"","removeMaskOnSubmit":true});
+                    $('.produkVarian.harga_beli_'+newAttribut).inputmask({"alias":"currency","radixPoint":".","prefix":"","removeMaskOnSubmit":true});
+                }
+                checkDuplicateHarga();
+                disableButtons();
+                return false;
+            });
+        SCRIPT;
+        Admin::style($style);
+        Admin::script($script);
+        Admin::script($deferredScript, true);
         return $content
             ->title('Produk')
             ->description('Tambah')
@@ -1144,8 +1344,21 @@ SCRIPT;
     }
     public function updateProduk($id, Request $request)
     {
-        echo $request->deskripsi;
-        dump($request->all());
+        try {
+            $this->produkService->updateProduk($id, $request->all());
+            return dump($request->all());
+        } catch (ValidationException $e) {
+            return back()->withInput(request()->only(['nama', 'deskripsi', 'namaunit']))->withErrors($e->validator);
+        }
+        // $validator = Validator::make($request->all(), [
+        //     'nama' => 'required|min:3'
+        // ]);
+        // if ($validator->fails()) {
+        //     return back()->withInput(request()->only(['nama', 'deskripsi']))->withErrors($validator);
+        // }
+        // return dump($request->all());
+        // admin_toastr('Sukses update produk');
+        // return redirect()->route(admin_get_route('produk.list'));
         // return $this->createProdukForm()->update($id);
     }
 }

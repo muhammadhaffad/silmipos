@@ -2,6 +2,7 @@
 namespace App\Services\Core\Produk;
 
 use App\Models\Produk;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
@@ -62,5 +63,66 @@ class ProdukService {
             DB::rollBack();
             throw $th;
         }
+    }
+    public function updateProduk($id, $request) {
+        $rules = [
+            'nama' => 'required|string|min:5',
+            'default_unit' => 'required|string',
+            'deskripsi' => 'nullable|string',
+            'produkAttribut' => 'required|array',
+            'produkAttribut.*.id_attribut' => 'required|numeric',
+            'produkAttribut.*.id_produkattribut' => 'required|numeric',
+            'produkAttribut.*._remove_' => 'required',
+            'default_akunpersediaan' => 'required|string',
+            'default_akunpemasukan' => 'required|string',
+            'default_akunbiaya' => 'required|string',
+            'produkVarian.*.kode_produkvarian_new' => 'required|string',
+            'produkVarian.*.produk_varian_harga\.0\.hargajual' => 'required|numeric',
+            'produkVarian.*.produk_varian_harga\.0\.hargabeli' => 'required|numeric',
+            'produkVarian.*.minstok' => 'required|numeric',
+            'produkVarian.*.kode_produkvarian' => 'required|string',
+            'produkVarian.*._remove_' => 'required|numeric',
+        ];
+        foreach ($request['produkAttribut'] as $key => $attr) {
+            if ($attr['_remove_'] == 0) {
+                $rules["produkVarian.*.{$key}"] = 'required|numeric';
+            }
+        }
+        $validator = Validator::make($request, $rules);
+        $validator->validate();
+
+        
+        DB::beginTransaction();
+        try {
+            $produk = Produk::find($id)->with(['produkAttribut', 'produkVarian' => function ($relation) {
+                $relation->with(['produkVarianHarga' => function ($q) {
+                    $q->where('id_varianharga', '1');
+                }]);
+            }])->first();
+            $produkVarian = $produk->produkVarian->keyBy('kode_produkvarian');
+            foreach ($request['produkVarian'] as $key => $varian) {
+                if ($varian['_remove_'] == 0) {
+                    if (isset($produkVarian[$key])) {
+                        $newValues = [];
+                        if ($produkVarian[$key]->kode_produkvarian !== $varian['kode_produkvarian_new']) {
+                            $newValues['kode_produkvarian'] = $varian['kode_produkvarian_new'];
+                        }
+                        if (!empty($newValues)) {
+                            $newValues['updated_at'] = date('Y-m-d H:i:s');
+                            $newValues['updated_by'] = Auth::user()->username;
+                            DB::table('toko_griyanaura.ms_produkvarian')->where('kode_produkvarian', $varian['kode_produkvarian'])->update($newValues);
+                        }
+                    } else {
+
+                    }
+                } else {
+                    $produkVarian[$key]->delete();
+                }
+            }
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+        }
+
     }
 }
