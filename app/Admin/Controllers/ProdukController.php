@@ -1348,6 +1348,7 @@ class ProdukController extends Controller
             $this->produkService->updateProduk($id, $request->all());
             return dump($request->all());
         } catch (ValidationException $e) {
+            dd($e->validator->getMessageBag());
             return back()->withInput(request()->only(['nama', 'deskripsi', 'namaunit']))->withErrors($e->validator);
         }
         // $validator = Validator::make($request->all(), [

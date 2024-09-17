@@ -77,16 +77,16 @@ class ProdukService {
             'default_akunpersediaan' => 'required|string',
             'default_akunpemasukan' => 'required|string',
             'default_akunbiaya' => 'required|string',
-            'produkVarian.*.kode_produkvarian_new' => 'required|string',
-            'produkVarian.*.produk_varian_harga\.0\.hargajual' => 'required|numeric',
-            'produkVarian.*.produk_varian_harga\.0\.hargabeli' => 'required|numeric',
-            'produkVarian.*.minstok' => 'required|numeric',
+            'produkVarian.*.kode_produkvarian_new' => 'required_if:produkVarian.*._remove_,0|string',
+            'produkVarian.*.produk_varian_harga\.0\.hargajual' => 'nullable|numeric',
+            'produkVarian.*.produk_varian_harga\.0\.hargabeli' => 'nullable|numeric',
+            'produkVarian.*.minstok' => 'required_if:produkVarian.*._remove_,0|numeric',
             'produkVarian.*.kode_produkvarian' => 'nullable|string',
             'produkVarian.*._remove_' => 'required|numeric',
         ];
         foreach ($request['produkAttribut'] as $key => $attr) {
             if ($attr['_remove_'] == 0) {
-                $rules["produkVarian.*.{$key}"] = 'required|numeric';
+                $rules["produkVarian.*.{$key}"] = 'required_if:produkVarian.*._remove_,0';
             }
         }
         $validator = Validator::make($request, $rules);
@@ -103,7 +103,7 @@ class ProdukService {
             $produkVarian = $produk->produkVarian->keyBy('kode_produkvarian');
             $produkAttribut = $produk->produkAttribut->keyBy('id_produkattribut');
             /* Attribut varian */
-            foreach ($request['produkAttribut'] as $key => &$attribut) {
+            foreach ($request['produkAttribut'] as $key => $attribut) {
                 if ($attribut['_remove_'] == 0) {
                     if (isset($produkAttribut[$key])) 
                     {
@@ -114,10 +114,10 @@ class ProdukService {
                         if (!empty($newValues)) {
                             $newValues['updated_at'] = date('Y-m-d H:i:s');
                             $newValues['updated_by'] = Admin::user()->username;
-                            DB::table('toko_griyanaura.ms_produkattributvarian')->where('id_produkattribut', $attribut['id_produkattribut'])->update($newValues);
+                            DB::table('toko_griyanaura.ms_produkattribut')->where('id_produkattribut', $attribut['id_produkattribut'])->update($newValues);
                         }
                     } else {
-                        $attribut['id_produkattribut'] = DB::table('toko_griyanaura.ms_produkattribut')->insertGetId([
+                        $request['produkAttribut'][$key]['id_produkattribut'] = DB::table('toko_griyanaura.ms_produkattribut')->insertGetId([
                             'id_attribut' => $attribut['id_attribut'],
                             'id_produk' => $idProduk
                         ], 'id_produkattribut');
@@ -142,10 +142,10 @@ class ProdukService {
                             $newValues['minstok'] = $varian['minstok'];
                         }
                         if ($produkVarian[$key]->produkVarianHarga->first()->hargajual != $varian['produk_varian_harga.0.hargajual']) {
-                            $newValuesHarga['hargajual'] = $varian['produk_varian_harga.0.hargajual'];
+                            $newValuesHarga['hargajual'] = (int)$varian['produk_varian_harga.0.hargajual'];
                         }
                         if ($produkVarian[$key]->produkVarianHarga->first()->hargabeli != $varian['produk_varian_harga.0.hargabeli']) {
-                            $newValuesHarga['hargabeli'] = $varian['produk_varian_harga.0.hargabeli'];
+                            $newValuesHarga['hargabeli'] = (int)$varian['produk_varian_harga.0.hargabeli'];
                         }
                         $oldVariansJson = json_decode($produkVarian[$key]->varian_id, true);
                         $oldVarians = [];
@@ -166,6 +166,8 @@ class ProdukService {
                                         DB::table('toko_griyanaura.ms_produkattributvarian')->where('kode_produkvarian', $varian['kode_produkvarian'])->where('id_produkattribut', $keyAttr)->update($newValues);
                                     }
                                 } else {
+                                    // dump($oldVarians, $request['produkAttribut'], $varian, $attribut);
+                                    // dump('===========');
                                     DB::table('toko_griyanaura.ms_produkattributvarian')->insert([
                                         'kode_produkvarian' => $varian['kode_produkvarian'],
                                         'id_produkattribut' => $attribut['id_produkattribut'],
@@ -180,7 +182,7 @@ class ProdukService {
                             $newValuesHarga['updated_at'] = date('Y-m-d H:i:s');
                             $newValuesHarga['updated_by'] = Admin::user()->username;
                             $idProdukHarga = DB::table('toko_griyanaura.ms_produkharga')->where(['id_produk'=> $idProduk, 'id_varianharga' => 1])->first()->id_produkharga;
-                            DB::table('toko_griyanaura.ms_produkvarian')->where('kode_produkvarian', $varian['kode_produkvarian'])->where('id_produkharga', $idProdukHarga)->update($newValuesHarga);
+                            DB::table('toko_griyanaura.ms_produkvarianharga')->where('kode_produkvarian', $varian['kode_produkvarian'])->where('id_produkharga', $idProdukHarga)->update($newValuesHarga);
                         }
                         if (!empty($newValues)) {
                             $newValues['updated_at'] = date('Y-m-d H:i:s');
@@ -199,8 +201,8 @@ class ProdukService {
                         $idGudang = DB::table('toko_griyanaura.lv_gudang')->orderBy('id_gudang')->first()->id_gudang;
                         $idVarianHarga = DB::table('toko_griyanaura.ms_produkvarianharga')->insertGetId([
                             'kode_produkvarian' => $varian['kode_produkvarian_new'],
-                            'hargajual' => $varian['produk_varian_harga.0.hargajual'] ?: 0,
-                            'hargabeli' => $varian['produk_varian_harga.0.hargabeli'] ?: 0,
+                            'hargajual' => (int)$varian['produk_varian_harga.0.hargajual'] ?: 0,
+                            'hargabeli' => (int)$varian['produk_varian_harga.0.hargabeli'] ?: 0,
                             'inserted_by' => Admin::user()->username,
                             'updated_by' => Admin::user()->username,
                             'id_produkharga' => $idProdukHarga
@@ -216,7 +218,7 @@ class ProdukService {
                         foreach ($request['produkAttribut'] as $keyAttr => $attribut) {
                             if ($attribut['_remove_'] == 0) {
                                 DB::table('toko_griyanaura.ms_produkattributvarian')->insert([
-                                    'kode_produkvarian' => $varian['kode_produkvarian'],
+                                    'kode_produkvarian' => $varian['kode_produkvarian_new'],
                                     'id_produkattribut' => $attribut['id_produkattribut'],
                                     'id_attributvalue' => $varian[$keyAttr],
                                     'inserted_by' => Admin::user()->username,
