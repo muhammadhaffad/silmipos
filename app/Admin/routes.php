@@ -28,6 +28,7 @@ Route::group([
     Route::get('/product/create', [ProdukController::class, 'createProduk'])->name('produk.create');
     Route::get('/product/edit/{id}', [ProdukController::class, 'editProduk'])->name('produk.edit');
     Route::get('/product/edit/harga/{id}', [ProdukController::class, 'editHargaProduk'])->name('produk.edit.harga');
+    Route::post('/product/store', [ProdukController::class, 'storeProduk'])->name('produk.store');
     Route::put('/product/update/{id}', [ProdukController::class, 'updateProduk'])->name('produk.update');
     Route::post('/product/delete/{id}', function () {
         return 'test';

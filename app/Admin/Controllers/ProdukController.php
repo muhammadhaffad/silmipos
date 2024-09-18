@@ -46,7 +46,15 @@ class ProdukController extends Controller
     protected function listProdukGrid()
     {
         $grid = new Grid(new Produk());
-        $grid->model()->with('produkVarian.produkVarianHarga', 'produkVarian.produkPersediaan');
+        $grid->model()->with(['produkVarian' => function ($relation) {
+            $relation->with(['produkVarianHarga' => function ($query) {
+                $query->where('id_varianharga', 1);
+            }]);
+        }, 'produkVarian' => function ($relation) {
+            $relation->with(['produkPersediaan' => function ($query) {
+                $query->where('gdg.id_gudang', 1);
+            }]);
+        }]);
         $grid->model()->join(DB::raw('(select kode_unit, nama as namaunit from toko_griyanaura.lv_unit) as u'), 'toko_griyanaura.ms_produk.default_unit', 'u.kode_unit');
         if (!request()->get('_sort') and !request()->get('_customSort')) {
             $grid->model()->orderByDesc('toko_griyanaura.ms_produk.inserted_at');
@@ -129,8 +137,8 @@ class ProdukController extends Controller
                 return [
                     $varian['kode_produkvarian'],
                     $varian['varian'],
-                    'Rp ' . number_format($varian['hargajual']),
-                    (fmod($varian['stok'], 1) !== 0.00) ? $varian['stok'] : (int)$varian['stok']
+                    'Rp ' . number_format($varian->produkVarianHarga->first()->hargajual),
+                    (fmod($varian->produkPersediaan?->first()?->stok, 1) !== 0.00) ? $varian->produkPersediaan?->first()?->stok : (int)$varian->produkPersediaan?->first()?->stok
                 ];
             });
             return new Table(['SKU', 'Varian', 'Harga jual', 'Stok'], $produkVarian->toArray());
@@ -171,7 +179,11 @@ class ProdukController extends Controller
     public function showProdukForm($id)
     {
         $form = new Form(new Produk);
-        $data = $form->model()->with('produkAttribut', 'produkVarian')->find($id);
+        $data = $form->model()->with(['produkAttribut', 'produkVarian' => function ($relation) {
+            $relation->with(['produkVarianHarga' => function ($query) {
+                $query->join(DB::raw("(select id_varianharga, nama as namavarianharga from toko_griyanaura.lv_varianharga) as vh"), 'ph.id_varianharga', 'vh.id_varianharga');
+            }, 'produkPersediaan']);
+        }])->find($id);
         $form->builder()->setResourceId($id);
         $form->builder()->setTitle($data->nama)->setMode('edit');
         $form->tools(function (Tools $tools) use ($id) {
@@ -211,14 +223,11 @@ class ProdukController extends Controller
                 $form->display('varian', 'Varian')->customFormat(function ($value) {
                     return $value ?: '--Tidak ada--';
                 });
-                $form->display('hargajual', 'Harga Jual')->attribute('align', 'right')->customFormat(function ($value) {
+                $form->display('produk_varian_harga.0.hargajual', 'Harga Jual')->attribute('align', 'right')->customFormat(function ($value) {
                     return 'Rp ' . number_format($value);
                 });
-                $form->display('default_hargabeli', 'Harga Beli')->attribute('align', 'right')->customFormat(function ($value) {
+                $form->display('produk_varian_harga.0.hargabeli', 'Harga Beli')->attribute('align', 'right')->customFormat(function ($value) {
                     return 'Rp ' . number_format($value);
-                });
-                $form->display('stok', 'Stok')->customFormat(function ($value) {
-                    return number_format($value);
                 });
                 $form->display('minstok', 'Min. Stok')->customFormat(function ($value) {
                     return number_format($value);
@@ -251,7 +260,44 @@ class ProdukController extends Controller
                 ->default('5002')
                 ->disable()
                 ->value($data->default_akunbiaya);
+        })->tab('Harga', function (Form $form) use ($data) {
+            $produkVarianWithHarga = [];
+            foreach ($data->produkVarian->toArray() as $varian) {
+                foreach ($varian['produk_varian_harga'] as $varianHarga) {
+                    $varian['hargajual'] = $varianHarga['hargajual'];
+                    $varian['hargabeli'] = $varianHarga['hargabeli'];
+                    $varian['namavarianharga'] = $varianHarga['namavarianharga'];
+                    $produkVarianWithHarga[] = $varian;
+                }
+            }
+            $form->tablehasmany('produkVarian', 'Varian', function (NestedForm $form) {
+                $form->display('kode_produkvarian', 'SKU');
+                $form->display('varian', 'Varian');  
+                $form->display('namavarianharga', 'Jenis Harga');  
+                $form->display('hargajual', 'Harga Jual')->attribute(['align' => 'right'])->customFormat(function ($x) {
+                    return 'Rp' . number_format($x);
+                });  
+                $form->display('hargabeli', 'Harga Beli')->attribute(['align' => 'right'])->customFormat(function ($x) {
+                    return 'Rp' . number_format($x);
+                });
+            })->disableCreate()->disableDelete()->value($produkVarianWithHarga)->useTable();
+        })->tab('Persediaan', function (Form $form) use ($data) {
+            $produkVarianPersediaan = [];
+            foreach ($data->produkVarian->toArray() as $varian) {
+                foreach ($varian['produk_persediaan'] as $persediaan) {
+                    $varian['stok'] = $persediaan['stok'];
+                    $varian['nama_gudang'] = $persediaan['nama_gudang'];
+                    $produkVarianPersediaan[] = $varian;
+                }
+            }
+            $form->tablehasmany('produkVarian', 'Varian', function (NestedForm $form) {
+                $form->display('kode_produkvarian', 'SKU');
+                $form->display('varian', 'Varian');  
+                $form->display('nama_gudang', 'Gudang');  
+                $form->display('stok', 'Stok');
+            })->disableCreate()->disableDelete()->value($produkVarianPersediaan)->useTable();
         });
+        
         return $form;
     }
     public function createProdukForm($request)
@@ -277,22 +323,22 @@ class ProdukController extends Controller
             $form->html('<div id="produk-varian-section" class="d-none">')->plain();
             $form->divider();
             $form->tablehasmany('produkAttribut', 'Varian Produk', function (NestedForm $form) {
-                $form->select('id_attribut', 'Varian')->options((new Dynamic())->setTable('toko_griyanaura.lv_attribut')->select('id_attribut as id', 'nama as text')->pluck('text', 'id')->toArray())->required();
+                $form->select('id_attribut', 'Varian')->options((new Dynamic())->setTable('toko_griyanaura.lv_attribut')->select('id_attribut as id', 'nama as text')->pluck('text', 'id')->toArray());
                 $form->multipleSelect('id_attributvalue', 'Nilai Varian');
             })->value([
-                ['id_produkattribut' => '']
+                ['id_produkattribut' => '0']
             ])->useTable();
             $form->divider();
             $form->tablehasmany('produkVarian', '', function (NestedForm $form) {
                 $keyName = 'kode_produkvarian_new';
                 if ($form->model()) {
-                    $key = $form->getKey();
+                    $key = $form->model()->getKey();
                 } else {
                     $key = 'new___LA_KEY__';
                 }
-                $form->text('kode_produkvarian', 'SKU')->style('width', '150px')->placeholder('[AUTO]')->withoutIcon()->customFormat(function ($x) {
+                $form->text('kode_produkvarian_new', 'SKU')->style('width', '150px')->placeholder('[AUTO]')->withoutIcon()->customFormat(function ($x) {
                     return $x;
-                })->required()->setElementName("produkVarian[{$key}][{$keyName}]");
+                })->setElementName("produkVarian[{$key}][{$keyName}]");
                 $form->html('<span id="varian">--Tidak Ada--</span>', 'Varian');
                 $form->currency('hargajual', 'Harga Jual')->symbol('Rp');
                 $form->currency('default_hargabeli', 'Harga Beli')->symbol('Rp');
@@ -300,7 +346,7 @@ class ProdukController extends Controller
                 $form->text('minstok', 'Min Stok')->attribute('type', 'number')->attribute('step', '.01')->style('min-width', '80px')->default('0.00')->withoutIcon();
             })->disableDelete()->disableCreate()->value([
                 [
-                    'kode_produkvarian' => ''
+                    'kode_produkvarian' => '0'
                 ]
             ])->useTable();
             $form->html('</div>')->plain();
@@ -427,8 +473,8 @@ class ProdukController extends Controller
                     }
                 }
                 $form->currency('produk_varian_harga.0.hargajual', 'Harga Jual')->removeElementClass('produk_varian_harga.0.hargajual')->addElementClass('hargajual')->symbol('Rp');
+                $form->currency('produk_varian_harga.0.hargabeli', 'Harga Beli')->removeElementClass('produk_varian_harga.0.hargabeli')->addElementClass('hargabeli')->symbol('Rp');
                 if ($data->in_stok) {
-                    $form->currency('produk_varian_harga.0.hargabeli', 'Harga Beli')->removeElementClass('produk_varian_harga.0.hargabeli')->addElementClass('hargabeli')->symbol('Rp');
                     $form->text('minstok', 'Min Stok')->attribute('type', 'number')->attribute('step', '.01')->style('min-width', '80px')->default('0.00')->withoutIcon();
                 }
             })->value($data->produkVarian->toArray())->useTable();
@@ -900,7 +946,7 @@ class ProdukController extends Controller
         return $content
             ->title('Produk')
             ->description('Tambah')
-            ->body($this->createProdukForm($request->all()));
+            ->body($this->createProdukForm($request->all())->setAction(route(admin_get_route('produk.store'))));
     }
     public function editProduk(Content $content, Request $request, $id)
     {
@@ -1362,4 +1408,14 @@ class ProdukController extends Controller
         // return redirect()->route(admin_get_route('produk.list'));
         // return $this->createProdukForm()->update($id);
     }
+    public function storeProduk(Request $request)
+    {
+        try {
+            $this->produkService->storeProduk($request->all());
+            return dump($request->all());
+        } catch (ValidationException $e) {
+            dd($e->validator->getMessageBag());
+            return back()->withInput(request()->only(['nama', 'deskripsi', 'namaunit']))->withErrors($e->validator);
+        }
+    } 
 }

@@ -8,61 +8,132 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class ProdukService {
-    public function createProduk($request) {
-        $validator = Validator::make($request, [
-            'produk.nama' => 'required|string',
-            'produk.deskripsi' => 'nullable|string',
-            'produk.in_stok' => 'required|boolean',
-            'produk.default_unit' => 'required|string',
-            'produk.attribut' => 'required|',
-            /* 'produk.default_pajakbeli' => 'required|numeric',
-            'produk.default_pajakjual' => 'required|numeric', */
-            'produk.default_akunpersediaan' => 'required|string', /* 1301 */
-            'produk.default_akunpemasukan' => 'required|string', /* 4001 */
-            'produk.default_akunbiaya' => 'required|string', /* 5002 */
-            'produk_varian' => 'nullable|array',
-            'produk_varian.*.attribut' => 'nullable|array',
-            'produk_varian.*.attribut.*.attr' => 'required|in_array:produk.attribut.*',
-            'produk_varian.*.attribut.*.attrval' => 'required|exists:pgsql.toko_griyanaura.lv_attributvalue,id_attributvalue',
-            'produk_varian.*.kode_produkvarian' => 'required_if_accepted:produk.in_stok|string',
-            'produk_varian.*.hargajual' => 'required_if_accepted:produk.in_stok|numeric',
-            'produk_varian.*.default_hargabeli' => 'required_if_accepted:produk.in_stok|numeric',
-            'produk_varian.*.pertanggal' => 'nullable|date',
-            'produk_varian.*.minstok' => 'required_if_accepted:produk.in_stok|numeric',
-        ]);
+    protected function generateCombinations($arrays) {
+        $result = [[]]; // Mulai dengan array kosong
+    
+        foreach ($arrays as $array) {
+            $temp = [];
+            foreach ($result as $combination) {
+                foreach ($array as $item) {
+                    $temp[] = array_merge($combination, [$item]);
+                }
+            }
+            $result = $temp; // Perbarui hasil dengan kombinasi baru
+        }
+    
+        return $result;
+    }
+    public function storeProduk($request) {
+        $rules = [
+            'nama' => 'required|string|min:5',
+            'default_unit' => 'required|string',
+            'deskripsi' => 'nullable|string',
+            'in_stok' => 'required',
+            'minstok' => 'required_if_accepted:in_stok',
+            'has_varian' => 'required',
+            'default_akunpersediaan' => 'required|string',
+            'default_akunpemasukan' => 'required|string',
+            'default_akunbiaya' => 'required|string',
+            'produkAttribut' => 'required',
+            'produkAttribut.*.id_attribut' => 'required_if_accepted:has_varian',
+            'produkAttribut.*.id_attributvalue' => 'required_if_accepted:has_varian|array',
+            'produkVarian' => 'required',
+            'produkVarian.*.kode_produkvarian_new' => 'nullable|string',
+            'produkVarian.*.hargajual' => 'nullable|numeric',
+            'produkVarian.*.default_hargabeli' => 'nullable|numeric',
+            'produkVarian.*.minstok' => 'required_if_accepted:in_stok',
+        ];
+        $validator = Validator::make($request, $rules);
         $validator->validate();
+        $jumlahVarian = 1;
+        foreach ($request['produkAttribut'] as $attribut) {
+            $jumlahVarian *= count($attribut['id_attributvalue']) - 1 ?: 1; 
+        }
+        if ($jumlahVarian != count($request['produkVarian'])) {
+            throw new \Exception('Varian tidak valid!');
+        }
+
         DB::beginTransaction();
         try {
-            $produk = Produk::create($request['produk']);
-            
-            $produkAttribut = array_unique(array_merge(...array_map(function($item) { 
-                return array_column($item['attribut'], 'attr');
-            }, $request['produk_varian'])));
-            foreach ($produkAttribut as &$produkAttr) {
-                $produkAttr['id_produk'] = $produk['id_produk'];
-            }
-            DB::table('toko_griyanaura.ms_produkattribut')->insert($produkAttribut);
-            $produkAttribut = array_map(function ($item) { return (array)$item; }, DB::table('toko_griyanaura.ms_produkattribut')->where('id_produk', $produk['id_produk'])->get()->toArray());
-            $produkAttribut = array_column($produkAttribut, 'id_produkattribut', 'id_attribut');
-            
-            $produkVarian = $request['produk_varian'];
-            $produkAttributVarian = array();
-            foreach ($produkVarian as &$varian) {
-                $varian['id_produk'] = $produk['id_produk'];
-                $produkAttributVarian[]['kode_produkvarian'] = $varian['kode_produkvarian'];
-                foreach ($varian['attribut'] as &$attr) {
-                    $produkAttributVarian[]['id_produkattribut'] = $produkAttribut[(int)$attr['attr']];
-                    $produkAttributVarian[]['id_attributvalue'] = $attr['attrval'];
+            $produk = Produk::create([
+                'nama' => $request['nama'],
+                'deskripsi' => $request['deskripsi'],
+                'in_stok' => $request['in_stok'] == 'on' ? true : false,
+                'default_unit' => $request['default_unit'],
+                'default_akunpersediaan' => $request['default_akunpersediaan'],
+                'default_akunpemasukan' => $request['default_akunpemasukan'],
+                'default_akunbiaya' => $request['default_akunbiaya'],
+                'inserted_by' => Admin::user()->username,
+                'updated_by' => Admin::user()->username
+            ]);
+            $idProdukHarga = DB::table('toko_griyanaura.ms_produkharga')->insertGetId([
+                'id_produk' => $produk->id_produk,
+                'id_varianharga' => 1 //Reguler
+            ], 'id_produkharga');
+            foreach ($request['produkAttribut'] as $key => $attribut) {
+                if ($attribut['id_attribut'] != null) {
+                    $request['produkAttribut'][$key]['id_produkattribut'] = DB::table('toko_griyanaura.ms_produkattribut')->insertGetId([
+                        'id_produk' => $produk->id_produk,
+                        'id_attribut' => $attribut['id_attribut']
+                    ],'id_produkattribut');
                 }
-                unset($varian['attribut']);
+            }  
+            $produkAttribut = [];
+            foreach ($request['produkAttribut'] as $key => $attribut) {
+                if ($attribut['id_attribut'] != null) {
+                    foreach ($attribut['id_attributvalue'] as $attVal) {
+                        if ($attVal != null) {
+                            $produkAttribut[$key][] = [$attribut['id_attribut'] => $attVal];
+                        }
+                    }
+                }
             }
-
-            DB::table('toko_griyanaura.ms_produkvarian')->insert($produkVarian);
-            DB::table('toko_griyanaura.ms_produkattributvarian')->insert($produkAttributVarian);
+            $produkVarianValue = $this->generateCombinations($produkAttribut);
+            foreach ($request['produkVarian'] as $key => $item) {
+                $data = [
+                    'id_produk' => $produk->id_produk,
+                    'minstok' => $item['minstok'],
+                    'inserted_by' => Admin::user()->username,
+                    'updated_by' => Admin::user()->username
+                ];
+                if ($item['kode_produkvarian_new'] != null) {
+                    $data['kode_produkvarian'] = $item['kode_produkvarian_new'];
+                }
+                $kodeProdukVarian = DB::table('toko_griyanaura.ms_produkvarian')->insertGetId($data, 'kode_produkvarian');   
+                if (!empty($produkVarianValue[$key])) {
+                    foreach ($produkVarianValue[$key] as $attributValue) {
+                        DB::table('toko_griyanaura.ms_produkattributvarian')->insert([
+                            'kode_produkvarian' => $kodeProdukVarian,
+                            'id_produkattribut' => array_key_first($attributValue),
+                            'id_attributvalue' => $attributValue[array_key_first($attributValue)],
+                            'inserted_by' => Admin::user()->username,
+                            'updated_by' => Admin::user()->username
+                        ]);
+                    }
+                } 
+                $idProdukVarianHarga = DB::table('toko_griyanaura.ms_produkvarianharga')->insertGetId([
+                    'kode_produkvarian' => $kodeProdukVarian,
+                    'id_produkharga' => $idProdukHarga,
+                    'hargajual' => (int)$item['hargajual'],
+                    'hargabeli' => (int)$item['default_hargabeli'],
+                    'inserted_by' => Admin::user()->username,
+                    'updated_by' => Admin::user()->username
+                ], 'id_produkvarianharga');
+                if ($request['in_stok'] == 'on') {
+                    DB::table('toko_griyanaura.ms_produkpersediaan')->insert([
+                        'kode_produkvarian' => $kodeProdukVarian,
+                        'id_gudang' => 1, // Gudang Pusat
+                        'stok' => 0,
+                        'default_varianharga' => $idProdukVarianHarga,
+                        'inserted_by' => Admin::user()->username,
+                        'updated_by' => Admin::user()->username
+                    ]);
+                }
+            }
             DB::commit();
-        } catch (\Exception $th) {
+        } catch (\Exception $e) {
             DB::rollBack();
-            throw $th;
+            throw $e;
         }
     }
     public function updateProduk($idProduk, $request) {
@@ -70,7 +141,7 @@ class ProdukService {
             'nama' => 'required|string|min:5',
             'default_unit' => 'required|string',
             'deskripsi' => 'nullable|string',
-            'produkAttribut' => 'required|array',
+            'produkAttribut' => 'array',
             'produkAttribut.*.id_attribut' => 'required|numeric',
             'produkAttribut.*.id_produkattribut' => 'nullable|numeric',
             'produkAttribut.*._remove_' => 'required',
@@ -80,13 +151,15 @@ class ProdukService {
             'produkVarian.*.kode_produkvarian_new' => 'required_if:produkVarian.*._remove_,0|string',
             'produkVarian.*.produk_varian_harga\.0\.hargajual' => 'nullable|numeric',
             'produkVarian.*.produk_varian_harga\.0\.hargabeli' => 'nullable|numeric',
-            'produkVarian.*.minstok' => 'required_if:produkVarian.*._remove_,0|numeric',
+            'produkVarian.*.minstok' => 'nullable|numeric',
             'produkVarian.*.kode_produkvarian' => 'nullable|string',
             'produkVarian.*._remove_' => 'required|numeric',
         ];
-        foreach ($request['produkAttribut'] as $key => $attr) {
-            if ($attr['_remove_'] == 0) {
-                $rules["produkVarian.*.{$key}"] = 'required_if:produkVarian.*._remove_,0';
+        if (isset($request['produkAttribut'])) {
+            foreach ($request['produkAttribut'] as $key => $attr) {
+                if ($attr['_remove_'] == 0) {
+                    $rules["produkVarian.*.{$key}"] = 'required_if:produkVarian.*._remove_,0';
+                }
             }
         }
         $validator = Validator::make($request, $rules);
@@ -103,29 +176,31 @@ class ProdukService {
             $produkVarian = $produk->produkVarian->keyBy('kode_produkvarian');
             $produkAttribut = $produk->produkAttribut->keyBy('id_produkattribut');
             /* Attribut varian */
-            foreach ($request['produkAttribut'] as $key => $attribut) {
-                if ($attribut['_remove_'] == 0) {
-                    if (isset($produkAttribut[$key])) 
-                    {
-                        $newValues = [];
-                        if ($produkAttribut[$key]->id_attribut != $attribut['id_attribut']) {
-                            $newValues['id_attribut'] = $attribut['id_attribut'];
-                        }
-                        if (!empty($newValues)) {
-                            $newValues['updated_at'] = date('Y-m-d H:i:s');
-                            $newValues['updated_by'] = Admin::user()->username;
-                            DB::table('toko_griyanaura.ms_produkattribut')->where('id_produkattribut', $attribut['id_produkattribut'])->update($newValues);
+            if (isset($request['produkAttribut'])) {
+                foreach ($request['produkAttribut'] as $key => $attribut) {
+                    if ($attribut['_remove_'] == 0) {
+                        if (isset($produkAttribut[$key])) 
+                        {
+                            $newValues = [];
+                            if ($produkAttribut[$key]->id_attribut != $attribut['id_attribut']) {
+                                $newValues['id_attribut'] = $attribut['id_attribut'];
+                            }
+                            if (!empty($newValues)) {
+                                $newValues['updated_at'] = date('Y-m-d H:i:s');
+                                $newValues['updated_by'] = Admin::user()->username;
+                                DB::table('toko_griyanaura.ms_produkattribut')->where('id_produkattribut', $attribut['id_produkattribut'])->update($newValues);
+                            }
+                        } else {
+                            $request['produkAttribut'][$key]['id_produkattribut'] = DB::table('toko_griyanaura.ms_produkattribut')->insertGetId([
+                                'id_attribut' => $attribut['id_attribut'],
+                                'id_produk' => $idProduk
+                            ], 'id_produkattribut');
                         }
                     } else {
-                        $request['produkAttribut'][$key]['id_produkattribut'] = DB::table('toko_griyanaura.ms_produkattribut')->insertGetId([
-                            'id_attribut' => $attribut['id_attribut'],
-                            'id_produk' => $idProduk
-                        ], 'id_produkattribut');
-                    }
-                } else {
-                    if (isset($produkAttribut[$key])) {
-                        DB::table('toko_griyanaura.ms_produkattributvarian')->where('id_produkattribut', $key)->delete();
-                        DB::table('toko_griyanaura.ms_produkattribut')->where('id_produkattribut', $key)->delete();
+                        if (isset($produkAttribut[$key])) {
+                            DB::table('toko_griyanaura.ms_produkattributvarian')->where('id_produkattribut', $key)->delete();
+                            DB::table('toko_griyanaura.ms_produkattribut')->where('id_produkattribut', $key)->delete();
+                        }
                     }
                 }
             }
@@ -138,8 +213,8 @@ class ProdukService {
                         if ($produkVarian[$key]->kode_produkvarian !== $varian['kode_produkvarian_new']) {
                             $newValues['kode_produkvarian'] = $varian['kode_produkvarian_new'];
                         }
-                        if ($produkVarian[$key]->minstok != $varian['minstok']) {
-                            $newValues['minstok'] = $varian['minstok'];
+                        if (isset($varian['minstok']) and $produkVarian[$key]->minstok != $varian['minstok']) {
+                            $newValues['minstok'] = $varian['minstok'] ?: 0;
                         }
                         if ($produkVarian[$key]->produkVarianHarga->first()->hargajual != $varian['produk_varian_harga.0.hargajual']) {
                             $newValuesHarga['hargajual'] = (int)$varian['produk_varian_harga.0.hargajual'];
@@ -153,28 +228,30 @@ class ProdukService {
                         foreach ($oldVariansJson as $item) {
                             $oldVarians += $item;
                         }
-                        foreach ($request['produkAttribut'] as $keyAttr => $attribut) {
-                            if ($attribut['_remove_'] == 0) {
-                                if (isset($oldVarians[$keyAttr])) {
-                                    $newValues = [];
-                                    if ($oldVarians[$keyAttr] != $varian[$keyAttr]) {
-                                        $newValues['id_attributvalue'] = $varian[$keyAttr];
+                        if (isset($request['produkAttribut'])) {
+                            foreach ($request['produkAttribut'] as $keyAttr => $attribut) {
+                                if ($attribut['_remove_'] == 0) {
+                                    if (isset($oldVarians[$keyAttr])) {
+                                        $newValues = [];
+                                        if ($oldVarians[$keyAttr] != $varian[$keyAttr]) {
+                                            $newValues['id_attributvalue'] = $varian[$keyAttr];
+                                        }
+                                        if (!empty($newValues)) {
+                                            $newValues['updated_at'] = date('Y-m-d H:i:s');
+                                            $newValues['updated_by'] = Admin::user()->username;
+                                            DB::table('toko_griyanaura.ms_produkattributvarian')->where('kode_produkvarian', $varian['kode_produkvarian'])->where('id_produkattribut', $keyAttr)->update($newValues);
+                                        }
+                                    } else {
+                                        // dump($oldVarians, $request['produkAttribut'], $varian, $attribut);
+                                        // dump('===========');
+                                        DB::table('toko_griyanaura.ms_produkattributvarian')->insert([
+                                            'kode_produkvarian' => $varian['kode_produkvarian'],
+                                            'id_produkattribut' => $attribut['id_produkattribut'],
+                                            'id_attributvalue' => $varian[$keyAttr],
+                                            'inserted_by' => Admin::user()->username,
+                                            'updated_by' => Admin::user()->username
+                                        ]);
                                     }
-                                    if (!empty($newValues)) {
-                                        $newValues['updated_at'] = date('Y-m-d H:i:s');
-                                        $newValues['updated_by'] = Admin::user()->username;
-                                        DB::table('toko_griyanaura.ms_produkattributvarian')->where('kode_produkvarian', $varian['kode_produkvarian'])->where('id_produkattribut', $keyAttr)->update($newValues);
-                                    }
-                                } else {
-                                    // dump($oldVarians, $request['produkAttribut'], $varian, $attribut);
-                                    // dump('===========');
-                                    DB::table('toko_griyanaura.ms_produkattributvarian')->insert([
-                                        'kode_produkvarian' => $varian['kode_produkvarian'],
-                                        'id_produkattribut' => $attribut['id_produkattribut'],
-                                        'id_attributvalue' => $varian[$keyAttr],
-                                        'inserted_by' => Admin::user()->username,
-                                        'updated_by' => Admin::user()->username
-                                    ]);
                                 }
                             }
                         }
@@ -193,7 +270,7 @@ class ProdukService {
                         DB::table('toko_griyanaura.ms_produkvarian')->insert([
                             'kode_produkvarian' => $varian['kode_produkvarian_new'],
                             'id_produk' => $idProduk,
-                            'minstok' => $varian['minstok'],
+                            'minstok' => $varian['minstok'] ?: 0,
                             'inserted_by' => Admin::user()->username,
                             'updated_by' => Admin::user()->username
                         ]);
@@ -265,6 +342,5 @@ class ProdukService {
             throw $e;
             DB::rollBack();
         }
-
     }
 }

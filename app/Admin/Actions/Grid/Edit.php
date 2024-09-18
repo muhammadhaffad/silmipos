@@ -6,6 +6,12 @@ use Encore\Admin\Actions\RowAction;
 
 class Edit extends RowAction
 {
+    protected $name;
+    protected $url;
+    public function __construct()
+    {
+        $this->initInteractor();
+    }
     /**
      * @return array|null|string
      */
