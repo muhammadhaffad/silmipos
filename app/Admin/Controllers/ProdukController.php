@@ -390,6 +390,7 @@ class ProdukController extends Controller
             $tools->disableView();
             $tools->disableDelete();
             $tools->append($tools->renderDelete(route(admin_get_route('produk.edit'), ['id' => $id])));
+            $tools->append($tools->renderEdit(route(admin_get_route('produk.edit.harga'), ['id' => $id]), 'Edit Harga'));
             $tools->append($tools->renderView(route(admin_get_route('produk.detail'), ['id' => $id])));
             $tools->append($tools->renderList(route(admin_get_route('produk.list'))));
         });
@@ -517,6 +518,7 @@ class ProdukController extends Controller
             $tools->disableView();
             $tools->disableDelete();
             $tools->append($tools->renderDelete(route(admin_get_route('produk.edit'), ['id' => $id])));
+            $tools->append($tools->renderEdit(route(admin_get_route('produk.edit'), ['id' => $id]), 'Edit Produk'));
             $tools->append($tools->renderView(route(admin_get_route('produk.detail'), ['id' => $id])));
             $tools->append($tools->renderList(route(admin_get_route('produk.list'))));
         });
@@ -532,7 +534,7 @@ class ProdukController extends Controller
         $form->divider();
         $form->tablehasmany('produkHarga', 'Jenis Harga', function (NestedForm $form) {
             if($form->model()?->id_varianharga == 1) {
-                $form->select('id_varianharga', 'Jenis')->required()->disable()->options((new Dynamic())->setTable('toko_griyanaura.lv_varianharga')->select('id_varianharga as id', 'nama as text')->get()->pluck('text', 'id')->toArray())->attribute([
+                $form->select('id_varianharga', 'Jenis')->readOnly()->required()->options((new Dynamic())->setTable('toko_griyanaura.lv_varianharga')->select('id_varianharga as id', 'nama as text')->get()->pluck('text', 'id')->toArray())->attribute([
                     'data-index' => $form->model()?->index
                 ]);
             } else {
@@ -1386,7 +1388,7 @@ class ProdukController extends Controller
         return $content
             ->title('Produk')
             ->description('Tambah')
-            ->body($this->editHargaProdukForm($id, $request->all())->setAction(route(admin_get_route('produk.update'), ['id' => $id])));
+            ->body($this->editHargaProdukForm($id, $request->all())->setAction(route(admin_get_route('produk.update.harga'), ['id' => $id])));
     }
     public function updateProduk($id, Request $request)
     {
@@ -1407,6 +1409,10 @@ class ProdukController extends Controller
         // admin_toastr('Sukses update produk');
         // return redirect()->route(admin_get_route('produk.list'));
         // return $this->createProdukForm()->update($id);
+    }
+    public function updateProdukHarga($id, Request $request)
+    {
+        return dd($request->all());
     }
     public function storeProduk(Request $request)
     {

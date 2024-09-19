@@ -202,9 +202,10 @@ class Tools implements Renderable
      *
      * @return string
      */
-    public function renderList($path = null)
+    public function renderList($path = null, $text = null)
     {
-        $text = trans('admin.list');
+        if (!$text) 
+            $text = trans('admin.list');
 
         return <<<EOT
 <div class="btn-group pull-right" style="margin-right: 5px">
@@ -218,9 +219,9 @@ EOT;
      *
      * @return string
      */
-    public function renderView($path = null)
+    public function renderView($path = null, $text = null)
     {
-        $view = trans('admin.view');
+        $view = ($text) ?: trans('admin.view');
 
         return <<<HTML
 <div class="btn-group pull-right" style="margin-right: 5px">
@@ -236,13 +237,13 @@ HTML;
      *
      * @return string
      */
-    public function renderDelete($path=null)
+    public function renderDelete($path=null, $text = null)
     {
         $trans = [
             'delete_confirm' => trans('admin.delete_confirm'),
             'confirm'        => trans('admin.confirm'),
             'cancel'         => trans('admin.cancel'),
-            'delete'         => trans('admin.delete'),
+            'delete'         => ($text) ?: trans('admin.delete') ,
         ];
 
         $class = uniqid();
@@ -306,13 +307,13 @@ HTML;
      *
      * @return string
      */
-    public function renderEdit($path)
+    public function renderEdit($path, $text = null)
     {
-        $edit = trans('admin.edit');
+        $edit = ($text) ?: trans('admin.edit');
 
         return <<<HTML
 <div class="btn-group pull-right" style="margin-right: 5px">
-    <a href="{$this->getEditPath($path)}" class="btn btn-sm btn-primary" title="{$edit}">
+    <a href="{$this->getEditPath($path)}" class="btn btn-sm btn-success" title="{$edit}">
         <i class="fa fa-edit"></i><span class="hidden-xs"> {$edit}</span>
     </a>
 </div>

@@ -343,4 +343,41 @@ class ProdukService {
             DB::rollBack();
         }
     }
+    public function updateProdukHarga($idProduk, $request) {
+        $rules = [
+            'produkHarga' => 'required',
+            'produkHarga.*._remove_' => 'required',
+            'produkHarga.*.id_varianharga' => 'required_if:produkHarga.*._remove_,0',
+            'produkHarga.*.id_produkharga' => 'required_if:produkHarga.*._remove_,0',
+            'produkVarian' => 'required',
+            'produkVarian.*.kode_produkvarian' => 'required'
+        ];
+        foreach ($request['produkHarga'] as $key => $jenisHarga) {
+            $rules['produkVarian.*.harga_jual_' . $key] = 'required_if:produkHarga.*._remove_,0';
+            $rules['produkVarian.*.harga_beli_' . $key] = 'required_if:produkHarga.*._remove_,0';
+        }
+        $produk = Produk::with('produkHarga', 'produkVarian.produkVarianHarga')->find($idProduk, 'id_produk');
+        $produkHarga = $produk->produkHarga->keyBy('id_produkharga');
+        $index = 0;
+        foreach ($request['produkHarga'] as $key => $jenisHarga) {
+            if ($index == 0) {
+                continue;
+            }
+            $index++;
+            if (isset($produkHarga[$key])) {
+                $newValues = [];
+                if ($produkHarga[$key]->id_varianharga != $jenisHarga['id_varianharga']) {
+                    $newValues['id_varianharga'] = $jenisHarga['id_varianharga'];
+                }
+                if (!empty($newValues)) {
+                    DB::table('toko_griyanaura.ms_produkharga')->where('id_produkharga', $produkHarga[$key]->id_produkharga)->update($newValues);
+                }
+            } else {
+                $request['produkHarga'][$key]['id_produkharga'] = DB::table('toko_griyanaura.ms_produkharga')->insert([
+                    'id_produk' => $produk->id_produk,
+                    'id_varianharga' => $jenisHarga['id_varianharga']
+                ]);
+            }
+        }
+    }
 }

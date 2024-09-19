@@ -6,10 +6,12 @@ use Encore\Admin\Actions\RowAction;
 
 class Edit extends RowAction
 {
-    protected $name;
-    protected $url;
-    public function __construct()
+    public $name;
+    public $url;
+    public function __construct($name = null, $url = null)
     {
+        $this->name = $name;
+        $this->url = $url;
         $this->initInteractor();
     }
     /**
@@ -17,6 +19,8 @@ class Edit extends RowAction
      */
     public function name()
     {
+        if ($this->name) 
+            return $this->name;
         return __('admin.edit');
     }
 
@@ -25,6 +29,8 @@ class Edit extends RowAction
      */
     public function href()
     {
+        if ($this->url) 
+            return $this->url;
         return "{$this->getResource()}/edit/{$this->getKey()}";
     }
 }
