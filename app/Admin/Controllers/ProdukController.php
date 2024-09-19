@@ -190,7 +190,7 @@ class ProdukController extends Controller
             $tools->disableList();
             $tools->disableView();
             $tools->disableDelete();
-            $tools->append($tools->renderDelete(route(admin_get_route('produk.edit'), ['id' => $id])));
+            $tools->append($tools->renderDelete(route(admin_get_route('produk.delete'), ['id' => $id])));
             $tools->append($tools->renderEdit(route(admin_get_route('produk.edit'), ['id' => $id])));
             $tools->append($tools->renderList(route(admin_get_route('produk.list'))));
         });
@@ -207,7 +207,7 @@ class ProdukController extends Controller
             $form->select('default_unit', 'Satuan')->setWidth(2)->options((new Dynamic)->setTable('toko_griyanaura.lv_unit')->select('kode_unit as id', 'nama as text')->pluck('text', 'id')->toArray())->disable()->value($data->default_unit);
             $form->display('deskripsi')->attribute('style', 'height:300px;overflow:auto;')->value($data->deskripsi);
             $form->display('hargajual', 'Harga Jual')->attribute('align', 'right')->value('Rp ' . number_format($data->produkVarian[0]->hargajual))->setWidth(2);
-            $form->display('hargabeli', 'Harga Beli')->attribute('align', 'right')->value('Rp ' . number_format($data->produkVarian[0]->default_hargabeli))->setWidth(2);
+            $form->display('hargabeli', 'Harga Modal')->attribute('align', 'right')->value('Rp ' . number_format($data->produkVarian[0]->default_hargabeli))->setWidth(2);
             $form->switch('in_stok', 'Produk di-stok?')->disable()->states([
                 'on' => ['value' => 1, 'text' => 'Iya', 'color' => 'success'],
                 'off' => ['value' => 0, 'text' => 'Tidak', 'color' => 'danger']
@@ -226,7 +226,7 @@ class ProdukController extends Controller
                 $form->display('produk_varian_harga.0.hargajual', 'Harga Jual')->attribute('align', 'right')->customFormat(function ($value) {
                     return 'Rp ' . number_format($value);
                 });
-                $form->display('produk_varian_harga.0.hargabeli', 'Harga Beli')->attribute('align', 'right')->customFormat(function ($value) {
+                $form->display('produk_varian_harga.0.hargabeli', 'Harga Modal')->attribute('align', 'right')->customFormat(function ($value) {
                     return 'Rp ' . number_format($value);
                 });
                 $form->display('minstok', 'Min. Stok')->customFormat(function ($value) {
@@ -277,7 +277,7 @@ class ProdukController extends Controller
                 $form->display('hargajual', 'Harga Jual')->attribute(['align' => 'right'])->customFormat(function ($x) {
                     return 'Rp' . number_format($x);
                 });  
-                $form->display('hargabeli', 'Harga Beli')->attribute(['align' => 'right'])->customFormat(function ($x) {
+                $form->display('hargabeli', 'Harga Modal')->attribute(['align' => 'right'])->customFormat(function ($x) {
                     return 'Rp' . number_format($x);
                 });
             })->disableCreate()->disableDelete()->value($produkVarianWithHarga)->useTable();
@@ -310,7 +310,7 @@ class ProdukController extends Controller
             $form->select('default_unit', 'Satuan')->required()->setWidth(2)->options((new Dynamic)->setTable('toko_griyanaura.lv_unit')->select('kode_unit as id', 'nama as text')->pluck('text', 'id')->toArray());
             $form->ckeditor('deskripsi');
             $form->currency('hargajual', 'Harga jual')->symbol('Rp');
-            $form->currency('default_hargabeli', 'Harga beli')->symbol('Rp');
+            $form->currency('default_hargabeli', 'Harga Modal')->symbol('Rp');
             $form->switch('in_stok', 'Produk di-stok?')->states([
                 'on' => ['value' => 1, 'text' => 'Iya', 'color' => 'success'],
                 'off' => ['value' => 0, 'text' => 'Tidak', 'color' => 'danger']
@@ -341,7 +341,7 @@ class ProdukController extends Controller
                 })->setElementName("produkVarian[{$key}][{$keyName}]");
                 $form->html('<span id="varian">--Tidak Ada--</span>', 'Varian');
                 $form->currency('hargajual', 'Harga Jual')->symbol('Rp');
-                $form->currency('default_hargabeli', 'Harga Beli')->symbol('Rp');
+                $form->currency('default_hargabeli', 'Harga Modal')->symbol('Rp');
                 $form->text('stok', 'Stok')->attribute('type', 'number')->attribute('step', '.01')->style('min-width', '80px')->default(0)->withoutIcon()->disable();
                 $form->text('minstok', 'Min Stok')->attribute('type', 'number')->attribute('step', '.01')->style('min-width', '80px')->default('0.00')->withoutIcon();
             })->disableDelete()->disableCreate()->value([
@@ -389,7 +389,7 @@ class ProdukController extends Controller
             $tools->disableList();
             $tools->disableView();
             $tools->disableDelete();
-            $tools->append($tools->renderDelete(route(admin_get_route('produk.edit'), ['id' => $id])));
+            $tools->append($tools->renderDelete(route(admin_get_route('produk.delete'), ['id' => $id])));
             $tools->append($tools->renderEdit(route(admin_get_route('produk.edit.harga'), ['id' => $id]), 'Edit Harga'));
             $tools->append($tools->renderView(route(admin_get_route('produk.detail'), ['id' => $id])));
             $tools->append($tools->renderList(route(admin_get_route('produk.list'))));
@@ -474,7 +474,7 @@ class ProdukController extends Controller
                     }
                 }
                 $form->currency('produk_varian_harga.0.hargajual', 'Harga Jual')->removeElementClass('produk_varian_harga.0.hargajual')->addElementClass('hargajual')->symbol('Rp');
-                $form->currency('produk_varian_harga.0.hargabeli', 'Harga Beli')->removeElementClass('produk_varian_harga.0.hargabeli')->addElementClass('hargabeli')->symbol('Rp');
+                $form->currency('produk_varian_harga.0.hargabeli', 'Harga Modal')->removeElementClass('produk_varian_harga.0.hargabeli')->addElementClass('hargabeli')->symbol('Rp');
                 if ($data->in_stok) {
                     $form->text('minstok', 'Min Stok')->attribute('type', 'number')->attribute('step', '.01')->style('min-width', '80px')->default('0.00')->withoutIcon();
                 }
@@ -517,7 +517,7 @@ class ProdukController extends Controller
             $tools->disableList();
             $tools->disableView();
             $tools->disableDelete();
-            $tools->append($tools->renderDelete(route(admin_get_route('produk.edit'), ['id' => $id])));
+            $tools->append($tools->renderDelete(route(admin_get_route('produk.delete'), ['id' => $id])));
             $tools->append($tools->renderEdit(route(admin_get_route('produk.edit'), ['id' => $id]), 'Edit Produk'));
             $tools->append($tools->renderView(route(admin_get_route('produk.detail'), ['id' => $id])));
             $tools->append($tools->renderList(route(admin_get_route('produk.list'))));
@@ -548,14 +548,15 @@ class ProdukController extends Controller
             $form->text('varian')->withoutIcon()->readonly()->disable();
             if ($form->model()) {
                 foreach ($data->produkHarga as $key => $jenisHarga) {
-                    $produkVarianHarga = array_filter($form->model()?->getAttribute('produk_varian_harga'), function ($varianHarga) use ($jenisHarga) { return $varianHarga['id_produkharga'] == $jenisHarga['id_produkharga']; })[0];
+                    $produkVarianHarga = array_filter($form->model()?->getAttribute('produk_varian_harga'), function ($varianHarga) use ($jenisHarga) { return $varianHarga['id_produkharga'] == $jenisHarga['id_produkharga']; });
+                    $produkVarianHarga = array_pop($produkVarianHarga);
                     $form->currency('harga_jual_' . $jenisHarga['id_produkharga'], 'Harga Jual ' . $jenisHarga['nama'])->symbol('Rp')->default($produkVarianHarga['hargajual']);
-                    $form->currency('harga_beli_' . $jenisHarga['id_produkharga'], 'Harga Beli ' . $jenisHarga['nama'])->symbol('Rp')->default($produkVarianHarga['hargabeli']);
+                    $form->currency('harga_beli_' . $jenisHarga['id_produkharga'], 'Harga Modal ' . $jenisHarga['nama'])->symbol('Rp')->default($produkVarianHarga['hargabeli']);
                 }
             } else {
                 foreach ($data->produkHarga as $key => $jenisHarga) {
                     $form->currency('harga_jual_' . $jenisHarga['id_produkharga'], 'Harga Jual ' . $jenisHarga['nama'])->setLabelClass(['varianharga', 'index-varianharga-' . $key])->symbol('Rp');
-                    $form->currency('harga_beli_' . $jenisHarga['id_produkharga'], 'Harga Beli ' . $jenisHarga['nama'])->setLabelClass(['varianharga', 'index-varianharga-' . $key])->symbol('Rp');
+                    $form->currency('harga_beli_' . $jenisHarga['id_produkharga'], 'Harga Modal ' . $jenisHarga['nama'])->setLabelClass(['varianharga', 'index-varianharga-' . $key])->symbol('Rp');
                 }
             }
         })->value($data->produkVarian->toArray())
@@ -1272,7 +1273,7 @@ class ProdukController extends Controller
                     if (k == 0) {
                         harga = 'Harga Jual ';
                     } else {
-                        harga = 'Harga Beli ';
+                        harga = 'Harga Modal ';
                     }
                     $(this).text(harga + varianText);
                 });
@@ -1284,7 +1285,7 @@ class ProdukController extends Controller
                 $('#has-many-produkVarian thead tr').each(function() {
                     $(this).find('th').eq(columnIndex).text('Harga Jual ');
                     $(this).find('th').eq(columnIndex).addClass('hidden');
-                    $(this).find('th').eq(columnIndex+1).text('Harga Beli ');
+                    $(this).find('th').eq(columnIndex+1).text('Harga Modal ');
                     $(this).find('th').eq(columnIndex+1).addClass('hidden');
                 });
                 $('#has-many-produkVarian tbody tr').each(function() {
@@ -1327,7 +1328,7 @@ class ProdukController extends Controller
                     }
                     $('#has-many-produkVarian thead tr').each(function() {
                         $(this).find('th').eq(columnIndex).after('<th class="varianharga index-varianharga-' + nextIndex + '">Harga Jual </th>');
-                        $(this).find('th').eq(columnIndex+1).after('<th class="varianharga index-varianharga-' + nextIndex + '">Harga Beli </th>');
+                        $(this).find('th').eq(columnIndex+1).after('<th class="varianharga index-varianharga-' + nextIndex + '">Harga Modal </th>');
                     });
                     $('#has-many-produkVarian tbody tr').filter(':visible').each(function() {
                         let kodeProdukvarian = $(this).find('input').first().val();
@@ -1358,11 +1359,11 @@ class ProdukController extends Controller
                         let newCellBeli = `
                             <td>
                                 <div class="form-group ">
-                                    <label for="harga_beli_`+newAttribut+`" class="col-sm-0 hidden control-label">Harga Beli<`+`/label>
+                                    <label for="harga_beli_`+newAttribut+`" class="col-sm-0 hidden control-label">Harga Modal<`+`/label>
                                     <div class="col-sm-12">
                                         <div class="input-group"><span class="input-group-addon">Rp<`+`/span>
                                             
-                                            <input style="width: 120px; text-align: right;" type="text" id="harga_beli_`+newAttribut+`" name="produkVarian[`+kodeProdukvarian+`][harga_beli_`+newAttribut+`]" value="`+valueBeli+`" class="form-control produkVarian harga_beli_`+newAttribut+`" placeholder="Input Harga Beli">
+                                            <input style="width: 120px; text-align: right;" type="text" id="harga_beli_`+newAttribut+`" name="produkVarian[`+kodeProdukvarian+`][harga_beli_`+newAttribut+`]" value="`+valueBeli+`" class="form-control produkVarian harga_beli_`+newAttribut+`" placeholder="Input Harga Modal">
 
                                             
                                         <`+`/div>
@@ -1394,7 +1395,8 @@ class ProdukController extends Controller
     {
         try {
             $this->produkService->updateProduk($id, $request->all());
-            return dump($request->all());
+            admin_toastr('Sukses memperbarui produk');
+            return redirect()->route(admin_get_route('produk.detail'), ['id' => $id]);
         } catch (ValidationException $e) {
             dd($e->validator->getMessageBag());
             return back()->withInput(request()->only(['nama', 'deskripsi', 'namaunit']))->withErrors($e->validator);
@@ -1412,16 +1414,37 @@ class ProdukController extends Controller
     }
     public function updateProdukHarga($id, Request $request)
     {
-        return dd($request->all());
+        try {
+            $this->produkService->updateProdukHarga($id, $request->all());
+            admin_toastr('Sukses memperbarui harga produk');
+            return redirect()->route(admin_get_route('produk.detail'), ['id' => $id]);
+        } catch (ValidationException $e) {
+            return back()->withErrors($e->validator);
+        }
     }
     public function storeProduk(Request $request)
     {
         try {
-            $this->produkService->storeProduk($request->all());
-            return dump($request->all());
+            $idProduk = $this->produkService->storeProduk($request->all());
+            admin_toastr('Sukses membuat produk');
+            return redirect()->route(admin_get_route('produk.detail'), ['id' => $idProduk]);
         } catch (ValidationException $e) {
-            dd($e->validator->getMessageBag());
             return back()->withInput(request()->only(['nama', 'deskripsi', 'namaunit']))->withErrors($e->validator);
         }
     } 
+    public function deleteProduk($id, Request $request)
+    {
+        try {
+            $this->produkService->deleteProduk($id);
+            admin_toastr('Sukses hapus produk');
+            return [
+                'status' => true,
+                'then' => ['action' => 'refresh', 'value' => true],
+                'message' => 'Sukses hapus produk'
+            ];
+            // return redirect()->route(admin_get_route('produk.list'));
+        } catch (ValidationException $e) {
+            return back()->withInput(request()->only(['nama', 'deskripsi', 'namaunit']))->withErrors($e->validator);
+        }
+    }
 }

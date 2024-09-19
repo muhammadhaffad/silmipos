@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Services\Core\Produk;
 
 use App\Models\Produk;
@@ -6,11 +7,14 @@ use Encore\Admin\Facades\Admin;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
-class ProdukService {
-    protected function generateCombinations($arrays) {
+class ProdukService
+{
+    protected function generateCombinations($arrays)
+    {
         $result = [[]]; // Mulai dengan array kosong
-    
+
         foreach ($arrays as $array) {
             $temp = [];
             foreach ($result as $combination) {
@@ -20,10 +24,11 @@ class ProdukService {
             }
             $result = $temp; // Perbarui hasil dengan kombinasi baru
         }
-    
+
         return $result;
     }
-    public function storeProduk($request) {
+    public function storeProduk($request)
+    {
         $rules = [
             'nama' => 'required|string|min:5',
             'default_unit' => 'required|string',
@@ -47,10 +52,10 @@ class ProdukService {
         $validator->validate();
         $jumlahVarian = 1;
         foreach ($request['produkAttribut'] as $attribut) {
-            $jumlahVarian *= count($attribut['id_attributvalue']) - 1 ?: 1; 
+            $jumlahVarian *= count($attribut['id_attributvalue']) - 1 ?: 1;
         }
         if ($jumlahVarian != count($request['produkVarian'])) {
-            throw new \Exception('Varian tidak valid!');
+            throw ValidationException::withMessages(['produkVarian' => 'jumlah varian tidak valid']);
         }
 
         DB::beginTransaction();
@@ -75,9 +80,9 @@ class ProdukService {
                     $request['produkAttribut'][$key]['id_produkattribut'] = DB::table('toko_griyanaura.ms_produkattribut')->insertGetId([
                         'id_produk' => $produk->id_produk,
                         'id_attribut' => $attribut['id_attribut']
-                    ],'id_produkattribut');
+                    ], 'id_produkattribut');
                 }
-            }  
+            }
             $produkAttribut = [];
             foreach ($request['produkAttribut'] as $key => $attribut) {
                 if ($attribut['id_attribut'] != null) {
@@ -99,7 +104,7 @@ class ProdukService {
                 if ($item['kode_produkvarian_new'] != null) {
                     $data['kode_produkvarian'] = $item['kode_produkvarian_new'];
                 }
-                $kodeProdukVarian = DB::table('toko_griyanaura.ms_produkvarian')->insertGetId($data, 'kode_produkvarian');   
+                $kodeProdukVarian = DB::table('toko_griyanaura.ms_produkvarian')->insertGetId($data, 'kode_produkvarian');
                 if (!empty($produkVarianValue[$key])) {
                     foreach ($produkVarianValue[$key] as $attributValue) {
                         DB::table('toko_griyanaura.ms_produkattributvarian')->insert([
@@ -110,7 +115,7 @@ class ProdukService {
                             'updated_by' => Admin::user()->username
                         ]);
                     }
-                } 
+                }
                 $idProdukVarianHarga = DB::table('toko_griyanaura.ms_produkvarianharga')->insertGetId([
                     'kode_produkvarian' => $kodeProdukVarian,
                     'id_produkharga' => $idProdukHarga,
@@ -131,12 +136,14 @@ class ProdukService {
                 }
             }
             DB::commit();
+            return $produk->id_produk;
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
         }
     }
-    public function updateProduk($idProduk, $request) {
+    public function updateProduk($idProduk, $request)
+    {
         $rules = [
             'nama' => 'required|string|min:5',
             'default_unit' => 'required|string',
@@ -179,8 +186,7 @@ class ProdukService {
             if (isset($request['produkAttribut'])) {
                 foreach ($request['produkAttribut'] as $key => $attribut) {
                     if ($attribut['_remove_'] == 0) {
-                        if (isset($produkAttribut[$key])) 
-                        {
+                        if (isset($produkAttribut[$key])) {
                             $newValues = [];
                             if ($produkAttribut[$key]->id_attribut != $attribut['id_attribut']) {
                                 $newValues['id_attribut'] = $attribut['id_attribut'];
@@ -258,7 +264,7 @@ class ProdukService {
                         if (!empty($newValuesHarga)) {
                             $newValuesHarga['updated_at'] = date('Y-m-d H:i:s');
                             $newValuesHarga['updated_by'] = Admin::user()->username;
-                            $idProdukHarga = DB::table('toko_griyanaura.ms_produkharga')->where(['id_produk'=> $idProduk, 'id_varianharga' => 1])->first()->id_produkharga;
+                            $idProdukHarga = DB::table('toko_griyanaura.ms_produkharga')->where(['id_produk' => $idProduk, 'id_varianharga' => 1])->first()->id_produkharga;
                             DB::table('toko_griyanaura.ms_produkvarianharga')->where('kode_produkvarian', $varian['kode_produkvarian'])->where('id_produkharga', $idProdukHarga)->update($newValuesHarga);
                         }
                         if (!empty($newValues)) {
@@ -274,7 +280,7 @@ class ProdukService {
                             'inserted_by' => Admin::user()->username,
                             'updated_by' => Admin::user()->username
                         ]);
-                        $idProdukHarga = DB::table('toko_griyanaura.ms_produkharga')->where(['id_produk'=> $idProduk, 'id_varianharga' => 1])->first()->id_produkharga;
+                        $idProdukHarga = DB::table('toko_griyanaura.ms_produkharga')->where(['id_produk' => $idProduk, 'id_varianharga' => 1])->first()->id_produkharga;
                         $idGudang = DB::table('toko_griyanaura.lv_gudang')->orderBy('id_gudang')->first()->id_gudang;
                         $idVarianHarga = DB::table('toko_griyanaura.ms_produkvarianharga')->insertGetId([
                             'kode_produkvarian' => $varian['kode_produkvarian_new'],
@@ -343,12 +349,13 @@ class ProdukService {
             DB::rollBack();
         }
     }
-    public function updateProdukHarga($idProduk, $request) {
+    public function updateProdukHarga($idProduk, $request)
+    {
         $rules = [
             'produkHarga' => 'required',
             'produkHarga.*._remove_' => 'required',
             'produkHarga.*.id_varianharga' => 'required_if:produkHarga.*._remove_,0',
-            'produkHarga.*.id_produkharga' => 'required_if:produkHarga.*._remove_,0',
+            'produkHarga.*.id_produkharga' => 'nullable',
             'produkVarian' => 'required',
             'produkVarian.*.kode_produkvarian' => 'required'
         ];
@@ -356,28 +363,104 @@ class ProdukService {
             $rules['produkVarian.*.harga_jual_' . $key] = 'required_if:produkHarga.*._remove_,0';
             $rules['produkVarian.*.harga_beli_' . $key] = 'required_if:produkHarga.*._remove_,0';
         }
-        $produk = Produk::with('produkHarga', 'produkVarian.produkVarianHarga')->find($idProduk, 'id_produk');
-        $produkHarga = $produk->produkHarga->keyBy('id_produkharga');
-        $index = 0;
-        foreach ($request['produkHarga'] as $key => $jenisHarga) {
-            if ($index == 0) {
-                continue;
+        $validator = Validator::make($request, $rules);
+        $validator->validate();
+        $varianHargaIds = [];
+        foreach ($request['produkHarga'] as $key => $produkHarga) {
+            if ($produkHarga['_remove_'] == 0) {
+                $varianHargaIds[] = $produkHarga['id_varianharga'];
             }
-            $index++;
-            if (isset($produkHarga[$key])) {
-                $newValues = [];
-                if ($produkHarga[$key]->id_varianharga != $jenisHarga['id_varianharga']) {
-                    $newValues['id_varianharga'] = $jenisHarga['id_varianharga'];
+        }
+        if (count($varianHargaIds) !== count(array_unique($varianHargaIds))) {
+            throw ValidationException::withMessages(['produkHarga' => 'Jenis harga terdapat duplikasi']);
+        }
+        DB::beginTransaction();
+        try {
+            $produk = Produk::with('produkHarga', 'produkVarian.produkVarianHarga')->find($idProduk, 'id_produk');
+            $produkHarga = $produk->produkHarga->keyBy('id_produkharga');
+            $index = 0;
+            foreach ($request['produkHarga'] as $key => $jenisHarga) {
+                if ($index == 0) {
+                    $index++;
+                    continue;
                 }
-                if (!empty($newValues)) {
-                    DB::table('toko_griyanaura.ms_produkharga')->where('id_produkharga', $produkHarga[$key]->id_produkharga)->update($newValues);
+                $index++;
+                if ($jenisHarga['_remove_'] == 0) {
+                    if (isset($produkHarga[$key])) {
+                        $newValues = [];
+                        if ($produkHarga[$key]->id_varianharga != $jenisHarga['id_varianharga']) {
+                            $newValues['id_varianharga'] = $jenisHarga['id_varianharga'];
+                        }
+                        if (!empty($newValues)) {
+                            DB::table('toko_griyanaura.ms_produkharga')->where('id_produkharga', $produkHarga[$key]->id_produkharga)->update($newValues);
+                        }
+                    } else {
+                        $request['produkHarga'][$key]['id_produkharga'] = DB::table('toko_griyanaura.ms_produkharga')->insertGetId([
+                            'id_produk' => $produk->id_produk,
+                            'id_varianharga' => $jenisHarga['id_varianharga']
+                        ], 'id_produkharga');
+                    }
+                } else {
+                    DB::table('toko_griyanaura.ms_produkvarianharga')->where('id_produkharga', $jenisHarga['id_produkharga'])->delete();
+                    DB::table('toko_griyanaura.ms_produkharga')->where('id_produkharga', $jenisHarga['id_produkharga'])->delete();
                 }
-            } else {
-                $request['produkHarga'][$key]['id_produkharga'] = DB::table('toko_griyanaura.ms_produkharga')->insert([
-                    'id_produk' => $produk->id_produk,
-                    'id_varianharga' => $jenisHarga['id_varianharga']
-                ]);
             }
+            foreach ($produk->produkVarian as $produkVarian) {
+                $oldHarga = $produkVarian->produkVarianHarga->keyBy('id_produkharga');
+                foreach ($request['produkHarga'] as $keyHarga => $jenisHarga) {
+                    if ($jenisHarga['_remove_'] == 0) {
+                        if (isset($oldHarga[$keyHarga])) {
+                            $newValues = [];
+                            if ($oldHarga[$keyHarga]['hargajual'] != $request['produkVarian'][$produkVarian->kode_produkvarian]['harga_jual_' . $keyHarga]) {
+                                $newValues['hargajual'] = (int)$request['produkVarian'][$produkVarian->kode_produkvarian]['harga_jual_' . $keyHarga];
+                            }
+                            if ($oldHarga[$keyHarga]['hargabeli'] != $request['produkVarian'][$produkVarian->kode_produkvarian]['harga_beli_' . $keyHarga]) {
+                                $newValues['hargabeli'] = (int)$request['produkVarian'][$produkVarian->kode_produkvarian]['harga_beli_' . $keyHarga];
+                            }
+                            if (!empty($newValues)) {
+                                $newValues['updated_at'] = date('Y-m-d H:i:s');
+                                $newValues['updated_by'] = Admin::user()->username;
+                                DB::table('toko_griyanaura.ms_produkvarianharga')->where('kode_produkvarian', $produkVarian->kode_produkvarian)->where('id_produkharga', $keyHarga)->update($newValues);
+                            }
+                        } else {
+                            // dump($oldVarians, $request['produkAttribut'], $varian, $attribut);
+                            // dump('===========');
+                            DB::table('toko_griyanaura.ms_produkvarianharga')->insert([
+                                'kode_produkvarian' => $produkVarian->kode_produkvarian,
+                                'hargajual' => (int)$request['produkVarian'][$produkVarian->kode_produkvarian]['harga_jual_' . $keyHarga],
+                                'hargabeli' => (int)$request['produkVarian'][$produkVarian->kode_produkvarian]['harga_beli_' . $keyHarga],
+                                'id_produkharga' => $request['produkHarga'][$keyHarga]['id_produkharga'],
+                                'inserted_by' => Admin::user()->username,
+                                'updated_by' => Admin::user()->username
+                            ]);
+                        }
+                    }
+                }
+            }
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
+    public function deleteProduk($idProduk) 
+    {
+        DB::beginTransaction();
+        try {
+            DB::table('toko_griyanaura.ms_produkattributvarian')->whereIn('id_produkattribut', DB::table('toko_griyanaura.ms_produkattribut')->select('id_produkattribut')->where('id_produk', $idProduk))->delete();
+            DB::table('toko_griyanaura.ms_produkattribut')->where('id_produk', $idProduk)->delete();
+    
+            DB::table('toko_griyanaura.ms_produkpersediaan')->whereIn('kode_produkvarian', DB::table('toko_griyanaura.ms_produkvarian')->select('kode_produkvarian')->where('id_produk', $idProduk))->delete();
+            
+            DB::table('toko_griyanaura.ms_produkvarianharga')->whereIn('id_produkharga', DB::table('toko_griyanaura.ms_produkharga')->select('id_produkharga')->where('id_produk', $idProduk))->delete();
+            DB::table('toko_griyanaura.ms_produkharga')->where('id_produk', $idProduk)->delete();
+    
+            DB::table('toko_griyanaura.ms_produkvarian')->where('id_produk', $idProduk)->delete();
+            DB::table('toko_griyanaura.ms_produk')->where('id_produk', $idProduk)->delete();
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
         }
     }
 }
