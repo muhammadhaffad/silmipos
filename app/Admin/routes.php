@@ -5,6 +5,7 @@ use App\Admin\Controllers\AjaxController;
 use App\Admin\Controllers\CobaController;
 use Illuminate\Support\Facades\Route;
 use App\Admin\Controllers\ProdukController;
+use App\Admin\Controllers\ProdukMutasiController;
 use Encore\Admin\Actions\Action;
 use Encore\Admin\Actions\RowAction;
 use Encore\Admin\Facades\Admin;
@@ -32,7 +33,7 @@ Route::group([
     Route::put('/product/update/{id}', [ProdukController::class, 'updateProduk'])->name('produk.update');
     Route::put('/product/update/harga/{id}', [ProdukController::class, 'updateProdukHarga'])->name('produk.update.harga');
     Route::match(['delete', 'post'], '/product/delete/{id}', [ProdukController::class, 'deleteProduk'])->name('produk.delete');
-    Route::post('/acdadc/{a}/cek', [CobaController::class, 'cobaHandle'])->name('test.handler');
+    Route::get('/move-wharehouse/create', [ProdukMutasiController::class, 'createProdukMutasi'])->name('produk-mutasi.create');
     Route::prefix('ajax')->group(function () {
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');
         Route::get('/varians', [AjaxController::class, 'getVarians'])->name('ajax.varians');
