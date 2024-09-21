@@ -13,4 +13,8 @@ class PindahGudang extends Model
     protected $primaryKey = 'id_pindahgudang';
     protected $table = 'toko_griyanaura.tr_pindahgudang';
     protected $guarded = [];
+
+    public function pindahGudangDetail() {
+        return $this->hasMany(PindahGudangDetail::class, 'id_pindahgudang', 'id_pindahgudang');
+    }
 }
