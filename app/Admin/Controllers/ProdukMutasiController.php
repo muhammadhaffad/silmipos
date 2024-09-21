@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PindahGudang;
 use App\Models\Produk;
 use App\Models\ProdukVarian;
-use Encore\Admin\Facades\Admin;
+use Encore\Admin\Admin;
 use Encore\Admin\Form\Field\Button;
 use Encore\Admin\Form\Field\Text;
 use Encore\Admin\Form\NestedForm;
@@ -15,6 +15,7 @@ use Encore\Admin\Form\Tools;
 use Encore\Admin\Grid;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Widgets\Table;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class ProdukMutasiController extends Controller
@@ -31,7 +32,10 @@ class ProdukMutasiController extends Controller
     }
     public function createProdukMutasiDetailGrid($idPindahGudang) {
         $form = new Form(new PindahGudang);
-        $data = $form->model()->where('id_pindahgudang', $idPindahGudang)->join(DB::raw('(select nama as nama_fromgudang, id_gudang from toko_griyanaura.lv_gudang) as gdg'), 'gdg.id_gudang', 'toko_griyanaura.tr_pindahgudang.from_gudang')->join(DB::raw('(select nama as nama_togudang, id_gudang from toko_griyanaura.lv_gudang) as gdg2'), 'gdg2.id_gudang', 'toko_griyanaura.tr_pindahgudang.to_gudang')->first();
+        $data = $form->model()->where('id_pindahgudang', $idPindahGudang)
+            ->join(DB::raw('(select nama as nama_fromgudang, default_varianharga as varianharga_fromgudang, id_gudang from toko_griyanaura.lv_gudang) as gdg'), 'gdg.id_gudang', 'toko_griyanaura.tr_pindahgudang.from_gudang')
+            ->join(DB::raw('(select nama as nama_togudang, default_varianharga as varianharga_togudang, id_gudang from toko_griyanaura.lv_gudang) as gdg2'), 'gdg2.id_gudang', 'toko_griyanaura.tr_pindahgudang.to_gudang')
+            ->first();
         $form->tools(function (Tools $tools) {
             $tools->disableList();
             $tools->append($tools->renderList(''));
@@ -47,45 +51,82 @@ class ProdukMutasiController extends Controller
         $form->disableReset();
 
         $grid = new Grid(new Produk());
-        $grid->model()->with(['produkVarian', 'produkVarian' => function ($relation) {
-            $relation->with(['produkPersediaan']);
-        }])->where('in_stok', true);
+        $grid->model()->with(['produkVarian.produkVarianHarga', 'produkVarian.produkPersediaan.produkVarianHarga'])
+            ->where('in_stok', true);
         $grid->column('nama', __('Nama'))->expand(function ($model) use ($data) {
             $produkVarian = $model->produkVarian->map(function ($varian) use ($data) {
+                $key = $varian['kode_produkvarian'];
+                // set harga modal 
+                if ($varian->produkPersediaan->firstWhere('id_gudang', $data->from_gudang)?->produkVarianHarga?->hargabeli) {
+                    $dariGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_fromgudang)?->hargabeli;
+                } else if ($varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_fromgudang)?->hargabeli) {
+                    $dariGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_fromgudang)?->hargabeli;
+                } else {
+                    $dariGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', 1)->hargabeli;
+                }
+
+                if ($varian->produkPersediaan->firstWhere('id_gudang', $data->to_gudang)?->produkVarianHarga?->hargabeli) {
+                    $keGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_togudang)?->hargabeli;
+                } else if ($varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_togudang)?->hargabeli) {
+                    $keGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_togudang)?->hargabeli;
+                } else {
+                    $keGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', 1)->hargabeli;
+                }
+
+                $varian->produkVarianHarga->firstWhere('id_varianharga', 1)->hargabeli;
                 $stokDariGudang = $varian->produkPersediaan->firstWhere('id_gudang', $data->from_gudang)?->stok ?: 0;
                 $stokDariGudang = (fmod($stokDariGudang, 1) !== 0.00) ? $stokDariGudang : (int)$stokDariGudang;
                 $stokKeGudang = $varian->produkPersediaan->firstWhere('id_gudang', $data->to_gudang)?->stok ?: 0;
                 $stokKeGudang = (fmod($stokKeGudang, 1) !== 0.00) ? $stokKeGudang : (int)$stokKeGudang;
-                $dariGudang = '<form pjax-container><div class="d-flex gap-2 align-items-center"><input class="form-control" style="width:100px"><input class="form-control" style="width:100px"><span style="width:50px" align="center">/ '.$stokDariGudang.'</span><button type="submit" class="btn btn-primary"><i class="fa fa-arrow-circle-right"></i></button></div></form>';
+                $dariGudangHargaModal =
+                <<<HTML
+                    <div class="d-flex gap-2 align-items-center">
+                        <input form="pindah-gudang-{$key}" name="harga_modal_dari_gudang" value="{$dariGudangHargaModal}" class="form-control hargamodal" style="width:100px">
+                    </div>
+                HTML;
+                $keGudangHargaModal =
+                <<<HTML
+                    <div class="d-flex gap-2 align-items-center">
+                        <input form="pindah-gudang-{$key}" name="harga_modal_ke_gudang" value="{$keGudangHargaModal}" class="form-control hargamodal" style="width:100px">
+                    </div>
+                HTML;
+                $dariGudang = 
+                <<<HTML
+                    <div class="d-flex gap-2 align-items-center">
+                        <input form="pindah-gudang-{$key}" name="jumlah" class="form-control" style="width:100px" type="number" max="{$stokDariGudang}" value="{$varian['jumlah_pindah']}">
+                        <span style="width:50px" align="center">/ {$stokDariGudang}</span>
+                        <button form="pindah-gudang-{$key}" type="submit" class="btn btn-success">
+                            <i class="fa fa-save"></i>
+                        </button>
+                    </div>
+                HTML;
+                $keGudang = 
+                <<<HTML
+                    <div class="d-flex gap-2 align-items-center">
+                        <span style="width:50px" align="center"> {$stokKeGudang}</span>
+                    </div>
+                HTML;
                 return [
+                    "<form method='POST' id='pindah-gudang-{$key}'>
+                        <input hidden name='_token' value='".csrf_token()."'>
+                        <input hidden name='kode_produkvarian' value='{$key}'>
+                    </form>",
                     $varian['kode_produkvarian'],
                     $varian['varian'],
+                    $dariGudangHargaModal,
                     $dariGudang,
-                    '<input class="form-control" style="width:100px">' . $stokKeGudang
+                    $keGudangHargaModal,
+                    $keGudang
                     // (fmod($varian->produkPersediaan?->first()?->stok, 1) !== 0.00) ? $varian->produkPersediaan?->first()?->stok : (int)$varian->produkPersediaan?->first()?->stok
                 ];
             });
-            return new Table(['SKU', 'Varian', "(From) Gudang {$data->nama_fromgudang}", "(To) Gudang {$data->nama_togudang}"], $produkVarian->toArray());
+            return new Table(['','SKU', 'Varian', "Harga modal (Gudang {$data->nama_fromgudang})","(From) Gudang {$data->nama_fromgudang}", "Harga modal (Gudang {$data->nama_togudang})", "(To) Gudang {$data->nama_togudang}"], $produkVarian->toArray());
         }, true);
         $grid->disableColumnSelector();
         $grid->disableRowSelector();
         $grid->disableActions();
         $grid->disableCreateButton();
         $grid->disableExport();
-        // $grid->column('Gudang ' . $data->nama_fromgudang)->display(function () use ($data) {
-        //     $fromGudang =  $this->produkPersediaan->where('id_gudang', $data->from_gudang)->first();
-        //     if ($fromGudang)
-        //         return (fmod($fromGudang['stok'], 1) !== 0.00) ? $fromGudang['stok'] : (int)$fromGudang['stok'];
-        //     else
-        //         return 0;
-        // });
-        // $grid->column('Gudang ' . $data->nama_togudang)->display(function () use ($data) {
-        //     $toGudang =  $this->produkPersediaan->where('id_gudang', $data->to_gudang)->first();
-        //     if ($toGudang) 
-        //         return (fmod($toGudang['stok'], 1) !== 0.00) ? $toGudang['stok'] : (int)$toGudang['stok'];
-        //     else
-        //         return 0;
-        // });
         return array($form, $grid);
     }
     public function detailProdukMutasiForm($idPindahGudang) {
@@ -116,6 +157,11 @@ class ProdukMutasiController extends Controller
             ->body($this->createProdukMutasiForm());
     }
     public function createProdukMutasiDetail($idPindahGudang, Content $content) {
+        $scriptDeferred = 
+        <<<SCRIPT
+            $('.hargamodal').inputmask({"alias":"currency","radixPoint":".","prefix":"","removeMaskOnSubmit":true});
+        SCRIPT;
+        Admin::script($scriptDeferred, true);
         return $content
             ->title('Produk')
             ->body($this->createProdukMutasiDetailGrid($idPindahGudang)[0])
@@ -136,5 +182,8 @@ class ProdukMutasiController extends Controller
         return $content
             ->title('Produk')
             ->body($this->detailProdukMutasiForm($idPindahGudang));
+    }
+    public function createOrUpdatePindahGudangDetail(Request $request) {
+
     }
 }
