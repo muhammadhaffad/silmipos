@@ -12,4 +12,5 @@ class Transaksi extends Model
     const UPDATED_AT = 'updated_at';
     protected $table = 'toko_griyanaura.tr_transaksi';
     protected $primaryKey = 'id_transaksi';
+    protected $guarded = [];
 }

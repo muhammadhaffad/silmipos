@@ -263,15 +263,18 @@ class ProdukController extends Controller
         })->tab('Harga', function (Form $form) use ($data) {
             $produkVarianWithHarga = [];
             foreach ($data->produkVarian->toArray() as $varian) {
-                foreach ($varian['produk_varian_harga'] as $varianHarga) {
+                $kodeProdukVarian = $varian['kode_produkvarian'];
+                foreach ($varian['produk_varian_harga'] as $k => $varianHarga) {
                     $varian['hargajual'] = $varianHarga['hargajual'];
                     $varian['hargabeli'] = $varianHarga['hargabeli'];
                     $varian['namavarianharga'] = $varianHarga['namavarianharga'];
+                    $varian['kode_produkvarian_label'] = $kodeProdukVarian;
+                    $varian['kode_produkvarian'] = $kodeProdukVarian . $k; // agar bisa duplikat
                     $produkVarianWithHarga[] = $varian;
                 }
             }
             $form->tablehasmany('produkVarian', 'Varian', function (NestedForm $form) {
-                $form->display('kode_produkvarian', 'SKU');
+                $form->display('kode_produkvarian_label', 'SKU');
                 $form->display('varian', 'Varian');  
                 $form->display('namavarianharga', 'Jenis Harga');  
                 $form->display('hargajual', 'Harga Jual')->attribute(['align' => 'right'])->customFormat(function ($x) {
@@ -284,14 +287,17 @@ class ProdukController extends Controller
         })->tab('Persediaan', function (Form $form) use ($data) {
             $produkVarianPersediaan = [];
             foreach ($data->produkVarian->toArray() as $varian) {
+                $kodeProdukVarian = $varian['kode_produkvarian'];
                 foreach ($varian['produk_persediaan'] as $persediaan) {
                     $varian['stok'] = $persediaan['stok'];
                     $varian['nama_gudang'] = $persediaan['nama_gudang'];
+                    $varian['kode_produkvarian_label'] = $kodeProdukVarian;
+                    $varian['kode_produkvarian'] = $kodeProdukVarian . $persediaan['id_gudang']; // agar bisa duplikat
                     $produkVarianPersediaan[] = $varian;
                 }
             }
             $form->tablehasmany('produkVarian', 'Varian', function (NestedForm $form) {
-                $form->display('kode_produkvarian', 'SKU');
+                $form->display('kode_produkvarian_label', 'SKU');
                 $form->display('varian', 'Varian');  
                 $form->display('nama_gudang', 'Gudang');  
                 $form->display('stok', 'Stok');

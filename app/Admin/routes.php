@@ -33,9 +33,13 @@ Route::group([
     Route::put('/product/update/{id}', [ProdukController::class, 'updateProduk'])->name('produk.update');
     Route::put('/product/update/harga/{id}', [ProdukController::class, 'updateProdukHarga'])->name('produk.update.harga');
     Route::match(['delete', 'post'], '/product/delete/{id}', [ProdukController::class, 'deleteProduk'])->name('produk.delete');
+    Route::get('/warehouse-transfer', [ProdukMutasiController::class, 'listProdukMutasi'])->name('produk-mutasi.list');
     Route::get('/warehouse-transfer/create', [ProdukMutasiController::class, 'createProdukMutasi'])->name('produk-mutasi.create');
     Route::get('/warehouse-transfer/edit/{idPindahGudang}', [ProdukMutasiController::class, 'createProdukMutasiDetail'])->name('produk-mutasi.create.detail');
     Route::get('/warehouse-transfer/detail/{idPindahGudang}', [ProdukMutasiController::class, 'detailProdukMutasi'])->name('produk-mutasi.detail');
+    Route::post('/warehouse-transfer/store', [ProdukMutasiController::class, 'storeProdukMutasi'])->name('produk-mutasi.store');
+    Route::post('/warehouse-transfer/update/{idPindahGudang}', [ProdukMutasiController::class, 'storePindahGudangDetail'])->name('produk-mutasi.store.detail');
+    Route::match(['delete', 'post'],'/warehouse-transfer/delete/{idPindahGudang}', [ProdukMutasiController::class, 'deleteProdukMutasi'])->name('produk-mutasi.delete');
     Route::prefix('ajax')->group(function () {
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');
         Route::get('/varians', [AjaxController::class, 'getVarians'])->name('ajax.varians');

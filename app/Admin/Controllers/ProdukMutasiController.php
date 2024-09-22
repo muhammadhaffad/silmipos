@@ -2,24 +2,67 @@
 
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Grid\Delete;
+use App\Admin\Actions\Grid\Edit;
+use App\Admin\Actions\Grid\Show;
 use App\Admin\Form\Form;
 use App\Http\Controllers\Controller;
 use App\Models\PindahGudang;
 use App\Models\Produk;
 use App\Models\ProdukVarian;
+use App\Services\Core\PindahGudang\PindahGudangService;
 use Encore\Admin\Admin;
 use Encore\Admin\Form\Field\Button;
 use Encore\Admin\Form\Field\Text;
 use Encore\Admin\Form\NestedForm;
 use Encore\Admin\Form\Tools;
 use Encore\Admin\Grid;
+use Encore\Admin\Grid\Displayers\DropdownActions;
+use Encore\Admin\Grid\Filter;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Widgets\Table;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ProdukMutasiController extends Controller
 {
+    protected $pindahGudangService;
+    public function __construct(PindahGudangService $pindahGudangService)
+    {
+        $this->pindahGudangService = $pindahGudangService;
+    }
+    public function listProdukMutasiGrid() {
+        $grid = new Grid(new PindahGudang());
+        $grid->model()->join(DB::raw("(select nama as nama_fromgudang, id_gudang from toko_griyanaura.lv_gudang) as gdg"), 'gdg.id_gudang', 'toko_griyanaura.tr_pindahgudang.from_gudang')->join(DB::raw("(select nama as nama_togudang, id_gudang from toko_griyanaura.lv_gudang) as gdg2"), 'gdg2.id_gudang', 'toko_griyanaura.tr_pindahgudang.to_gudang')->where('is_batal', false)->orderBy('tanggal');
+        $grid->filter(function (Filter $filter) {
+            $filter->expand();
+            $filter->disableIdFilter();
+            $filter->ilike('transaksi_no', 'No. Transaksi');
+        });
+        $grid->column('transaksi_no', 'No. Transaksi')->sortable();
+        $grid->column('tanggal')->display(function ($value) {
+            return date('d F Y', strtotime($value));
+        })->sortable();
+        $grid->column('catatan')->display(function ($value) {
+            if (strlen($value) > 20) {
+                return substr($value, 0, 20) . '...';
+            }
+            return $value;
+        });
+        $grid->column('nama_fromgudang', 'Dari Gudang');
+        $grid->column('nama_togudang', 'Ke Gudang');
+        $grid->actions(function (DropdownActions $actions) {
+            $actions->disableDelete();
+            $actions->disableEdit();
+            $actions->disableView();
+            $actions->add(new Show);
+            $actions->add(new Edit());
+            // dump($this);
+            $actions->add(new Delete(route(admin_get_route('produk-mutasi.delete'), $this->row->id_pindahgudang)));
+        });
+        return $grid;
+    }
     public function createProdukMutasiForm() {
         $form = new Form(new PindahGudang);
         $form->text('transaksi_no')->withoutIcon()->placeholder('[AUTO]');
@@ -28,17 +71,25 @@ class ProdukMutasiController extends Controller
         $form->select('to_gudang', 'Ke Gudang')->options(DB::table('toko_griyanaura.lv_gudang')->select('nama as text', 'id_gudang as id')->get()->pluck('text', 'id'))->setWidth(4);
         $form->text('keterangan')->setWidth(4);
         $form->textarea('catatan');
+        $form->disableCreatingCheck();
+        $form->disableEditingCheck();
+        $form->disableViewCheck();
         return $form;
     }
-    public function createProdukMutasiDetailGrid($idPindahGudang) {
+    public function createProdukMutasiDetailFormGrid($idPindahGudang) {
         $form = new Form(new PindahGudang);
+        $form->builder()->setMode('edit');
         $data = $form->model()->where('id_pindahgudang', $idPindahGudang)
             ->join(DB::raw('(select nama as nama_fromgudang, default_varianharga as varianharga_fromgudang, id_gudang from toko_griyanaura.lv_gudang) as gdg'), 'gdg.id_gudang', 'toko_griyanaura.tr_pindahgudang.from_gudang')
             ->join(DB::raw('(select nama as nama_togudang, default_varianharga as varianharga_togudang, id_gudang from toko_griyanaura.lv_gudang) as gdg2'), 'gdg2.id_gudang', 'toko_griyanaura.tr_pindahgudang.to_gudang')
             ->first();
-        $form->tools(function (Tools $tools) {
+        $form->tools(function (Tools $tools) use ($idPindahGudang) {
             $tools->disableList();
-            $tools->append($tools->renderList(''));
+            $tools->disableView();
+            $tools->disableDelete();
+            $tools->append($tools->renderDelete(route(admin_get_route('produk-mutasi.delete'), ['idPindahGudang' => $idPindahGudang])));
+            $tools->append($tools->renderView(route(admin_get_route('produk-mutasi.detail'), ['idPindahGudang' => $idPindahGudang])));
+            $tools->append($tools->renderList(route(admin_get_route('produk-mutasi.list'))));
         });
         $form->text('transaksi_no')->readonly()->withoutIcon()->value($data->transaksi_no);
         $form->datetime('tanggal')->readonly()->value($data->tanggal);
@@ -51,6 +102,11 @@ class ProdukMutasiController extends Controller
         $form->disableReset();
 
         $grid = new Grid(new Produk());
+        $grid->filter(function (Filter $filter) {
+            $filter->expand();
+            $filter->disableIdFilter();
+            $filter->ilike('nama', 'Produk');
+        });
         $grid->model()->with(['produkVarian.produkVarianHarga', 'produkVarian.produkPersediaan.produkVarianHarga'])
             ->where('in_stok', true);
         $grid->column('nama', __('Nama'))->expand(function ($model) use ($data) {
@@ -58,7 +114,7 @@ class ProdukMutasiController extends Controller
                 $key = $varian['kode_produkvarian'];
                 // set harga modal 
                 if ($varian->produkPersediaan->firstWhere('id_gudang', $data->from_gudang)?->produkVarianHarga?->hargabeli) {
-                    $dariGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_fromgudang)?->hargabeli;
+                    $dariGudangHargaModal = $varian->produkPersediaan->firstWhere('id_gudang', $data->from_gudang)?->produkVarianHarga?->hargabeli;
                 } else if ($varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_fromgudang)?->hargabeli) {
                     $dariGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_fromgudang)?->hargabeli;
                 } else {
@@ -66,7 +122,7 @@ class ProdukMutasiController extends Controller
                 }
 
                 if ($varian->produkPersediaan->firstWhere('id_gudang', $data->to_gudang)?->produkVarianHarga?->hargabeli) {
-                    $keGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_togudang)?->hargabeli;
+                    $keGudangHargaModal = $varian->produkPersediaan->firstWhere('id_gudang', $data->to_gudang)?->produkVarianHarga?->hargabeli;
                 } else if ($varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_togudang)?->hargabeli) {
                     $keGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_togudang)?->hargabeli;
                 } else {
@@ -94,8 +150,8 @@ class ProdukMutasiController extends Controller
                 <<<HTML
                     <div class="d-flex gap-2 align-items-center">
                         <input form="pindah-gudang-{$key}" name="jumlah" class="form-control" style="width:100px" type="number" max="{$stokDariGudang}" value="{$varian['jumlah_pindah']}">
-                        <span style="width:50px" align="center">/ {$stokDariGudang}</span>
-                        <button form="pindah-gudang-{$key}" type="submit" class="btn btn-success">
+                        <span class="stok-dari-gudang" style="width:50px" align="center">/ {$stokDariGudang}</span>
+                        <button form="pindah-gudang-{$key}" type="button" class="btn btn-success pindah-gudang">
                             <i class="fa fa-save"></i>
                         </button>
                     </div>
@@ -103,11 +159,12 @@ class ProdukMutasiController extends Controller
                 $keGudang = 
                 <<<HTML
                     <div class="d-flex gap-2 align-items-center">
-                        <span style="width:50px" align="center"> {$stokKeGudang}</span>
+                        <span class="stok-ke-gudang" style="width:50px" align="center"> {$stokKeGudang}</span>
                     </div>
                 HTML;
+                $action = route(admin_get_route('produk-mutasi.store.detail'), ['idPindahGudang' => $data->id_pindahgudang]);
                 return [
-                    "<form method='POST' id='pindah-gudang-{$key}'>
+                    "<form method='POST' action='{$action}' id='pindah-gudang-{$key}'>
                         <input hidden name='_token' value='".csrf_token()."'>
                         <input hidden name='kode_produkvarian' value='{$key}'>
                     </form>",
@@ -132,6 +189,14 @@ class ProdukMutasiController extends Controller
     public function detailProdukMutasiForm($idPindahGudang) {
         $form = new Form(new PindahGudang);
         $data = $form->model()->where('id_pindahgudang', $idPindahGudang)->first();
+        $form->tools(function (Tools $tools) use ($idPindahGudang) {
+            $tools->disableList();
+            $tools->disableView();
+            $tools->disableDelete();
+            $tools->append($tools->renderDelete(route(admin_get_route('produk-mutasi.delete'), ['idPindahGudang' => $idPindahGudang])));
+            $tools->append($tools->renderEdit(route(admin_get_route('produk-mutasi.create.detail'), ['idPindahGudang' => $idPindahGudang])));
+            $tools->append($tools->renderList(route(admin_get_route('produk-mutasi.list'))));
+        });
         $form->text('transaksi_no')->withoutIcon()->readonly()->value($data->transaksi_no);
         $form->datetime('tanggal')->value($data->tanggal);
         $form->select('from_gudang', 'Dari Gudang')->readOnly()->options(DB::table('toko_griyanaura.lv_gudang')->select('nama as text', 'id_gudang as id')->get()->pluck('text', 'id'))->setWidth(4)->value($data->from_gudang);
@@ -150,22 +215,73 @@ class ProdukMutasiController extends Controller
         
         return $form;
     }
+    public function listProdukMutasi(Content $content) {
+        return $content
+            ->title('Produk')
+            ->description('List')
+            ->body($this->listProdukMutasiGrid());
+    }
     public function createProdukMutasi(Content $content) {
         return $content
             ->title('Produk')
             ->description('Tambah')
-            ->body($this->createProdukMutasiForm());
+            ->body($this->createProdukMutasiForm()->setAction(route(admin_get_route('produk-mutasi.store'))));
     }
     public function createProdukMutasiDetail($idPindahGudang, Content $content) {
+        $action = route(admin_get_route('produk-mutasi.store.detail'), ['idPindahGudang' => $idPindahGudang]);
         $scriptDeferred = 
         <<<SCRIPT
-            $('.hargamodal').inputmask({"alias":"currency","radixPoint":".","prefix":"","removeMaskOnSubmit":true});
+            $('.hargamodal').inputmask({
+                "alias":"currency",
+                "radixPoint":".",
+                "prefix":"",
+                "removeMaskOnSubmit":true
+            });
+            $('.btn.pindah-gudang').on('click', function () {
+                const that = this;
+                function getFormData(form){
+                    var unindexed_array = form.serializeArray();
+                    var indexed_array = {};
+                    $.map(unindexed_array, function(n, i){
+                        if (n['name'] == 'harga_modal_dari_gudang' || n['name'] == 'harga_modal_ke_gudang') {
+                            indexed_array[n['name']] = n['value'].slice(0, -3).replace(/[.,]/g, '');
+                        } else {
+                            indexed_array[n['name']] = n['value'];
+                        }
+                    });
+                    return indexed_array;
+                }
+                $.ajax({
+                    url: '{$action}',
+                    type: 'POST',
+                    data: JSON.stringify(getFormData($(this.form))),
+                    contentType: 'application/json',
+                    success: function(response) {
+                        console.log('Data berhasil dikirim:', response);
+                        $.admin.toastr['success']('Berhasil pindah gudang!');
+                        let tr = $(that).closest('tr');
+                        tr.find('span.stok-dari-gudang').text('/ ' + response.stok_dari_gudang);
+                        tr.find('span.stok-ke-gudang').text(response.stok_ke_gudang);
+                        tr.find('input[name="jumlah"]').val('');
+                    },
+                    error: function(xhr, status, error) {
+                        $.admin.toastr['warning']('Gagal pindah gudang!');
+                        if (xhr.status === 400) {
+                            console.log('Bad Request');
+                        } else if (xhr.status === 404) {
+                            console.log('Not Found');
+                        } else if (xhr.status === 500) {
+                            console.log('Internal Server Error');
+                        }
+                    }
+                });
+            })
         SCRIPT;
         Admin::script($scriptDeferred, true);
         return $content
             ->title('Produk')
-            ->body($this->createProdukMutasiDetailGrid($idPindahGudang)[0])
-            ->body($this->createProdukMutasiDetailGrid($idPindahGudang)[1]);
+            ->body($this->createProdukMutasiDetailFormGrid($idPindahGudang)[0])
+            ->body($this->createProdukMutasiDetailFormGrid($idPindahGudang)[1]);
     }
     public function detailProdukMutasi($idPindahGudang, Content $content) {
         $style = 
@@ -183,7 +299,36 @@ class ProdukMutasiController extends Controller
             ->title('Produk')
             ->body($this->detailProdukMutasiForm($idPindahGudang));
     }
-    public function createOrUpdatePindahGudangDetail(Request $request) {
-
+    
+    public function storeProdukMutasi(Request $request) {
+        try {
+            $result = $this->pindahGudangService->storePindahGudang($request->all());
+            admin_toastr('Sukses membuat transaksi pindah gudang');
+            return redirect()->route(admin_get_route('produk-mutasi.create.detail'), ['idPindahGudang' => $result->id_pindahgudang]);
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            throw $e;
+        }
+    }
+    public function storePindahGudangDetail($idPindahGudang, Request $request) {
+        try {
+            $result = $this->pindahGudangService->storePindahGudangDetail($idPindahGudang, $request->all());
+            return response()->json($result);
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            // dump($e);
+            throw $e;
+        }
+    }
+    public function deleteProdukMutasi($idPindahGudang, Request $request) {
+        $this->pindahGudangService->deletePindahGudang($idPindahGudang);
+        admin_toastr('Sukses hapus produk');
+        return [
+            'status' => true,
+            'then' => ['action' => 'refresh', 'value' => true],
+            'message' => 'Sukses hapus produk'
+        ];
     }
 }
