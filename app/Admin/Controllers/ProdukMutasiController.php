@@ -114,10 +114,13 @@ class ProdukMutasiController extends Controller
                 $key = $varian['kode_produkvarian'];
                 // set harga modal 
                 if ($varian->produkPersediaan->firstWhere('id_gudang', $data->from_gudang)?->produkVarianHarga?->hargabeli) {
+                    // pakai harga modal dari default harga persediaan
                     $dariGudangHargaModal = $varian->produkPersediaan->firstWhere('id_gudang', $data->from_gudang)?->produkVarianHarga?->hargabeli;
                 } else if ($varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_fromgudang)?->hargabeli) {
+                    // pakai harga modal dari default harga gudang
                     $dariGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_fromgudang)?->hargabeli;
                 } else {
+                    // pakai harga modal reguler
                     $dariGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', 1)->hargabeli;
                 }
 

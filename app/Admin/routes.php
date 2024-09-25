@@ -6,6 +6,7 @@ use App\Admin\Controllers\CobaController;
 use Illuminate\Support\Facades\Route;
 use App\Admin\Controllers\ProdukController;
 use App\Admin\Controllers\ProdukMutasiController;
+use App\Admin\Controllers\ProdukPenyesuaianController;
 use Encore\Admin\Actions\Action;
 use Encore\Admin\Actions\RowAction;
 use Encore\Admin\Facades\Admin;
@@ -40,6 +41,10 @@ Route::group([
     Route::post('/warehouse-transfer/store', [ProdukMutasiController::class, 'storeProdukMutasi'])->name('produk-mutasi.store');
     Route::post('/warehouse-transfer/update/{idPindahGudang}', [ProdukMutasiController::class, 'storePindahGudangDetail'])->name('produk-mutasi.store.detail');
     Route::match(['delete', 'post'],'/warehouse-transfer/delete/{idPindahGudang}', [ProdukMutasiController::class, 'deleteProdukMutasi'])->name('produk-mutasi.delete');
+    Route::get('/stock-adjustment/create', [ProdukPenyesuaianController::class, 'createProdukPenyesuaian'])->name('produk-penyesuaian.create');
+    Route::get('/stock-adjustment/edit/{idPenyesuaianGudang}', [ProdukPenyesuaianController::class, 'createProdukPenyesuaianDetail'])->name('produk-penyesuaian.create.detail');
+    Route::post('/stock-adjustment/store', [ProdukPenyesuaianController::class, 'storeProdukPenyesuaian'])->name('produk-penyesuaian.store');
+    Route::get('/stock-adjustment/update/{idPenyesuaianGudang}', [ProdukPenyesuaianController::class, 'storeProdukPenyesuaianDetail'])->name('produk-penyesuaian.store.detail');
     Route::prefix('ajax')->group(function () {
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');
         Route::get('/varians', [AjaxController::class, 'getVarians'])->name('ajax.varians');
