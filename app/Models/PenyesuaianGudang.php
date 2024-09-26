@@ -13,4 +13,8 @@ class PenyesuaianGudang extends Model
     protected $primaryKey = 'id_penyesuaiangudang';
     protected $table = 'toko_griyanaura.tr_penyesuaiangudang';
     protected $guarded = [];
+
+    public function penyesuaianGudangDetail() {
+        return $this->hasMany(PenyesuaianGudangDetail::class, 'id_penyesuaiangudang', 'id_penyesuaiangudang');
+    }
 }

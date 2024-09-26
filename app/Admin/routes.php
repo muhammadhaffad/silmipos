@@ -42,9 +42,11 @@ Route::group([
     Route::post('/warehouse-transfer/update/{idPindahGudang}', [ProdukMutasiController::class, 'storePindahGudangDetail'])->name('produk-mutasi.store.detail');
     Route::match(['delete', 'post'],'/warehouse-transfer/delete/{idPindahGudang}', [ProdukMutasiController::class, 'deleteProdukMutasi'])->name('produk-mutasi.delete');
     Route::get('/stock-adjustment/create', [ProdukPenyesuaianController::class, 'createProdukPenyesuaian'])->name('produk-penyesuaian.create');
+    Route::get('/stock-adjustment/detail/{idPenyesuaianGudang}', [ProdukPenyesuaianController::class, 'detailProdukPenyesuaian'])->name('produk-penyesuaian.detail');
     Route::get('/stock-adjustment/edit/{idPenyesuaianGudang}', [ProdukPenyesuaianController::class, 'createProdukPenyesuaianDetail'])->name('produk-penyesuaian.create.detail');
     Route::post('/stock-adjustment/store', [ProdukPenyesuaianController::class, 'storeProdukPenyesuaian'])->name('produk-penyesuaian.store');
-    Route::POST('/stock-adjustment/update/{idPenyesuaianGudang}', [ProdukPenyesuaianController::class, 'storeProdukPenyesuaianDetail'])->name('produk-penyesuaian.store.detail');
+    Route::put('/stock-adjustment/validate/{idPenyesuaianGudang}', [ProdukPenyesuaianController::class, 'validateProdukPenyesuaian'])->name('produk-penyesuaian.validate');
+    Route::post('/stock-adjustment/update/{idPenyesuaianGudang}', [ProdukPenyesuaianController::class, 'storeProdukPenyesuaianDetail'])->name('produk-penyesuaian.store.detail');
     Route::prefix('ajax')->group(function () {
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');
         Route::get('/varians', [AjaxController::class, 'getVarians'])->name('ajax.varians');

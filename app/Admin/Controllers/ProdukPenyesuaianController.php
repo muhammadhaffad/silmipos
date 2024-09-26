@@ -9,6 +9,7 @@ use App\Models\Produk;
 use App\Services\Core\PenyesuaianGudang\PenyesuaianGudangService;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
+use Encore\Admin\Form\NestedForm;
 use Encore\Admin\Form\Tools;
 use Encore\Admin\Grid;
 use Encore\Admin\Grid\Filter;
@@ -39,13 +40,14 @@ class ProdukPenyesuaianController extends Controller
     public function createProdukPenyesuaianDetailFormGrid($idPenyesuaianGudang) {
         $form = new Form(new PenyesuaianGudang);
         $form->builder()->setMode('edit');
+        $form->setAction(route(admin_get_route('produk-penyesuaian.validate'), [$idPenyesuaianGudang]));
         $data = $form->model()->where('id_penyesuaiangudang', $idPenyesuaianGudang)->first();
         $form->tools(function (Tools $tools) use ($idPenyesuaianGudang) {
             $tools->disableList();
             $tools->disableView();
             $tools->disableDelete();
             $tools->append($tools->renderDelete(route(admin_get_route('produk-mutasi.delete'), ['idPindahGudang' => $idPenyesuaianGudang])));
-            $tools->append($tools->renderView(route(admin_get_route('produk-mutasi.detail'), ['idPindahGudang' => $idPenyesuaianGudang])));
+            $tools->append($tools->renderView(route(admin_get_route('produk-penyesuaian.detail'), ['idPenyesuaianGudang' => $idPenyesuaianGudang])));
             $tools->append($tools->renderList(route(admin_get_route('produk-mutasi.list'))));
         });
         $form->text('transaksi_no')->readonly()->withoutIcon()->value($data->transaksi_no);
@@ -147,6 +149,52 @@ class ProdukPenyesuaianController extends Controller
         $grid->disableExport();
         return array($form, $grid);
     }
+    public function detailProdukPenyesuaianForm($idPenyesuaianGudang) {
+        $form = new Form(new PenyesuaianGudang);
+        $data = $form->model()->where('id_penyesuaiangudang', $idPenyesuaianGudang)->first();
+        $form->tools(function (Tools $tools) use ($idPenyesuaianGudang) {
+            $tools->disableList();
+            $tools->disableView();
+            $tools->disableDelete();
+            // $tools->append($tools->renderDelete(route(admin_get_route('produk-mutasi.delete'), ['idPenyesuaianGudang' => $idPenyesuaianGudang])));
+            // $tools->append($tools->renderEdit(route(admin_get_route('produk-mutasi.create.detail'), ['idPenyesuaianGudang' => $idPenyesuaianGudang])));
+            // $tools->append($tools->renderList(route(admin_get_route('produk-mutasi.list'))));
+        });
+        $form->text('transaksi_no')->withoutIcon()->readonly()->value($data->transaksi_no);
+        $form->datetime('tanggal')->value($data->tanggal);
+        $form->select('from_gudang', 'Dari Gudang')->readOnly()->options(DB::table('toko_griyanaura.lv_gudang')->select('nama as text', 'id_gudang as id')->get()->pluck('text', 'id'))->setWidth(4)->value($data->from_gudang);
+        $form->select('to_gudang', 'Ke Gudang')->readOnly()->options(DB::table('toko_griyanaura.lv_gudang')->select('nama as text', 'id_gudang as id')->get()->pluck('text', 'id'))->setWidth(4)->value($data->to_gudang);
+        $form->text('keterangan')->readonly()->setWidth(4);
+        $form->textarea('catatan')->readonly();
+        $form->tablehasmany('penyesuaianGudangDetail', 'Produk', function (NestedForm $form) {
+            $form->text('kode_produkvarian')->setLabelClass(['w-100'])->disable()->withoutIcon();
+            $form->text('jumlah')->setLabelClass(['w-200px'])->disable()->withoutIcon();
+        })->useTable()->disableCreate()->disableDelete()->value($data->penyesuaianGudangDetail->toArray() ?: [['id_penyesuaiangudangdetail' => 0]]);
+        $form->disableCreatingCheck();
+        $form->disableEditingCheck();
+        $form->disableViewCheck();
+        $form->disableSubmit();
+        $form->disableReset();
+        
+        return $form;
+    }
+
+    public function detailProdukPenyesuaian($idPenyesuaianGudang, Content $content) {
+        $style = 
+        <<<STYLE
+            #has-many-pindahGudangDetail .input-group {
+                width: 100%;
+            }
+            .w-200px {
+                max-width: 200px;
+                min-width: 200px;
+            }
+        STYLE;
+        Admin::style($style);
+        return $content
+            ->title('Produk')
+            ->body($this->detailProdukPenyesuaianForm($idPenyesuaianGudang));
+    }
     public function createProdukPenyesuaian(Content $content) {
         return $content
             ->title('Produk')
@@ -213,6 +261,17 @@ class ProdukPenyesuaianController extends Controller
             return response()->json([
                 'id_penyesuaiangudangdetail' =>  $result?->id_penyesuaiangudangdetail
             ]);
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            throw $e;
+        }
+    }
+    public function validateProdukPenyesuaian($idPenyesuaianGudang, Request $request) {
+        try {
+            $result = $this->penyesuaianGudangService->validPenyesuaianGudang($idPenyesuaianGudang, $request->all());
+            admin_toastr('Sukses validasi penyesuaian gudang');
+            return back();
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Exception $e) {
