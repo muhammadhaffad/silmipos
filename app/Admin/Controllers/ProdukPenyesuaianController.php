@@ -107,6 +107,7 @@ class ProdukPenyesuaianController extends Controller
                         <form action="">
                             <div class="d-flex gap-1">
                                 $token
+                                <input class="" name="kode_produkvarian" hidden value="{$dataGudang[$gdg['id_gudang']]['kode_produkvarian']}">
                                 <input class="" name="id_gudang" hidden value="{$dataGudang[$gdg['id_gudang']]['id_gudang']}">
                                 <input class="" name="id_penyesuaiangudang" hidden value="{$dataGudang[$gdg['id_gudang']]['id_penyesuaiangudang']}">
                                 <input class="" name="id_penyesuaiangudangdetail" hidden value="{$dataGudang[$gdg['id_gudang']]['id_penyesuaiangudangdetail']}">
@@ -153,11 +154,40 @@ class ProdukPenyesuaianController extends Controller
             ->body($this->createProdukPenyesuaianForm()->setAction(route(admin_get_route('produk-penyesuaian.store'))));
     }
     public function createProdukPenyesuaianDetail($idPenyesuaianGudang, Content $content) {
-        $action = route(admin_get_route('produk-mutasi.store.detail'), ['idPindahGudang' => $idPenyesuaianGudang]);
+        $action = route(admin_get_route('produk-penyesuaian.store.detail'), ['idPenyesuaianGudang' => $idPenyesuaianGudang]);
         $scriptDeferred = 
         <<<SCRIPT
             $('.penyesuaian-stok').on('change', function () {
-                console.info($(this.form).serialize());
+                const that = this;
+                function getFormData(form){
+                    var unindexed_array = form.serializeArray();
+                    var indexed_array = {};
+                    $.map(unindexed_array, function(n, i){
+                        indexed_array[n['name']] = n['value'];
+                    });
+                    return indexed_array;
+                }
+                $.ajax({
+                    url: '{$action}',
+                    type: 'POST',
+                    data: JSON.stringify(getFormData($(this.form))),
+                    contentType: 'application/json',
+                    success: function(response) {
+                        console.log('Data berhasil dikirim:', response);
+                        $.admin.toastr['success']('Berhasil tambah penyesuaian stok produk!');
+                        $(that).closest('form').find('[name="id_penyesuaiangudangdetail"]').val(response.id_penyesuaiangudangdetail);
+                    },
+                    error: function(xhr, status, error) {
+                        $.admin.toastr['warning']('Gagal tambah penyesuaian stok produk!');
+                        if (xhr.status === 400) {
+                            console.log('Bad Request');
+                        } else if (xhr.status === 404) {
+                            console.log('Not Found');
+                        } else if (xhr.status === 500) {
+                            console.log('Internal Server Error');
+                        }
+                    }
+                });
             });            
         SCRIPT;
         Admin::script($scriptDeferred, true);
@@ -179,7 +209,10 @@ class ProdukPenyesuaianController extends Controller
     }
     public function storeProdukPenyesuaianDetail(Request $request) {
         try {
-            $this->penyesuaianGudangService->storePenyesuaianGudangDetail($request->all());
+            $result = $this->penyesuaianGudangService->storePenyesuaianGudangDetail($request->all());
+            return response()->json([
+                'id_penyesuaiangudangdetail' =>  $result?->id_penyesuaiangudangdetail
+            ]);
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Exception $e) {
