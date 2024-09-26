@@ -5,6 +5,7 @@ namespace App\Services\Core\PenyesuaianGudang;
 use App\Models\PenyesuaianGudang;
 use App\Models\PenyesuaianGudangDetail;
 use App\Models\ProdukPersediaan;
+use App\Models\ProdukPersediaanDetail;
 use App\Models\ProdukVarian;
 use App\Models\ProdukVarianHarga;
 use App\Models\Transaksi;
@@ -130,7 +131,23 @@ class PenyesuaianGudangService
             $penyesuaianGudang->update([
                 'is_valid' => $request['is_valid']
             ]);
-            
+            $penyesuaianGudangDetail = PenyesuaianGudangDetail::where('id_penyesuaiangudang', $idPenyesuaianGudang)->get();
+            foreach ($penyesuaianGudangDetail as $produk) {
+                ProdukPersediaan::where('kode_produkvarian', $produk->kode_produkvarian)->where('id_gudang', $produk->id_gudang)->update([
+                    'stok' => DB::raw('stok +' . $produk->selisih)
+                ]);
+                if ($produk->selisih > 0) {
+                    $dataPersediaanDetail = ProdukPersediaanDetail::create([
+                        'id_persediaan' => $dataDariPersediaan->id_persediaan,
+                        'tanggal' => $dataPindahGudang->tanggal,
+                        'keterangan' => "#{$dataPindahGudang->transaksi_no} Pindah Gudang ke " . $dataPindahGudang->nama_togudang,
+                        'stok_out' => $request['jumlah'],
+                        'hargabeli' => (int)$request['harga_modal_dari_gudang']
+                    ]);
+                } else if ($produk->selisih < 0) {
+
+                }
+            }
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
