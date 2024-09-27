@@ -24,4 +24,8 @@ class ProdukVarian extends Model
     public function produkPersediaan() {
         return $this->hasMany(ProdukPersediaan::class, 'kode_produkvarian', 'kode_produkvarian')->join(DB::raw("(select id_gudang, nama as nama_gudang from toko_griyanaura.lv_gudang) as gdg"), 'toko_griyanaura.ms_produkpersediaan.id_gudang', 'gdg.id_gudang');
     }
+
+    public function pindahGudangDetail() {
+        return $this->hasOne(PindahGudangDetail::class, 'kode_produkvarian', 'kode_produkvarian');
+    }
 }

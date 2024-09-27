@@ -125,7 +125,7 @@ class PenyesuaianGudangService
             throw $e;
         }
     }
-    public function validPenyesuaianGudang($idPenyesuaianGudang, $request)
+    public function validatePenyesuaianGudang($idPenyesuaianGudang, $request)
     {
         $rules = [
             'is_valid' => 'required|in:on,off'
@@ -136,6 +136,9 @@ class PenyesuaianGudangService
         DB::beginTransaction();
         try {
             $penyesuaianGudang = PenyesuaianGudang::where('id_penyesuaiangudang', $idPenyesuaianGudang)->first();
+            if ($penyesuaianGudang->is_valid) {
+                abort(403);
+            }
             if (!$request['is_valid']) {
                 DB::commit();
                 return $penyesuaianGudang;

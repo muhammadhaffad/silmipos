@@ -205,7 +205,7 @@ class ProdukPenyesuaianController extends Controller
             $tools->disableView();
             $tools->disableDelete();
             if (!$data->is_valid) {
-                $tools->append($tools->renderDelete(route(admin_get_route('produk-penyesuaian.delete'), ['idPenyesuaianGudang' => $idPenyesuaianGudang])));
+                $tools->append($tools->renderDelete(route(admin_get_route('produk-penyesuaian.delete'), ['idPenyesuaianGudang' => $idPenyesuaianGudang]), listPath: route(admin_get_route('produk-penyesuaian.list'))));
                 $tools->append($tools->renderEdit(route(admin_get_route('produk-penyesuaian.create.detail'), ['idPenyesuaianGudang' => $idPenyesuaianGudang])));
             }
             $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
@@ -343,7 +343,7 @@ class ProdukPenyesuaianController extends Controller
     }
     public function validateProdukPenyesuaian($idPenyesuaianGudang, Request $request) {
         try {
-            $result = $this->penyesuaianGudangService->validPenyesuaianGudang($idPenyesuaianGudang, $request->all());
+            $result = $this->penyesuaianGudangService->validatePenyesuaianGudang($idPenyesuaianGudang, $request->all());
             admin_toastr('Sukses validasi penyesuaian gudang');
             return redirect()->route(admin_get_route('produk-penyesuaian.detail'), ['idPenyesuaianGudang' => $idPenyesuaianGudang]);
         } catch (ValidationException $e) {

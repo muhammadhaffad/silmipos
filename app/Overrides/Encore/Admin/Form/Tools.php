@@ -237,7 +237,7 @@ HTML;
      *
      * @return string
      */
-    public function renderDelete($path=null, $text = null)
+    public function renderDelete($path=null, $text = null, $listPath = null)
     {
         $trans = [
             'delete_confirm' => trans('admin.delete_confirm'),
@@ -270,7 +270,7 @@ $('.{$class}-delete').unbind('click').click(function() {
                         _token:LA.token,
                     },
                     success: function (data) {
-                        $.pjax({container:'#pjax-container', url: '{$this->getListPath()}' });
+                        $.pjax({container:'#pjax-container', url: '{$this->getListPath($listPath)}' });
 
                         resolve(data);
                     }
