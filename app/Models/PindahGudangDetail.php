@@ -13,4 +13,11 @@ class PindahGudangDetail extends Model
     protected $primaryKey = 'id_pindahgudangdetail';
     protected $table = 'toko_griyanaura.tr_pindahgudangdetail';
     protected $guarded = [];
+
+    public function produkPersediaanDariGudang() {
+        return $this->hasOne(ProdukPersediaan::class, 'kode_produkvarian', 'kode_produkvarian');
+    }
+    public function produkPersediaanKeGudang() {
+        return $this->hasOne(ProdukPersediaan::class, 'kode_produkvarian', 'kode_produkvarian');
+    }
 }

@@ -2,9 +2,13 @@
 
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Grid\Delete;
+use App\Admin\Actions\Grid\Edit;
+use App\Admin\Actions\Grid\Show;
 use App\Http\Controllers\Controller;
 use App\Models\Dynamic;
 use App\Models\PenyesuaianGudang;
+use App\Models\PenyesuaianGudangDetail;
 use App\Models\Produk;
 use App\Services\Core\PenyesuaianGudang\PenyesuaianGudangService;
 use Encore\Admin\Facades\Admin;
@@ -12,6 +16,7 @@ use Encore\Admin\Form;
 use Encore\Admin\Form\NestedForm;
 use Encore\Admin\Form\Tools;
 use Encore\Admin\Grid;
+use Encore\Admin\Grid\Displayers\DropdownActions;
 use Encore\Admin\Grid\Filter;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Widgets\Table;
@@ -25,6 +30,46 @@ class ProdukPenyesuaianController extends Controller
     public function __construct(PenyesuaianGudangService $penyesuaianGudangService)
     {
         $this->penyesuaianGudangService = $penyesuaianGudangService;
+    }
+    public function listProdukPenyesuaianGrid() {
+        $grid = new Grid(new PenyesuaianGudang());
+        $grid->model()->withSum('penyesuaianGudangDetail as total_penyesuaian', DB::raw('selisih*harga_modal'));
+        $grid->filter(function (Filter $filter) {
+            $filter->expand();
+            $filter->disableIdFilter();
+            $filter->ilike('transaksi_no', 'No. Transaksi');
+        });
+        $grid->column('transaksi_no', 'No. Transaksi')->sortable();
+        $grid->column('tanggal')->display(function ($value) {
+            return date('d F Y', strtotime($value));
+        })->sortable();
+        $grid->column('catatan')->display(function ($value) {
+            if (strlen($value) > 20) {
+                return substr($value, 0, 20) . '...';
+            }
+            return $value;
+        });
+        $grid->column('total_penyesuaian')->display(function ($val) {
+            return number_format($val);
+        });
+        $grid->column('is_valid', 'Status')->display(function ($val) {
+            return $val ? 'Valid' : 'Belum valid';
+        })->label([
+            true => 'success',
+            false => 'warning'
+        ]);
+        $grid->actions(function (DropdownActions $actions) {
+            $actions->disableDelete();
+            $actions->disableEdit();
+            $actions->disableView();
+            $actions->add(new Show);
+            if (!$this->row->is_valid) {
+                $actions->add(new Edit());
+                $actions->add(new Delete(route(admin_get_route('produk-penyesuaian.delete'), $this->row->id_penyesuaiangudang)));
+            }
+            // // dump($this);
+        });
+        return $grid;
     }
     public function createProdukPenyesuaianForm() {
         $form = new Form(new PenyesuaianGudang);
@@ -42,13 +87,15 @@ class ProdukPenyesuaianController extends Controller
         $form->builder()->setMode('edit');
         $form->setAction(route(admin_get_route('produk-penyesuaian.validate'), [$idPenyesuaianGudang]));
         $data = $form->model()->where('id_penyesuaiangudang', $idPenyesuaianGudang)->first();
-        $form->tools(function (Tools $tools) use ($idPenyesuaianGudang) {
+        $form->tools(function (Tools $tools) use ($idPenyesuaianGudang, $data) {
             $tools->disableList();
             $tools->disableView();
             $tools->disableDelete();
-            $tools->append($tools->renderDelete(route(admin_get_route('produk-mutasi.delete'), ['idPindahGudang' => $idPenyesuaianGudang])));
+            if (!$data->is_valid) {
+                $tools->append($tools->renderDelete(route(admin_get_route('produk-penyesuaian.delete'), ['idPenyesuaianGudang' => $idPenyesuaianGudang])));
+            }
             $tools->append($tools->renderView(route(admin_get_route('produk-penyesuaian.detail'), ['idPenyesuaianGudang' => $idPenyesuaianGudang])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-mutasi.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
         });
         $form->text('transaksi_no')->readonly()->withoutIcon()->value($data->transaksi_no);
         $form->datetime('tanggal')->readonly()->value($data->tanggal);
@@ -152,24 +199,40 @@ class ProdukPenyesuaianController extends Controller
     public function detailProdukPenyesuaianForm($idPenyesuaianGudang) {
         $form = new Form(new PenyesuaianGudang);
         $data = $form->model()->where('id_penyesuaiangudang', $idPenyesuaianGudang)->first();
-        $form->tools(function (Tools $tools) use ($idPenyesuaianGudang) {
+        $gudang = (new Dynamic)->setTable('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang')->toArray();
+        $form->tools(function (Tools $tools) use ($idPenyesuaianGudang, $data) {
             $tools->disableList();
             $tools->disableView();
             $tools->disableDelete();
-            // $tools->append($tools->renderDelete(route(admin_get_route('produk-mutasi.delete'), ['idPenyesuaianGudang' => $idPenyesuaianGudang])));
-            // $tools->append($tools->renderEdit(route(admin_get_route('produk-mutasi.create.detail'), ['idPenyesuaianGudang' => $idPenyesuaianGudang])));
-            // $tools->append($tools->renderList(route(admin_get_route('produk-mutasi.list'))));
+            if (!$data->is_valid) {
+                $tools->append($tools->renderDelete(route(admin_get_route('produk-penyesuaian.delete'), ['idPenyesuaianGudang' => $idPenyesuaianGudang])));
+                $tools->append($tools->renderEdit(route(admin_get_route('produk-penyesuaian.create.detail'), ['idPenyesuaianGudang' => $idPenyesuaianGudang])));
+            }
+            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
         });
         $form->text('transaksi_no')->withoutIcon()->readonly()->value($data->transaksi_no);
         $form->datetime('tanggal')->value($data->tanggal);
-        $form->select('from_gudang', 'Dari Gudang')->readOnly()->options(DB::table('toko_griyanaura.lv_gudang')->select('nama as text', 'id_gudang as id')->get()->pluck('text', 'id'))->setWidth(4)->value($data->from_gudang);
-        $form->select('to_gudang', 'Ke Gudang')->readOnly()->options(DB::table('toko_griyanaura.lv_gudang')->select('nama as text', 'id_gudang as id')->get()->pluck('text', 'id'))->setWidth(4)->value($data->to_gudang);
         $form->text('keterangan')->readonly()->setWidth(4);
         $form->textarea('catatan')->readonly();
-        $form->tablehasmany('penyesuaianGudangDetail', 'Produk', function (NestedForm $form) {
-            $form->text('kode_produkvarian')->setLabelClass(['w-100'])->disable()->withoutIcon();
-            $form->text('jumlah')->setLabelClass(['w-200px'])->disable()->withoutIcon();
-        })->useTable()->disableCreate()->disableDelete()->value($data->penyesuaianGudangDetail->toArray() ?: [['id_penyesuaiangudangdetail' => 0]]);
+        $form->tablehasmany('penyesuaianGudangDetail', 'Produk', function (NestedForm $form) use ($gudang) {
+            $form->text('kode_produkvarian')->setLabelClass(['w-200px'])->disable()->withoutIcon();
+            $form->text('harga_modal', 'Harga modal')->customFormat(function ($val) {
+                return 'Rp.' . number_format($val);
+            })->setLabelClass(['w-200px'])->setGroupClass('w-200px')->disable()->withoutIcon();
+            $form->text('id_gudang', 'Gudang')->customFormat(function ($val) use ($gudang) {
+                return @$gudang[$val];
+            })->setLabelClass(['w-100px'])->disable()->withoutIcon();
+            $form->text('', 'Stok sebelum')->customFormat(function () use ($form) {
+                return $form->model()->jumlah - $form->model()->selisih;
+            })->setLabelClass(['w-100px'])->setGroupClass('w-100px')->disable()->withoutIcon();
+            $form->text('jumlah', 'Stok sesudah')->setLabelClass(['w-100px'])->setGroupClass('w-100px')->disable()->withoutIcon();
+            $form->text('selisih')->setLabelClass(['w-100px'])->setGroupClass('w-100px')->disable()->withoutIcon();
+        })->useTable()->disableCreate()->disableDelete()->value($data->penyesuaianGudangDetail->toArray() ?: []);
+        $total = 0;
+        foreach ($data->penyesuaianGudangDetail as $produk) {
+            $total += $produk['selisih'] * $produk['harga_modal'];
+        }
+        $form->text('', 'Total Penyesuaian')->setWidth(2, 8)->withoutIcon()->disable()->value(number_format($total));
         $form->disableCreatingCheck();
         $form->disableEditingCheck();
         $form->disableViewCheck();
@@ -179,6 +242,12 @@ class ProdukPenyesuaianController extends Controller
         return $form;
     }
 
+    public function listProdukPenyesuaian(Content $content) {
+        return $content
+            ->title('Produk')
+            ->description('List')
+            ->body($this->listProdukPenyesuaianGrid());
+    }
     public function detailProdukPenyesuaian($idPenyesuaianGudang, Content $content) {
         $style = 
         <<<STYLE
@@ -186,8 +255,13 @@ class ProdukPenyesuaianController extends Controller
                 width: 100%;
             }
             .w-200px {
-                max-width: 200px;
-                min-width: 200px;
+                width: 200px;
+            }
+            .w-100px {
+                width: 100px;
+            }
+            .w-50px {
+                width: 50px;
             }
         STYLE;
         Admin::style($style);
@@ -271,11 +345,20 @@ class ProdukPenyesuaianController extends Controller
         try {
             $result = $this->penyesuaianGudangService->validPenyesuaianGudang($idPenyesuaianGudang, $request->all());
             admin_toastr('Sukses validasi penyesuaian gudang');
-            return back();
+            return redirect()->route(admin_get_route('produk-penyesuaian.detail'), ['idPenyesuaianGudang' => $idPenyesuaianGudang]);
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Exception $e) {
             throw $e;
         }
+    }
+    public function deleteProdukPenyesuaian($idPenyesuaianGudang, Request $request) {
+        $this->penyesuaianGudangService->deletePenyesuaianGudang($idPenyesuaianGudang);
+        admin_toastr('Sukses hapus penyesuaian gudang');
+        return [
+            'status' => true,
+            'then' => ['action' => 'refresh', 'value' => true],
+            'message' => 'Sukses hapus penyesuaian gudang'
+        ];
     }
 }

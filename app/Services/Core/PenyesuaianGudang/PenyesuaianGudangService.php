@@ -93,7 +93,7 @@ class PenyesuaianGudangService
                 ]);
             }
             if ($request['id_penyesuaiangudangdetail']) {
-                if ($request['jumlah_penyesuaian']) {
+                if ($request['jumlah_penyesuaian'] != null) {
                     $penyesuaianGudangDetail = PenyesuaianGudangDetail::where('id_penyesuaiangudangdetail', $request['id_penyesuaiangudangdetail'])->first();
                     $penyesuaianGudangDetail->update([
                         'jumlah' => $request['jumlah_penyesuaian'],
@@ -106,7 +106,7 @@ class PenyesuaianGudangService
                     $penyesuaianGudangDetail = null;
                 }
             } else {
-                if ($request['jumlah_penyesuaian']) {
+                if ($request['jumlah_penyesuaian'] != null) {
                     $penyesuaianGudangDetail = PenyesuaianGudangDetail::create([
                         'id_gudang' => $request['id_gudang'],
                         'kode_produkvarian' => $request['kode_produkvarian'],
@@ -199,6 +199,21 @@ class PenyesuaianGudangService
             }
             DB::commit();
             return $penyesuaianGudang;
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
+    public function deletePenyesuaianGudang($idPenyesuaianGudang) {
+        $penyesuaianGudang = (new PenyesuaianGudang())->where('id_penyesuaiangudang', $idPenyesuaianGudang)->first();
+        if ($penyesuaianGudang->is_valid) {
+            abort(403);
+        }
+        DB::beginTransaction();
+        try {
+            PenyesuaianGudangDetail::where('id_penyesuaiangudang', $idPenyesuaianGudang)->delete();
+            PenyesuaianGudang::where('id_penyesuaiangudang', $idPenyesuaianGudang)->delete();
+            DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
