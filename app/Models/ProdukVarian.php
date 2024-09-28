@@ -15,6 +15,7 @@ class ProdukVarian extends Model
     protected $keyType = 'string';
     protected $table = 'toko_griyanaura.ms_produkvarian';
     protected $guarded = [];
+    protected $hidden = ['inserted_at', 'updated_at', 'inserted_by', 'updated_by'];
     public $incrementing = false;
 
     public function produkVarianHarga() {
@@ -27,5 +28,9 @@ class ProdukVarian extends Model
 
     public function pindahGudangDetail() {
         return $this->hasOne(PindahGudangDetail::class, 'kode_produkvarian', 'kode_produkvarian');
+    }
+
+    public function produk() {
+        return $this->belongsTo(Produk::class, 'id_produk', 'id_produk');
     }
 }

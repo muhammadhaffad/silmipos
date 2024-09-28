@@ -16,6 +16,7 @@ class Produk extends Model
     protected $table = 'toko_griyanaura.ms_produk';
     protected $guarded = [];
     protected $casts = ['in_stok' => 'string'];
+    protected $hidden = ['inserted_at', 'updated_at', 'inserted_by', 'updated_by', 'deskripsi'];
 
     public function produkAttribut()
     {

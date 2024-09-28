@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Akun;
 use App\Models\Dynamic;
 use App\Models\Produk;
+use App\Models\ProdukPersediaan;
 use App\Models\ProdukVarian;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -39,7 +40,7 @@ class AjaxController extends Controller
     }
     public function getProduk(Request $request) {
         $q = $request->get('q');
-        $subQuery = ProdukVarian::select(['toko_griyanaura.ms_produkvarian.kode_produkvarian as id', DB::raw("toko_griyanaura.ms_produkvarian.kode_produkvarian || ' - ' || p.nama || ' ' || string_agg(av.nama, ' ' order by pav.id_produkattributvalue) as text")])
+        $subQuery = ProdukVarian::select(['toko_griyanaura.ms_produkvarian.kode_produkvarian as kode_produkvarian', DB::raw("toko_griyanaura.ms_produkvarian.kode_produkvarian || ' - ' || p.nama || ' ' || string_agg(av.nama, ' ' order by pav.id_produkattributvalue) as text")])
             ->leftJoin('toko_griyanaura.ms_produk as p', 'p.id_produk', 'toko_griyanaura.ms_produkvarian.id_produk')
             ->leftJoin('toko_griyanaura.ms_produkattributvarian as pav', 'pav.kode_produkvarian', 'toko_griyanaura.ms_produkvarian.kode_produkvarian')
             ->leftJoin('toko_griyanaura.lv_attributvalue as av', 'pav.id_attributvalue', 'av.id_attributvalue')
@@ -51,6 +52,23 @@ class AjaxController extends Controller
         if ($request->get('id')) {
             return $query->where('kode_produkvarian', $request->get('id'))->first();
         } 
-        return $query->where(DB::raw("x.id || ' ' || x.text"), 'ilike', "%$q%")->paginate();
+        return $query->where(DB::raw("x.kode_produkvarian || ' ' || x.text"), 'ilike', "%$q%")->paginate();
+    }
+    public function getKontak(Request $request) {
+        $q = $request->get('q');
+        if ($request->get('id')) {
+            return (new Dynamic())->setTable('toko_griyanaura.ms_kontak')->where('id_kontak', $request->get('id'))->first(['id_kontak as id', DB::raw("nama || ' - ' || alamat as text")]);
+        }
+        return (new Dynamic())->setTable('toko_griyanaura.ms_kontak')->where('nama', 'ilike', "%$q%")->paginate(null, ['id_kontak as id', DB::raw("nama || ' - ' || alamat as text")]);
+    }
+    public function getProdukDetail(Request $request) {
+        $kode = $request->get('kode_produkvarian');
+        $gudang = $request->get('id_gudang');
+        $gudang = (new Dynamic())->setTable('toko_griyanaura.lv_gudang')->where('id_gudang', $gudang)->first();
+        return ProdukVarian::with(['produk', 'produkVarianHarga' => function ($q) use ($gudang) {
+                $q->where('id_varianharga', $gudang?->default_varianharga ?: 1);
+            }, 'produkPersediaan' => function ($q) use ($gudang) {
+                $q->with('produkVarianHarga')->where('gdg.id_gudang', $gudang?->id_gudang)->first();
+            }])->where('kode_produkvarian', $kode)->first()->toArray();
     }
 }

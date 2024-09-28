@@ -15,8 +15,13 @@ class ProdukPersediaan extends Model
     protected $primaryKey = 'id_persediaan';
     protected $table = 'toko_griyanaura.ms_produkpersediaan';
     protected $guarded = [];
+    protected $hidden = ['inserted_at', 'updated_at', 'inserted_by', 'updated_by'];
 
     public function produkVarianHarga() {
         return $this->hasOne(ProdukVarianHarga::class, 'id_produkvarianharga', 'default_varianharga');
+    }
+
+    public function produkVarian() {
+        return $this->belongsTo(ProdukVarian::class, 'kode_produkvarian', 'kode_produkvarian');
     }
 }

@@ -62,5 +62,7 @@ Route::group([
         Route::get('/varians', [AjaxController::class, 'getVarians'])->name('ajax.varians');
         Route::get('/attribut-value/{idAttribut?}', [AjaxController::class, 'attributValue'])->name('ajax.attribut-value');
         Route::get('/produk', [AjaxController::class, 'getProduk'])->name('ajax.produk');
+        Route::get('/kontak', [AjaxController::class, 'getKontak'])->name('ajax.kontak');
+        Route::get('/detail-produk', [AjaxController::class, 'getProdukDetail'])->name('ajax.produk-detail');
     });
 });
