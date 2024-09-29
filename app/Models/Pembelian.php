@@ -17,4 +17,10 @@ class Pembelian extends Model
     public function pembelianDetail() {
         return $this->hasMany(PembelianDetail::class, 'id_pembelian', 'id_pembelian');
     }
+    public function kontak() {
+        return $this->hasOne(Kontak::class, 'id_kontak', 'id_kontak');
+    }
+    public function pembelianInvoice() {
+        return $this->hasMany(Pembelian::class, 'pembelian_parent', 'id_pembelian')->where('jenis', 'invoice');
+    }
 }

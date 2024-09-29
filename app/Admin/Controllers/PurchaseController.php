@@ -4,34 +4,45 @@ namespace App\Admin\Controllers;
 
 use App\Models\Dynamic;
 use App\Models\Pembelian;
+use App\Services\Core\Purchase\PurchaseOrderService;
 use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
+use Encore\Admin\Form\Footer;
 use Encore\Admin\Form\NestedForm;
 use Encore\Admin\Form\Row;
+use Encore\Admin\Form\Tools;
 use Encore\Admin\Grid;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Show;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class PurchaseController extends AdminController
 {
+    protected $purchaseOrderService;
+    public function __construct(PurchaseOrderService $purchaseOrderService)
+    {
+        $this->purchaseOrderService = $purchaseOrderService;
+    }
     public function createPurchaseOrderForm($model) {
         $form = new Form($model);
+        $form->setAction(route(admin_get_route('purchase.order.store')));
         $data = $form->model();
         $form->column(12, function (Form $form) {
-            $form->select('id_kontak', 'Supplier')->ajax(route(admin_get_route('ajax.kontak')))->setWidth(3);
+            $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak')))->setWidth(3);
         });
         $form->column(12, function (Form $form) {
             $form->text('transaksi_no', 'No. Transaksi')->placeholder('[AUTO]')->setLabelClass(['text-nowrap'])->withoutIcon()->width('100%')->setWidth(2,8);
             $form->datetime('tanggal', 'Tanggal')->required()->width('100%')->setWidth(3, 7)->value(date('Y-m-d H:i:s'));
-            $form->select('id_gudang', 'Gudang')->required()->width('100%')->setWidth(3, 7)->options(DB::table('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang'));
+            $form->select('id_gudang', 'Gudang')->required()->width('100%')->setWidth(3, 7)->options(DB::table('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang'))->default(1);
         });
         $form->column(12, function (Form $form) {
             $form->tablehasmany('pembelianDetail', function (NestedForm $form) {
-                $form->select('kode_produkvarian', 'Produk')->ajax(route(admin_get_route('ajax.produk')), 'kode_produkvarian')->setGroupClass('w-200px');
-                $form->currency('qty', 'Qty')->symbol('QTY');
-                $form->currency('harga', 'Harga')->symbol('Rp');
+                $form->select('kode_produkvarian', 'Produk')->required()->ajax(route(admin_get_route('ajax.produk')), 'kode_produkvarian')->setGroupClass('w-200px');
+                $form->currency('qty', 'Qty')->required()->symbol('QTY');
+                $form->currency('harga', 'Harga')->required()->symbol('Rp');
                 $form->currency('diskon', 'Diskon')->symbol('%');
                 $form->currency('Total', 'total')->symbol('Rp')->readonly();
             })->useTable();
@@ -44,53 +55,377 @@ class PurchaseController extends AdminController
         });
         return $form;
     }
+    public function detailPurchaseOrderForm($model, $idPembelian) {
+        $form = new Form($model);
+        $form->setAction(route(admin_get_route('purchase.order.to-invoice'), ['idPembelian' => $idPembelian]));
+        $data = $form->model()->with(['kontak','pembelianDetail' => function ($rel) {
+            $rel->leftJoin(DB::raw("(select id_pembeliandetailparent, sum(qty) as jumlah_diinvoice from toko_griyanaura.tr_pembeliandetail where id_pembeliandetailparent is not null group by id_pembeliandetailparent) as x"), 'x.id_pembeliandetailparent', 'toko_griyanaura.tr_pembeliandetail.id_pembeliandetail');
+            $rel->with('produkVarian');
+        } ])->where('id_pembelian', $idPembelian)->join(DB::raw("(select id_gudang, nama as nama_gudang from toko_griyanaura.lv_gudang) as gdg"), 'gdg.id_gudang', 'toko_griyanaura.tr_pembelian.id_gudang')->first();
+        $form->tools(function (Tools $tools) use ($idPembelian, $data) {
+            $tools->disableList();
+            $tools->disableView();
+            $tools->disableDelete();
+            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Supplier')->setWidth(3);
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->html("<div style='padding-top: 7px;'>#{$data->transaksi_no}</div>", 'No. Transaksi')->setWidth(2, 8);
+            $form->html("<div style='padding-top: 7px;'>{$data->tanggal}</div>", 'Tanggal')->setWidth(2, 8);
+            $form->html("<div style='padding-top: 7px;'>{$data->nama_gudang}</div>", 'Gudang')->setWidth(2, 8);
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->tablehasmany('pembelianDetail', function (NestedForm $form) {
+                $data = $form->model();
+                $form->html("<input type='checkbox' name='pembelianDetail[{$data?->id_pembeliandetail}][check]' value='{$data?->id_pembeliandetail}'>", '<input id="checkAll" type="checkbox">');
+                $form->html($data?->produkVarian?->varian, 'Produk')->required();
+                $form->html(number($data?->jumlah_diinvoice ?: 0) . ' / ' . number($data?->qty), 'Qty')->setGroupClass('w-100px');
+                if ($data?->jumlah_diinvoice == $data?->qty and $data != null) {
+                    $form->html('-', '');
+                } else {
+                    $form->text('qty', '')->customFormat(function ($val) {
+                        return number($val);
+                    })->attribute('type', 'number')->withoutIcon()->required()->setGroupClass('w-100px');
+                }
+                $form->currency('harga', 'Harga')->disable()->required()->symbol('Rp');
+                $form->currency('diskon', 'Diskon')->disable()->symbol('%');
+                $form->currency('total', 'Total')->disable()->symbol('Rp')->readonly();
+            })->value($data->pembelianDetail->toArray())->useTable()->disableCreate()->disableDelete();
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->currency('totalraw', 'Sub total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->totalraw);
+            $form->currency('diskon')->setWidth(2, 8)->width('100%')->symbol('%')->readonly()->value($data->diskon);
+            $form->currency('total', 'Total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->grandtotal);
+            $form->textarea('catatan')->setWidth(4)->readonly()->value($data->catatan);
+        });
+        $form->disableCreatingCheck();
+        $form->disableEditingCheck();
+        $form->disableViewCheck();
+        // $form->disableSubmit();
+        $form->disableReset();
+        $form->button();
+
+        return $form;
+    }
+    public function editPurchaseOrderForm($model, $idPembelian) {
+        $form = new Form($model);
+        $form->builder()->setMode('edit');
+        $form->setAction(route(admin_get_route('purchase.order.update'), ['idPembelian' => $idPembelian]));
+        $data = $form->model()->with('pembelianDetail')->where('id_pembelian', $idPembelian)->first();
+        $form->column(12, function (Form $form) use ($data) {
+            $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak')))->attribute([
+                'data-url' => route(admin_get_route('ajax.kontak')),
+                'select2' => null
+            ])->setWidth(3)->value($data->id_kontak);
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->text('transaksi_no', 'No. Transaksi')->disable()->placeholder('[AUTO]')->setLabelClass(['text-nowrap'])->withoutIcon()->width('100%')->setWidth(2,8)->value($data->transaksi_no);
+            $form->datetime('tanggal', 'Tanggal')->required()->width('100%')->setWidth(3, 7)->value($data->tanggal);
+            $form->select('id_gudang', 'Gudang')->required()->width('100%')->setWidth(3, 7)->options(DB::table('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang'))->value($data->id_gudang);
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->tablehasmany('pembelianDetail', function (NestedForm $form) {
+                $form->select('kode_produkvarian', 'Produk')->required()->ajax(route(admin_get_route('ajax.produk')), 'kode_produkvarian')->attribute([
+                    'data-url' => route(admin_get_route('ajax.produk')),
+                    'select2' => null
+                ])->setGroupClass('w-200px');
+                $form->currency('qty', 'Qty')->required()->symbol('QTY');
+                $form->currency('harga', 'Harga')->required()->symbol('Rp');
+                $form->currency('diskon', 'Diskon')->symbol('%');
+                $form->currency('total', 'Total')->symbol('Rp')->readonly();
+            })->value($data->pembelianDetail->toArray())->useTable();
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->currency('totalraw', 'Sub total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->totalraw);
+            $form->currency('diskon')->setWidth(2, 8)->width('100%')->symbol('%')->value($data->diskon);
+            $form->currency('total', 'Total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->grandtotal);
+            $form->textarea('catatan')->setWidth(4)->value($data->catatan);
+        });
+        return $form;
+    }
 
     public function createPurchaseOrder(Content $content) {
         $style = <<<STYLE
-        .input-group {
-            width: 100% !important;   
-        }
-        .w-200px {
-            width: 200px;
-        }
-        [id^="has-many-"] {
-            position: relative;
-            overflow: auto;
-            white-space: nowrap;
-        }
-        [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
-            position: -webkit-sticky;
-            position: sticky;
-            left: 0px;
-            background: white;
-            z-index: 20;
-            width: 200px;
-        }
-        [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
-            position: -webkit-sticky;
-            position: sticky;
-            right: 0px;
-            background: white;
-            z-index: 10;
-        }
-        [id^="has-many-"] .form-group:has(.add) {
-            width: 100%;
-            position: -webkit-sticky;
-            position: sticky;
-            left: 0px;
-            background: white;
-            z-index: 10;
-        }
-        [class*='col-md-'] {
-            margin-bottom: 2rem;
-        }
+            .input-group {
+                width: 100% !important;   
+            }
+            .w-200px {
+                width: 200px;
+            }
+            [id^="has-many-"] {
+                position: relative;
+                overflow: auto;
+                white-space: nowrap;
+            }
+            [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0px;
+                background: white;
+                z-index: 20;
+                width: 200px;
+            }
+            [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
+                position: -webkit-sticky;
+                position: sticky;
+                right: 0px;
+                background: white;
+                z-index: 10;
+            }
+            [id^="has-many-"] .form-group:has(.add) {
+                width: 100%;
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0px;
+                background: white;
+                z-index: 10;
+            }
+            [class*='col-md-'] {
+                margin-bottom: 2rem;
+            }
         STYLE;
         Admin::style($style);
         $urlGetDetailProduk = route(admin_get_route('ajax.produk-detail'));
         $scriptDereferred = <<<SCRIPT
-        $("#has-many-pembelianDetail").on('click', '.add', function () {
+            function hitungProdukTotal(e) {
+                const row = $(e.target).closest('tr');
+                const harga = parseInt(row.find('.pembelianDetail[name*="harga"]').first().inputmask('unmaskedvalue')) || 0;
+                const qty = parseFloat(row.find('.pembelianDetail[name*="qty"]').first().inputmask('unmaskedvalue')) || 0;
+                const diskon = parseFloat(row.find('.pembelianDetail[name*="diskon"]').first().inputmask('unmaskedvalue')) || 0;
+                const total = parseInt(harga*qty*(1-diskon/100));
+                row.find('.pembelianDetail[name*="Total"]').first().val(total).change();
+            }
+            function hitungTotal() {
+                let total = 0;
+                $('.pembelianDetail[name*="Total"]:visible').each(function (e, item) {
+                    total += parseInt($(item).inputmask('unmaskedvalue')) || 0;
+                });
+                $('[name="totalraw"]').val(total).change();
+            }
+            function hitungGrandTotal() {
+                const diskon = parseFloat($('[name="diskon"]').inputmask('unmaskedvalue')) || 0;
+                const total = parseInt($('[name="totalraw"]').inputmask('unmaskedvalue')) || 0;
+                $('[name="total"]').val(total*(1-diskon/100));
+            }
+            $("#has-many-pembelianDetail").on('click', '.remove', function () {
+                hitungTotal();
+            });
+            $("#has-many-pembelianDetail").on('click', '.add', function () {
+                $(".pembelianDetail.kode_produkvarian").on('select2:select', function (e) {
+                    const kode = e.params.data.id;
+                    const idGudang = $('select[name="id_gudang"]').val();
+                    $.ajax({
+                        url: '$urlGetDetailProduk',
+                        type: 'GET',
+                        data: {
+                            kode_produkvarian: kode,
+                            id_gudang: idGudang
+                        },
+                        success: function(data) {
+                            // Jika permintaan berhasil
+                            console.log('Data berhasil diterima:', data);
+                            if (data?.porduk_persediaan) {
+                                $(e.target).closest('tr').find('[name*="harga"]').val(data.porduk_persediaan[0].produk_varian_harga.hargabeli);
+                            } else {
+                                $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_varian_harga[0].hargabeli);
+                            }
+                            $(e.target).closest('tr').find('[name*="qty"]').val(1);
+                            hitungProdukTotal(e);
+                            hitungTotal(e);
+                        },
+                        error: function(jqXHR, textStatus, errorThrown) {
+                            // Menangani kesalahan
+                            switch (jqXHR.status) {
+                                case 404:
+                                    console.log('Error 404: Tidak ditemukan.');
+                                    break;
+                                case 500:
+                                    console.log('Error 500: Kesalahan server.');
+                                    break;
+                                default:
+                                    console.log('Kesalahan: ' + textStatus);
+                                    break;
+                            }
+                        }
+                    });
+                });
+                $('.pembelianDetail[name*="harga"],.pembelianDetail[name*="qty"],.pembelianDetail[name*="diskon"]').on('change', function (e) {
+                    hitungProdukTotal(e);
+                });
+                $('.pembelianDetail[name*="Total"]').on('change', function (e) {
+                    hitungTotal();
+                });
+            });
+            $('[name="totalraw"],[name="diskon"]').on('change', function () {
+                hitungGrandTotal();
+            });
+        SCRIPT;
+        Admin::script($scriptDereferred, true);
+        $pembelian = new Pembelian();
+        return $content
+            ->title('Order Pembelian')
+            ->description('Buat')
+            ->body($this->createPurchaseOrderForm($pembelian));
+    }
+    public function detailPurchaseOrder(Content $content, $idPembelian) {
+        $style = <<<STYLE
+            .input-group {
+                width: 100% !important;   
+            }
+            .w-200px {
+                width: 200px;
+            }
+            .w-100px {
+                width: 100px;
+            }
+            [id^="has-many-"] {
+                position: relative;
+                overflow: auto;
+                white-space: nowrap;
+            }
+            [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0px;
+                background: white;
+                z-index: 20;
+                width: 20px;
+            }
+            [id^="has-many-"] table td:nth-child(2), [id^="has-many-"] table th:nth-child(2) {
+                position: -webkit-sticky;
+                position: sticky;
+                left: 30px;
+                background: white;
+                z-index: 20;
+                width: 200px;
+            }
+            [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
+                position: -webkit-sticky;
+                position: sticky;
+                right: 0px;
+                background: white;
+                z-index: 10;
+            }
+            [id^="has-many-"] .form-group:has(.add) {
+                width: 100%;
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0px;
+                background: white;
+                z-index: 10;
+            }
+            [class*='col-md-'] {
+                margin-bottom: 2rem;
+            }
+        STYLE;
+        Admin::style($style);
+        $script = <<<SCRIPT
+            const checkAll = document.querySelector("#checkAll");
+            const products = document.querySelectorAll('[name^="pembelianDetail"]');
+            checkAll.addEventListener("change", function () {
+                products.forEach(product => {
+                    product.checked = this.checked;
+                });
+            });
+
+            for (const product of products) {
+                product.addEventListener("click", updateDisplay);
+            }
+            function updateDisplay() {
+                let checkedCount = 0;
+                for (const product of products) {
+                    if (product.checked) {
+                    checkedCount++;
+                    }
+                }
+
+                if (checkedCount === 0) {
+                    checkAll.checked = false;
+                    checkAll.indeterminate = false;
+                } else if (checkedCount === products.length) {
+                    checkAll.checked = true;
+                    checkAll.indeterminate = false;
+                } else {
+                    checkAll.checked = false;
+                    checkAll.indeterminate = true;
+                }
+            }
+            $('select.form-control').each(function () {
+                const select = this;
+                const defaultValue = select.dataset.value.split(',');
+                const defaultUrl = select.dataset.url;
+                defaultValue.forEach(function (value) {
+                    $.ajax({
+                        type: 'GET',
+                        url: defaultUrl + '?id=' + value
+                    }).then(function (data) {
+                        const option = new Option(data.text, data.id, true, true);
+                        $(select).append(option).trigger('change');
+                        $(select).trigger({
+                            type: 'select2:select',
+                            params: {
+                                data: data
+                            }
+                        });
+                    });
+                })
+            });
+            $('#checkAll').trigger('click');
+        SCRIPT;
+        Admin::script($script);
+        $pembelian = new Pembelian();
+        return $content
+            ->title('Order Pembelian')
+            ->description('Detail')
+            ->body($this->detailPurchaseOrderForm($pembelian, $idPembelian));
+    }
+    public function editPurchaseOrder(Content $content, $idPembelian) {
+        $style = <<<STYLE
+            .input-group {
+                width: 100% !important;   
+            }
+            .w-200px {
+                width: 200px;
+            }
+            [id^="has-many-"] {
+                position: relative;
+                overflow: auto;
+                white-space: nowrap;
+            }
+            [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0px;
+                background: white;
+                z-index: 20;
+                width: 200px;
+            }
+            [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
+                position: -webkit-sticky;
+                position: sticky;
+                right: 0px;
+                background: white;
+                z-index: 10;
+            }
+            [id^="has-many-"] .form-group:has(.add) {
+                width: 100%;
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0px;
+                background: white;
+                z-index: 10;
+            }
+            [class*='col-md-'] {
+                margin-bottom: 2rem;
+            }
+        STYLE;
+        Admin::style($style);
+        $urlGetDetailProduk = route(admin_get_route('ajax.produk-detail'));
+        $scriptDereferred = <<<SCRIPT
             $(".pembelianDetail.kode_produkvarian").on('select2:select', function (e) {
-                const kode = e.params.data.id;
+                const kode = e.params.data.kode_produkvarian;
                 const idGudang = $('select[name="id_gudang"]').val();
                 $.ajax({
                     url: '$urlGetDetailProduk',
@@ -102,8 +437,16 @@ class PurchaseController extends AdminController
                     success: function(data) {
                         // Jika permintaan berhasil
                         console.log('Data berhasil diterima:', data);
-                        $(e.target).closest('tr').find('[name^="harga"]').val(data.hargabeli);
-                        console.info(e.target);
+                        if (data?.porduk_persediaan) {
+                            $(e.target).closest('tr').find('[name*="harga"]').val(data.porduk_persediaan[0].produk_varian_harga.hargabeli);
+                        } else {
+                            $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_varian_harga[0].hargabeli);
+                        }
+                        if (!$(e.target).closest('tr').find('[name*="qty"]').val()) {
+                            $(e.target).closest('tr').find('[name*="qty"]').val(1);
+                        }
+                        hitungProdukTotal(e);
+                        hitungTotal(e);
                     },
                     error: function(jqXHR, textStatus, errorThrown) {
                         // Menangani kesalahan
@@ -121,13 +464,143 @@ class PurchaseController extends AdminController
                     }
                 });
             });
-        });
+            $('[select2]').each(function () {
+                const select = this;
+                const defaultValue = select.dataset.value.split(',');
+                const defaultUrl = select.dataset.url;
+                defaultValue.forEach(function (value) {
+                    $.ajax({
+                        type: 'GET',
+                        url: defaultUrl + '?id=' + value
+                    }).then(function (data) {
+                        const option = new Option(data.text, data.id, true, true);
+                        $(select).append(option).trigger('change');
+                        $(select).trigger({
+                            type: 'select2:select',
+                            params: {
+                                data: data
+                            }
+                        });
+                    });
+                })
+            });
+            function hitungProdukTotal(e) {
+                const row = $(e.target).closest('tr');
+                const harga = parseInt(row.find('.pembelianDetail[name*="harga"]').first().inputmask('unmaskedvalue')) || 0;
+                const qty = parseFloat(row.find('.pembelianDetail[name*="qty"]').first().inputmask('unmaskedvalue')) || 0;
+                const diskon = parseFloat(row.find('.pembelianDetail[name*="diskon"]').first().inputmask('unmaskedvalue')) || 0;
+                const total = parseInt(harga*qty*(1-diskon/100));
+                row.find('.pembelianDetail[name*="total"]').first().val(total).change();
+            }
+            function hitungTotal() {
+                let total = 0;
+                $('.pembelianDetail[name*="total"]:visible').each(function (e, item) {
+                    total += parseInt($(item).inputmask('unmaskedvalue')) || 0;
+                });
+                $('[name="totalraw"]').val(total).change();
+            }
+            function hitungGrandTotal() {
+                const diskon = parseFloat($('[name="diskon"]').inputmask('unmaskedvalue')) || 0;
+                const total = parseInt($('[name="totalraw"]').inputmask('unmaskedvalue')) || 0;
+                $('[name="total"]').val(total*(1-diskon/100));
+            }
+            $("#has-many-pembelianDetail").on('click', '.remove', function () {
+                console.info('hit');
+                hitungTotal();
+            });
+            $('.pembelianDetail[name*="harga"],.pembelianDetail[name*="qty"],.pembelianDetail[name*="diskon"]').on('change', function (e) {
+                hitungProdukTotal(e);
+            });
+            $('.pembelianDetail[name*="total"]').on('change', function (e) {
+                hitungTotal();
+            });
+            $("#has-many-pembelianDetail").on('click', '.add', function () {
+                $(".pembelianDetail.kode_produkvarian").on('select2:select', function (e) {
+                    const kode = e.params.data.id;
+                    const idGudang = $('select[name="id_gudang"]').val();
+                    $.ajax({
+                        url: '$urlGetDetailProduk',
+                        type: 'GET',
+                        data: {
+                            kode_produkvarian: kode,
+                            id_gudang: idGudang
+                        },
+                        success: function(data) {
+                            // Jika permintaan berhasil
+                            console.log('Data berhasil diterima:', data);
+                            if (data?.porduk_persediaan) {
+                                $(e.target).closest('tr').find('[name*="harga"]').val(data.porduk_persediaan[0].produk_varian_harga.hargabeli);
+                            } else {
+                                $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_varian_harga[0].hargabeli);
+                            }
+                            if (!$(e.target).closest('tr').find('[name*="qty"]').val()) {
+                                $(e.target).closest('tr').find('[name*="qty"]').val(1);
+                            }
+                            hitungProdukTotal(e);
+                            hitungTotal(e);
+                        },
+                        error: function(jqXHR, textStatus, errorThrown) {
+                            // Menangani kesalahan
+                            switch (jqXHR.status) {
+                                case 404:
+                                    console.log('Error 404: Tidak ditemukan.');
+                                    break;
+                                case 500:
+                                    console.log('Error 500: Kesalahan server.');
+                                    break;
+                                default:
+                                    console.log('Kesalahan: ' + textStatus);
+                                    break;
+                            }
+                        }
+                    });
+                });
+                $('.pembelianDetail[name*="harga"],.pembelianDetail[name*="qty"],.pembelianDetail[name*="diskon"]').on('change', function (e) {
+                    hitungProdukTotal(e);
+                });
+                $('.pembelianDetail[name*="total"]').on('change', function (e) {
+                    hitungTotal();
+                });
+            });
+            $('[name="totalraw"],[name="diskon"]').on('change', function () {
+                hitungGrandTotal();
+            });
         SCRIPT;
         Admin::script($scriptDereferred, true);
         $pembelian = new Pembelian();
+        if ($pembelian->has('pembelianInvoice')->where('id_pembelian', $idPembelian)->first()) {
+            admin_toastr('Pembelian sudah di-invoice, perubahan tidak diizinkan', 'warning');
+            return redirect()->route(admin_get_route('purchase.order.detail'), ['idPembelian' => $idPembelian]);
+        }
         return $content
             ->title('Order Pembelian')
-            ->description('Buat')
-            ->body($this->createPurchaseOrderForm($pembelian));
+            ->description('Ubah')
+            ->body($this->editPurchaseOrderForm($pembelian, $idPembelian));
+    }
+
+    public function storePurchaseOrder(Request $request) {
+        try {
+            $this->purchaseOrderService->storePurchaseOrder($request->all());
+            admin_toastr('Sukses buat transaksi pembelian');
+            return redirect()->route(admin_get_route('purchase.order.create'));
+        } catch (ValidationException $e) {
+            return $e->validator->getMessageBag();
+        } catch (\Exception $e) {
+            throw $e;
+        }
+    }
+    public function updatePurchaseOrder(Request $request, $idPembelian) {
+        try {
+            $this->purchaseOrderService->updatePurchaseOrder($idPembelian, $request->all());
+            admin_toastr('Sukses memperbarui transaksi pembelian');
+            return redirect()->route(admin_get_route('purchase.order.detail'), ['idPembelian' => $idPembelian]);
+        } catch (ValidationException $e) {
+            return $e->validator->getMessageBag();
+        } catch (\Exception $e) {
+            throw $e;
+        }
+    }
+    public function toInvoicePurchaseOrder(Request $request, $idPembelian) {
+        dd($request->all());
     }
 }

@@ -1,0 +1,3 @@
+﻿alter table toko_griyanaura.tr_pembelian add column id_gudang int references toko_griyanaura.lv_gudang(id_gudang) on update cascade on delete restrict;
+alter table toko_griyanaura.tr_pembeliandetail add column id_gudang int references toko_griyanaura.lv_gudang(id_gudang) on update cascade on delete restrict;
+alter table toko_griyanaura.tr_pembeliandetail add column id_pembeliandetailparent int references toko_griyanaura.tr_pembeliandetail(id_pembeliandetail) on update cascade on delete restrict;

@@ -55,7 +55,12 @@ Route::group([
         Route::match(['post', 'delete'],'/delete/{idPenyesuaianGudang}', [ProdukPenyesuaianController::class, 'deleteProdukPenyesuaian'])->name('produk-penyesuaian.delete');
     });
     Route::prefix('/purchase')->group(function () {
-        Route::get('/order/create', [PurchaseController::class, 'createPurchaseOrder']);
+        Route::get('/order/create', [PurchaseController::class, 'createPurchaseOrder'])->name('purchase.order.create');
+        Route::get('/order/detail/{idPembelian}', [PurchaseController::class, 'detailPurchaseOrder'])->name('purchase.order.detail');
+        Route::get('/order/edit/{idPembelian}', [PurchaseController::class, 'editPurchaseOrder'])->name('purchase.order.edit');
+        Route::post('/order/store', [PurchaseController::class, 'storePurchaseOrder'])->name('purchase.order.store');
+        Route::post('/order/to-invoice/{idPembelian}', [PurchaseController::class, 'toInvoicePurchaseOrder'])->name('purchase.order.to-invoice');
+        Route::put('/order/update/{idPembelian}', [PurchaseController::class, 'updatePurchaseOrder'])->name('purchase.order.update');
     });
     Route::prefix('ajax')->group(function () {
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');
