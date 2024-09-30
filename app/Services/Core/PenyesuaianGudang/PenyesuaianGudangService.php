@@ -156,7 +156,7 @@ class PenyesuaianGudangService
                         'id_persediaan' => $produk->produkPersediaan->id_persediaan,
                         'tanggal' => $penyesuaianGudang->tanggal,
                         'keterangan' => "#{$penyesuaianGudang->transaksi_no} Penyesuaian stok",
-                        'stok_in' => $produk->selisih,
+                        'stok_in' => abs($produk->selisih),
                         'hargabeli' => $produk->harga_modal
                     ]);
                     $detailTransaksi = [
@@ -178,7 +178,7 @@ class PenyesuaianGudangService
                         'id_persediaan' => $produk->produkPersediaan->id_persediaan,
                         'tanggal' => $penyesuaianGudang->tanggal,
                         'keterangan' => "#{$penyesuaianGudang->transaksi_no} Penyesuaian stok",
-                        'stok_out' => $produk->selisih,
+                        'stok_out' => abs($produk->selisih),
                         'hargabeli' => $produk->harga_modal
                     ]);
                     $detailTransaksi = [

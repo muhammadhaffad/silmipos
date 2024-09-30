@@ -2,6 +2,7 @@
 
 namespace App\Admin\Controllers;
 
+use App\Exceptions\PurchaseOrderException;
 use App\Models\Dynamic;
 use App\Models\Pembelian;
 use App\Services\Core\Purchase\PurchaseOrderService;
@@ -35,8 +36,8 @@ class PurchaseController extends AdminController
         });
         $form->column(12, function (Form $form) {
             $form->text('transaksi_no', 'No. Transaksi')->placeholder('[AUTO]')->setLabelClass(['text-nowrap'])->withoutIcon()->width('100%')->setWidth(2,8);
-            $form->datetime('tanggal', 'Tanggal')->required()->width('100%')->setWidth(3, 7)->value(date('Y-m-d H:i:s'));
-            $form->select('id_gudang', 'Gudang')->required()->width('100%')->setWidth(3, 7)->options(DB::table('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang'))->default(1);
+            $form->datetime('tanggal', 'Tanggal')->required()->width('100%')->setWidth(2, 8)->value(date('Y-m-d H:i:s'));
+            $form->select('id_gudang', 'Gudang')->required()->width('100%')->setWidth(2, 8)->options(DB::table('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang'))->default(1);
         });
         $form->column(12, function (Form $form) {
             $form->tablehasmany('pembelianDetail', function (NestedForm $form) {
@@ -66,6 +67,8 @@ class PurchaseController extends AdminController
             $tools->disableList();
             $tools->disableView();
             $tools->disableDelete();
+            $tools->append($tools->renderDelete(route(admin_get_route('purchase.order.delete'), ['idPembelian' => $idPembelian])));
+            $tools->append($tools->renderEdit(route(admin_get_route('purchase.order.edit'), ['idPembelian' => $idPembelian])));
             $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
@@ -79,14 +82,67 @@ class PurchaseController extends AdminController
         $form->column(12, function (Form $form) use ($data) {
             $form->tablehasmany('pembelianDetail', function (NestedForm $form) {
                 $data = $form->model();
-                $form->html("<input type='checkbox' name='pembelianDetail[{$data?->id_pembeliandetail}][check]' value='{$data?->id_pembeliandetail}'>", '<input id="checkAll" type="checkbox">');
+                $form->html($data?->produkVarian?->varian, 'Produk')->required();
+                $form->text('qty', 'Qty')->customFormat(function ($val) {
+                    return number($val);
+                })->disable()->attribute('type', 'number')->withoutIcon()->required()->setGroupClass('w-100px');
+                $form->currency('harga', 'Harga')->disable()->required()->symbol('Rp');
+                $form->currency('diskon', 'Diskon')->disable()->symbol('%');
+                $form->currency('total', 'Total')->disable()->symbol('Rp')->readonly();
+            })->value($data->pembelianDetail->toArray())->useTable()->disableCreate()->disableDelete();
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->currency('totalraw', 'Sub total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->totalraw);
+            $form->currency('diskon')->setWidth(2, 8)->width('100%')->symbol('%')->readonly()->value($data->diskon);
+            $form->currency('total', 'Total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->grandtotal);
+            $form->textarea('catatan')->setWidth(4)->readonly()->value($data->catatan);
+        });
+        $form->disableCreatingCheck();
+        $form->disableEditingCheck();
+        $form->disableViewCheck();
+        $form->disableSubmit();
+        $form->disableReset();
+
+        return $form;
+    }
+    public function toInvoicePurchaseOrderForm($model, $idPembelian) {
+        $form = new Form($model);
+        $form->setAction(route(admin_get_route('purchase.order.to-invoice.store'), ['idPembelian' => $idPembelian]));
+        $data = $form->model()->with(['kontak','pembelianDetail' => function ($rel) {
+            $rel->leftJoin(DB::raw("(select id_pembeliandetailparent, sum(qty) as jumlah_diinvoice from toko_griyanaura.tr_pembeliandetail where id_pembeliandetailparent is not null group by id_pembeliandetailparent) as x"), 'x.id_pembeliandetailparent', 'toko_griyanaura.tr_pembeliandetail.id_pembeliandetail');
+            $rel->with('produkVarian');
+        } ])->where('id_pembelian', $idPembelian)->join(DB::raw("(select id_gudang, nama as nama_gudang from toko_griyanaura.lv_gudang) as gdg"), 'gdg.id_gudang', 'toko_griyanaura.tr_pembelian.id_gudang')->first();
+        $form->tools(function (Tools $tools) use ($idPembelian, $data) {
+            $tools->disableList();
+            $tools->disableView();
+            $tools->disableDelete();
+            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Supplier')->setWidth(3);
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->html("<div style='padding-top: 7px;'>#{$data->transaksi_no}</div>", 'No. Transaksi')->setWidth(2, 8);
+            $form->html("<div style='padding-top: 7px;'>{$data->tanggal}</div>", 'Tanggal')->setWidth(2, 8);
+            $form->datetime("tanggaltempo", 'Tanggal Tempo')->required()->setWidth(2, 8)->width('100%')->value(date('Y-m-d H:i:s', strtotime($data->tanggal . ' +1 day')));
+            $form->html("<div style='padding-top: 7px;'>{$data->nama_gudang}</div>", 'Gudang')->setWidth(2, 8);
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->tablehasmany('pembelianDetail', function (NestedForm $form) {
+                $data = $form->model();
+                $checkDisable = $data?->jumlah_diinvoice == $data?->qty;
+                if (!$checkDisable) {
+                    $form->html("<input type='checkbox' name='pembelianDetail[{$data?->id_pembeliandetail}][check]' value='{$data?->id_pembeliandetail}'>", '<input id="checkAll" type="checkbox">');
+                } else {
+                    $form->html("<input type='checkbox' disabled>", '<input id="checkAll" type="checkbox">');
+                }
                 $form->html($data?->produkVarian?->varian, 'Produk')->required();
                 $form->html(number($data?->jumlah_diinvoice ?: 0) . ' / ' . number($data?->qty), 'Qty')->setGroupClass('w-100px');
-                if ($data?->jumlah_diinvoice == $data?->qty and $data != null) {
+                if ($data?->jumlah_diinvoice >= $data?->qty and $data != null) {
                     $form->html('-', '');
                 } else {
-                    $form->text('qty', '')->customFormat(function ($val) {
-                        return number($val);
+                    $form->text('qty', '')->customFormat(function ($val) use ($data) {
+                        return number($val - $data?->jumlah_diinvoice);
                     })->attribute('type', 'number')->withoutIcon()->required()->setGroupClass('w-100px');
                 }
                 $form->currency('harga', 'Harga')->disable()->required()->symbol('Rp');
@@ -288,6 +344,82 @@ class PurchaseController extends AdminController
             [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
                 position: -webkit-sticky;
                 position: sticky;
+                left: 0;
+                background: white;
+                z-index: 20;
+                width: 200px;
+            }
+            [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
+                position: -webkit-sticky;
+                position: sticky;
+                right: 0px;
+                background: white;
+                z-index: 10;
+            }
+            [id^="has-many-"] .form-group:has(.add) {
+                width: 100%;
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0px;
+                background: white;
+                z-index: 10;
+            }
+            [class*='col-md-'] {
+                margin-bottom: 2rem;
+            }
+        STYLE;
+        Admin::style($style);
+        $script = <<<SCRIPT
+            $('select.form-control').each(function () {
+                const select = this;
+                const defaultValue = select.dataset.value.split(',');
+                const defaultUrl = select.dataset.url;
+                defaultValue.forEach(function (value) {
+                    $.ajax({
+                        type: 'GET',
+                        url: defaultUrl + '?id=' + value
+                    }).then(function (data) {
+                        const option = new Option(data.text, data.id, true, true);
+                        $(select).append(option).trigger('change');
+                        $(select).trigger({
+                            type: 'select2:select',
+                            params: {
+                                data: data
+                            }
+                        });
+                    });
+                })
+            });
+        SCRIPT;
+        Admin::script($script);
+        $pembelian = new Pembelian();
+        if (!$pembelian->where('id_pembelian', $idPembelian)->where('jenis', 'order')->first()) {
+            abort(404);
+        }
+        return $content
+            ->title('Order Pembelian')
+            ->description('Detail')
+            ->body($this->detailPurchaseOrderForm($pembelian, $idPembelian));
+    }
+    public function toInvoicePurchaseOrder(Content $content, $idPembelian) {
+        $style = <<<STYLE
+            .input-group {
+                width: 100% !important;   
+            }
+            .w-200px {
+                width: 200px;
+            }
+            .w-100px {
+                width: 100px;
+            }
+            [id^="has-many-"] {
+                position: relative;
+                overflow: auto;
+                white-space: nowrap;
+            }
+            [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
+                position: -webkit-sticky;
+                position: sticky;
                 left: 0px;
                 background: white;
                 z-index: 20;
@@ -376,10 +508,13 @@ class PurchaseController extends AdminController
         SCRIPT;
         Admin::script($script);
         $pembelian = new Pembelian();
+        if (!$pembelian->where('id_pembelian', $idPembelian)->where('jenis', 'order')->first()) {
+            abort(404);
+        }
         return $content
             ->title('Order Pembelian')
-            ->description('Detail')
-            ->body($this->detailPurchaseOrderForm($pembelian, $idPembelian));
+            ->description('Ke invoice')
+            ->body($this->toInvoicePurchaseOrderForm($pembelian, $idPembelian));
     }
     public function editPurchaseOrder(Content $content, $idPembelian) {
         $style = <<<STYLE
@@ -568,6 +703,9 @@ class PurchaseController extends AdminController
         SCRIPT;
         Admin::script($scriptDereferred, true);
         $pembelian = new Pembelian();
+        if (!$pembelian->where('id_pembelian', $idPembelian)->where('jenis', 'order')->first()) {
+            abort(404);
+        }
         if ($pembelian->has('pembelianInvoice')->where('id_pembelian', $idPembelian)->first()) {
             admin_toastr('Pembelian sudah di-invoice, perubahan tidak diizinkan', 'warning');
             return redirect()->route(admin_get_route('purchase.order.detail'), ['idPembelian' => $idPembelian]);
@@ -580,9 +718,9 @@ class PurchaseController extends AdminController
 
     public function storePurchaseOrder(Request $request) {
         try {
-            $this->purchaseOrderService->storePurchaseOrder($request->all());
+            $result = $this->purchaseOrderService->storePurchaseOrder($request->all());
             admin_toastr('Sukses buat transaksi pembelian');
-            return redirect()->route(admin_get_route('purchase.order.create'));
+            return redirect()->route(admin_get_route('purchase.order.detail'), ['idPembelian' => $result->id_pembelian]);
         } catch (ValidationException $e) {
             return $e->validator->getMessageBag();
         } catch (\Exception $e) {
@@ -600,7 +738,31 @@ class PurchaseController extends AdminController
             throw $e;
         }
     }
-    public function toInvoicePurchaseOrder(Request $request, $idPembelian) {
-        dd($request->all());
+    public function storeToInvoicePurchaseOrder(Request $request, $idPembelian) {
+        try {
+            $this->purchaseOrderService->storeToInvoicePurchaseOrder($idPembelian, $request->all());
+            admin_toastr('Sukses buat invoice pembelian');
+            return redirect()->route(admin_get_route('purchase.order.create'));
+        } catch (ValidationException $e) {
+            return $e->validator->getMessageBag();
+        } catch (\Exception $e) {
+            throw $e;
+        }
+    }
+    public function deletePurchaseOrder(Request $request, $idPembelian) {
+        try {
+            $this->purchaseOrderService->deletePurchaseOrder($idPembelian);
+            admin_toastr('Sukses hapus penyesuaian gudang');
+            return [
+                'status' => true,
+                'then' => ['action' => 'refresh', 'value' => true],
+                'message' => 'Sukses hapus penyesuaian gudang'
+            ];
+        } catch (PurchaseOrderException $e) {
+            admin_toastr($e->getMessage(), 'warning');
+            return redirect()->back();
+        } catch (\Exception $e) {
+            throw $e;
+        }
     }
 }

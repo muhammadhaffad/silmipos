@@ -40,7 +40,7 @@ class AjaxController extends Controller
     }
     public function getProduk(Request $request) {
         $q = $request->get('q');
-        $subQuery = ProdukVarian::select(['toko_griyanaura.ms_produkvarian.kode_produkvarian as kode_produkvarian', DB::raw("toko_griyanaura.ms_produkvarian.kode_produkvarian || ' - ' || p.nama || ' ' || string_agg(av.nama, ' ' order by pav.id_produkattributvalue) as text")])
+        $subQuery = ProdukVarian::select(['toko_griyanaura.ms_produkvarian.kode_produkvarian as kode_produkvarian', DB::raw("toko_griyanaura.ms_produkvarian.kode_produkvarian || ' - ' || p.nama || ' ' || string_agg(coalesce(av.nama, ''), ' ' order by pav.id_produkattributvalue) as text")])
             ->leftJoin('toko_griyanaura.ms_produk as p', 'p.id_produk', 'toko_griyanaura.ms_produkvarian.id_produk')
             ->leftJoin('toko_griyanaura.ms_produkattributvarian as pav', 'pav.kode_produkvarian', 'toko_griyanaura.ms_produkvarian.kode_produkvarian')
             ->leftJoin('toko_griyanaura.lv_attributvalue as av', 'pav.id_attributvalue', 'av.id_attributvalue')
