@@ -307,14 +307,15 @@ HTML;
      *
      * @return string
      */
-    public function renderEdit($path, $text = null)
+    public function renderEdit($path, $text = null, $icon = null)
     {
         $edit = ($text) ?: trans('admin.edit');
+        $icon = ($icon) ?: 'fa-edit';
 
         return <<<HTML
 <div class="btn-group pull-right" style="margin-right: 5px">
     <a href="{$this->getEditPath($path)}" class="btn btn-sm btn-success" title="{$edit}">
-        <i class="fa fa-edit"></i><span class="hidden-xs"> {$edit}</span>
+        <i class="fa {$icon}"></i><span class="hidden-xs"> {$edit}</span>
     </a>
 </div>
 HTML;

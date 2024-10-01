@@ -172,12 +172,9 @@ class PurchaseOrderService
     }
     public function deletePurchaseOrder($idPembelian)
     {
-        if ((new Pembelian())->where('id_pembelian', $idPembelian)->has('pembelianInvoice')->first()) {
-            abort(403);
-        }
         DB::beginTransaction();
         try {
-            if (!Pembelian::where('id_pembelian', $idPembelian)->has('pembelianInvoice')->first()) {
+            if (Pembelian::where('id_pembelian', $idPembelian)->has('pembelianInvoice')->first()) {
                 throw new PurchaseOrderException('Pembelian order sudah di-invoice, penghapusan tidak diizinkan');
             }
             PembelianDetail::where('id_pembelian', $idPembelian)->delete();
@@ -244,7 +241,7 @@ class PurchaseOrderService
             $pembelianInvoice = Pembelian::with('pembelianDetail.produkVarian.produk')->find($pembelianInvoice->id_pembelian);
             $detailTransaksi = [];
             foreach ($pembelianInvoice->pembelianDetail as $item) {
-                if ($item->produk->in_stok == true) {
+                if ($item->produkVarian->produk->in_stok == true) {
                     $persediaanProduk = ProdukPersediaan::where('kode_produkvarian', $item['kode_produkvarian'])->where('id_gudang', $item['id_gudang'])->first();
                     if (!$persediaanProduk) {
                         if (ProdukVarianHarga::where('kode_produkvarian', $item['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $item['id_gudang'])->first()) {

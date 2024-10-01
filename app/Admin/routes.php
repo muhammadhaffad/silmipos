@@ -62,7 +62,7 @@ Route::group([
         Route::post('/order/store', [PurchaseController::class, 'storePurchaseOrder'])->name('purchase.order.store');
         Route::post('/order/to-invoice/store/{idPembelian}', [PurchaseController::class, 'storeToInvoicePurchaseOrder'])->name('purchase.order.to-invoice.store');
         Route::put('/order/update/{idPembelian}', [PurchaseController::class, 'updatePurchaseOrder'])->name('purchase.order.update');
-        Route::put('/order/delete/{idPembelian}', [PurchaseController::class, 'deletePurchaseOrder'])->name('purchase.order.delete');
+        Route::match(['delete', 'post'], '/order/delete/{idPembelian}', [PurchaseController::class, 'deletePurchaseOrder'])->name('purchase.order.delete');
     });
     Route::prefix('ajax')->group(function () {
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');

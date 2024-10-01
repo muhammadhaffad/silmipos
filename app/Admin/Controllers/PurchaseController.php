@@ -67,8 +67,9 @@ class PurchaseController extends AdminController
             $tools->disableList();
             $tools->disableView();
             $tools->disableDelete();
-            $tools->append($tools->renderDelete(route(admin_get_route('purchase.order.delete'), ['idPembelian' => $idPembelian])));
+            $tools->append($tools->renderDelete(route(admin_get_route('purchase.order.delete'), ['idPembelian' => $idPembelian]), listPath: route(admin_get_route('purchase.order.create'))));
             $tools->append($tools->renderEdit(route(admin_get_route('purchase.order.edit'), ['idPembelian' => $idPembelian])));
+            $tools->append($tools->renderEdit(route(admin_get_route('purchase.order.to-invoice'), ['idPembelian' => $idPembelian]), text: 'Buat ke invoice', icon: 'fa-file-text'));
             $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
@@ -116,6 +117,8 @@ class PurchaseController extends AdminController
             $tools->disableList();
             $tools->disableView();
             $tools->disableDelete();
+            $tools->append($tools->renderDelete(route(admin_get_route('purchase.order.delete'), ['idPembelian' => $idPembelian]), listPath: route(admin_get_route('purchase.order.create'))));
+            $tools->append($tools->renderView(route(admin_get_route('purchase.order.detail'), ['idPembelian' => $idPembelian])));
             $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
@@ -170,6 +173,14 @@ class PurchaseController extends AdminController
         $form->builder()->setMode('edit');
         $form->setAction(route(admin_get_route('purchase.order.update'), ['idPembelian' => $idPembelian]));
         $data = $form->model()->with('pembelianDetail')->where('id_pembelian', $idPembelian)->first();
+        $form->tools(function (Tools $tools) use ($idPembelian, $data) {
+            $tools->disableList();
+            $tools->disableView();
+            $tools->disableDelete();
+            $tools->append($tools->renderDelete(route(admin_get_route('purchase.order.delete'), ['idPembelian' => $idPembelian]), listPath: route(admin_get_route('purchase.order.create'))));
+            $tools->append($tools->renderView(route(admin_get_route('purchase.order.detail'), ['idPembelian' => $idPembelian])));
+            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+        });
         $form->column(12, function (Form $form) use ($data) {
             $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak')))->attribute([
                 'data-url' => route(admin_get_route('ajax.kontak')),
@@ -752,15 +763,19 @@ class PurchaseController extends AdminController
     public function deletePurchaseOrder(Request $request, $idPembelian) {
         try {
             $this->purchaseOrderService->deletePurchaseOrder($idPembelian);
-            admin_toastr('Sukses hapus penyesuaian gudang');
+            admin_toastr('Sukses hapus order pembelian');
             return [
                 'status' => true,
                 'then' => ['action' => 'refresh', 'value' => true],
-                'message' => 'Sukses hapus penyesuaian gudang'
+                'message' => 'Sukses hapus order pembelian'
             ];
         } catch (PurchaseOrderException $e) {
             admin_toastr($e->getMessage(), 'warning');
-            return redirect()->back();
+            return [
+                'status' => false,
+                'then' => ['action' => 'refresh', 'value' => true],
+                'message' => $e->getMessage()
+            ];
         } catch (\Exception $e) {
             throw $e;
         }
