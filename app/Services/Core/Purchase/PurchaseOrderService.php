@@ -10,6 +10,7 @@ use App\Models\ProdukPersediaanDetail;
 use App\Models\ProdukVarianHarga;
 use App\Models\Transaksi;
 use App\Services\Core\Jurnal\JurnalService;
+use Encore\Admin\Facades\Admin;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
@@ -39,6 +40,9 @@ class PurchaseOrderService
             $transaksi = Transaksi::create([
                 'transaksi_no' => $noTransaksi,
                 'id_transaksijenis' => 'pembelian_order',
+                'tanggal' => $request['tanggal'],
+                'inserted_by' => Admin::user()->username,
+                'updated_by' => Admin::user()->username
             ]);
             $pembelian = Pembelian::create([
                 'id_transaksi' => $transaksi->id_transaksi,
@@ -198,13 +202,16 @@ class PurchaseOrderService
             $transaksi = Transaksi::create([
                 'transaksi_no' => $noTransaksi,
                 'id_transaksijenis' => 'pembelian_invoice',
+                'tanggal' => $request['tanggal'],
+                'inserted_by' => Admin::user()->username,
+                'updated_by' => Admin::user()->username
             ]);
             $pembelianInvoice = Pembelian::create([
                 'id_transaksi' => $transaksi->id_transaksi,
                 'id_kontak' => $pembelian->id_kontak,
                 'jenis' => 'invoice',
                 'transaksi_no' => $noTransaksi,
-                'tanggal' => $pembelian->tanggal,
+                'tanggal' => $request['tanggal'],
                 'tanggaltempo' => $request['tanggaltempo'],
                 'catatan' => $pembelian->catatan,
                 'diskonjenis' => 'persen',
@@ -264,14 +271,16 @@ class PurchaseOrderService
                         'tanggal' => $pembelianInvoice->tanggal,
                         'keterangan' => "#{$pembelianInvoice->transaksi_no} Invoice Pembelian",
                         'stok_in' => $item->qty,
-                        'hargabeli' => (int)($item->harga * (1-$item->diskon/100) * (1-$pembelianInvoice->diskon/100))
+                        'hargabeli' => (int)($item->harga * (1-$item->diskon/100) * (1-$pembelianInvoice->diskon/100)),
+                        'ref_id' => $item->id_pembeliandetail
                     ]);
                 }
                 $detailTransaksi[] = [
                     'kode_akun' => $item->produkVarian->produk->default_akunpersediaan,
                     'keterangan' => $item->produkVarian->varian,
                     'nominaldebit' => (int)($item->qty * $item->harga * (1-$item->diskon/100) * (1-$pembelianInvoice->diskon/100)),
-                    'nominalkredit' => 0
+                    'nominalkredit' => 0,
+                    'ref_id' => $item->id_pembeliandetail
                 ];
             }
             $detailTransaksi[] = [

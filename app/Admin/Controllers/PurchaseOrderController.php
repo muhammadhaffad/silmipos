@@ -20,7 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
-class PurchaseController extends AdminController
+class PurchaseOrderController extends AdminController
 {
     protected $purchaseOrderService;
     public function __construct(PurchaseOrderService $purchaseOrderService)
@@ -126,8 +126,8 @@ class PurchaseController extends AdminController
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->html("<div style='padding-top: 7px;'>#{$data->transaksi_no}</div>", 'No. Transaksi')->setWidth(2, 8);
-            $form->html("<div style='padding-top: 7px;'>{$data->tanggal}</div>", 'Tanggal')->setWidth(2, 8);
-            $form->datetime("tanggaltempo", 'Tanggal Tempo')->required()->setWidth(2, 8)->width('100%')->value(date('Y-m-d H:i:s', strtotime($data->tanggal . ' +1 day')));
+            $form->datetime("tanggal", 'Tanggal')->required()->setWidth(2, 8)->width('100%')->value(date('Y-m-d H:i:s'));
+            $form->datetime("tanggaltempo", 'Tanggal Tempo')->required()->setWidth(2, 8)->width('100%')->value(date('Y-m-d H:i:s', strtotime(date('Y-m-d H:i:s') . ' +1 day')));
             $form->html("<div style='padding-top: 7px;'>{$data->nama_gudang}</div>", 'Gudang')->setWidth(2, 8);
         });
         $form->column(12, function (Form $form) use ($data) {

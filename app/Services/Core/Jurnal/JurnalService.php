@@ -22,6 +22,9 @@ Trait JurnalService {
         foreach ($detailTransaksi as &$tr) {
             $tr['id_transaksi'] = $transaksi['id_transaksi'];
             $tr['tanggal'] = $transaksi['tanggal'];
+            if (!isset($tr['ref_id'])) {
+                $tr['ref_id'] = null;
+            }
             $totalDebit += $tr['nominaldebit'];
             $totalKredit += $tr['nominalkredit'];
         }

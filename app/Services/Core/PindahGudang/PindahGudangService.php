@@ -371,14 +371,16 @@ class PindahGudangService
                     'tanggal' => $dataPindahGudang->tanggal,
                     'keterangan' => "#{$dataPindahGudang->transaksi_no} Pindah Gudang ke " . $dataPindahGudang->nama_togudang,
                     'stok_out' => $produk['jumlah'],
-                    'hargabeli' => (int)$produk['harga_modal_dari_gudang']
+                    'hargabeli' => (int)$produk['harga_modal_dari_gudang'],
+                    'ref_id' => $produk->id_pindahgudangdetail
                 ]);
                 $dataKePersediaanDetail = ProdukPersediaanDetail::create([
                     'id_persediaan' => $dataKePersediaan->id_persediaan,
                     'tanggal' => $dataPindahGudang->tanggal,
                     'keterangan' => "#{$dataPindahGudang->transaksi_no} Pindah Gudang dari " . $dataPindahGudang->nama_fromgudang,
                     'stok_in' => $produk['jumlah'],
-                    'hargabeli' => (int)$produk['harga_modal_ke_gudang']
+                    'hargabeli' => (int)$produk['harga_modal_ke_gudang'],
+                    'ref_id' => $produk->id_pindahgudangdetail
                 ]);
                 if ($produk['harga_modal_dari_gudang'] > $produk['harga_modal_ke_gudang']) {
                     $detailTransaksi = [
@@ -386,19 +388,22 @@ class PindahGudangService
                             'kode_akun' => '1301',
                             'keterangan' => $dataPindahGudang->keterangan ?: $defaultKeterangan . ' ' . $produk['kode_produkvarian'],
                             'nominaldebit' => (int)($produk['jumlah'] * $produk['harga_modal_ke_gudang']),
-                            'nominalkredit' => 0
+                            'nominalkredit' => 0,
+                            'ref_id' => $produk['id_pindahgudangdetail']
                         ],
                         [
                             'kode_akun' => '1301',
                             'keterangan' => $dataPindahGudang->keterangan ?: $defaultKeterangan . ' ' . $produk['kode_produkvarian'],
                             'nominaldebit' => 0,
                             'nominalkredit' => (int)($produk['jumlah'] * $produk['harga_modal_dari_gudang']),
+                            'ref_id' => $produk['id_pindahgudangdetail']
                         ],
                         [
                             'kode_akun' => '4006',
                             'keterangan' => $dataPindahGudang->keterangan ?: $defaultKeterangan . ' ' . $produk['kode_produkvarian'],
                             'nominaldebit' => (int)($produk['jumlah'] * ($produk['harga_modal_dari_gudang'] - $produk['harga_modal_ke_gudang'])),
                             'nominalkredit' => 0,
+                            'ref_id' => $produk['id_pindahgudangdetail']
                         ],
                     ];
                 } else if ($produk['harga_modal_dari_gudang'] < $produk['harga_modal_ke_gudang']) {
@@ -407,19 +412,22 @@ class PindahGudangService
                             'kode_akun' => '1301',
                             'keterangan' => $dataPindahGudang->keterangan ?: $defaultKeterangan,
                             'nominaldebit' => (int)($produk['jumlah'] * $produk['harga_modal_ke_gudang']),
-                            'nominalkredit' => 0
+                            'nominalkredit' => 0,
+                            'ref_id' => $produk['id_pindahgudangdetail']
                         ],
                         [
                             'kode_akun' => '1301',
                             'keterangan' => $dataPindahGudang->keterangan ?: $defaultKeterangan,
                             'nominaldebit' => 0,
                             'nominalkredit' => (int)($produk['jumlah'] * $produk['harga_modal_dari_gudang']),
+                            'ref_id' => $produk['id_pindahgudangdetail']
                         ],
                         [
                             'kode_akun' => '6202',
                             'keterangan' => $dataPindahGudang->keterangan ?: $defaultKeterangan,
                             'nominaldebit' => 0,
                             'nominalkredit' => (int)($produk['jumlah'] * ($produk['harga_modal_ke_gudang'] - $produk['harga_modal_dari_gudang'])),
+                            'ref_id' => $produk['id_pindahgudangdetail']
                         ],
                     ];
                 }

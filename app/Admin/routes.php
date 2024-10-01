@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\Route;
 use App\Admin\Controllers\ProdukController;
 use App\Admin\Controllers\ProdukMutasiController;
 use App\Admin\Controllers\ProdukPenyesuaianController;
-use App\Admin\Controllers\PurchaseController;
+use App\Admin\Controllers\PurchaseInvoiceController;
+use App\Admin\Controllers\PurchaseOrderController;
 use Encore\Admin\Actions\Action;
 use Encore\Admin\Actions\RowAction;
 use Encore\Admin\Facades\Admin;
@@ -55,14 +56,21 @@ Route::group([
         Route::match(['post', 'delete'],'/delete/{idPenyesuaianGudang}', [ProdukPenyesuaianController::class, 'deleteProdukPenyesuaian'])->name('produk-penyesuaian.delete');
     });
     Route::prefix('/purchase')->group(function () {
-        Route::get('/order/create', [PurchaseController::class, 'createPurchaseOrder'])->name('purchase.order.create');
-        Route::get('/order/detail/{idPembelian}', [PurchaseController::class, 'detailPurchaseOrder'])->name('purchase.order.detail');
-        Route::get('/order/edit/{idPembelian}', [PurchaseController::class, 'editPurchaseOrder'])->name('purchase.order.edit');
-        Route::get('/order/to-invoice/{idPembelian}', [PurchaseController::class, 'toInvoicePurchaseOrder'])->name('purchase.order.to-invoice');
-        Route::post('/order/store', [PurchaseController::class, 'storePurchaseOrder'])->name('purchase.order.store');
-        Route::post('/order/to-invoice/store/{idPembelian}', [PurchaseController::class, 'storeToInvoicePurchaseOrder'])->name('purchase.order.to-invoice.store');
-        Route::put('/order/update/{idPembelian}', [PurchaseController::class, 'updatePurchaseOrder'])->name('purchase.order.update');
-        Route::match(['delete', 'post'], '/order/delete/{idPembelian}', [PurchaseController::class, 'deletePurchaseOrder'])->name('purchase.order.delete');
+        Route::prefix('/order')->group(function () {
+            Route::get('/create', [PurchaseOrderController::class, 'createPurchaseOrder'])->name('purchase.order.create');
+            Route::get('/detail/{idPembelian}', [PurchaseOrderController::class, 'detailPurchaseOrder'])->name('purchase.order.detail');
+            Route::get('/edit/{idPembelian}', [PurchaseOrderController::class, 'editPurchaseOrder'])->name('purchase.order.edit');
+            Route::get('/to-invoice/{idPembelian}', [PurchaseOrderController::class, 'toInvoicePurchaseOrder'])->name('purchase.order.to-invoice');
+            Route::post('/store', [PurchaseOrderController::class, 'storePurchaseOrder'])->name('purchase.order.store');
+            Route::post('/to-invoice/store/{idPembelian}', [PurchaseOrderController::class, 'storeToInvoicePurchaseOrder'])->name('purchase.order.to-invoice.store');
+            Route::put('/update/{idPembelian}', [PurchaseOrderController::class, 'updatePurchaseOrder'])->name('purchase.order.update');
+            Route::match(['delete', 'post'], '/delete/{idPembelian}', [PurchaseOrderController::class, 'deletePurchaseOrder'])->name('purchase.order.delete');
+        });
+        Route::prefix('/invoice')->group(function () {
+            Route::get('/create', [PurchaseInvoiceController::class, 'createPurchaseInvoice'])->name('purchase.invoice.create');
+
+            Route::post('/store', [PurchaseInvoiceController::class, 'storePurchaseInvoice'])->name('purchase.invoice.store');
+        });
     });
     Route::prefix('ajax')->group(function () {
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');

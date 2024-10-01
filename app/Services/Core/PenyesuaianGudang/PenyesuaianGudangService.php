@@ -157,20 +157,23 @@ class PenyesuaianGudangService
                         'tanggal' => $penyesuaianGudang->tanggal,
                         'keterangan' => "#{$penyesuaianGudang->transaksi_no} Penyesuaian stok",
                         'stok_in' => abs($produk->selisih),
-                        'hargabeli' => $produk->harga_modal
+                        'hargabeli' => $produk->harga_modal,
+                        'ref_id' => $produk->id_penyesuaiangudangdetail
                     ]);
                     $detailTransaksi = [
                         [
                             'kode_akun' => '1301',
                             'keterangan' => $penyesuaianGudang->keterangan ?: 'Penyesuaian stok ' . $produk->kode_produkvarian,
                             'nominaldebit' => (int)(abs($produk->selisih) * $produk->harga_modal),
-                            'nominalkredit' => 0
+                            'nominalkredit' => 0,
+                            'ref_id' => $produk->id_penyesuaiangudangdetail
                         ],
                         [
                             'kode_akun' => '4006',
                             'keterangan' => $penyesuaianGudang->keterangan ?: 'Penyesuaian stok ' . $produk->kode_produkvarian,
                             'nominaldebit' => 0,
                             'nominalkredit' => (int)(abs($produk->selisih) * $produk->harga_modal),
+                            'ref_id' => $produk->id_penyesuaiangudangdetail
                         ]
                     ];
                 } else if ($produk->selisih < 0) {
@@ -179,20 +182,23 @@ class PenyesuaianGudangService
                         'tanggal' => $penyesuaianGudang->tanggal,
                         'keterangan' => "#{$penyesuaianGudang->transaksi_no} Penyesuaian stok",
                         'stok_out' => abs($produk->selisih),
-                        'hargabeli' => $produk->harga_modal
+                        'hargabeli' => $produk->harga_modal,
+                        'ref_id' => $produk->id_penyesuaiangudangdetail
                     ]);
                     $detailTransaksi = [
                         [
                             'kode_akun' => '6202',
                             'keterangan' => $penyesuaianGudang->keterangan ?: 'Penyesuaian stok ' . $produk->kode_produkvarian,
                             'nominaldebit' => (int)(abs($produk->selisih) * $produk->harga_modal),
-                            'nominalkredit' => 0
+                            'nominalkredit' => 0,
+                            'ref_id' => $produk->id_penyesuaiangudangdetail
                         ],
                         [
                             'kode_akun' => '1301',
                             'keterangan' => $penyesuaianGudang->keterangan ?: 'Penyesuaian stok ' . $produk->kode_produkvarian,
                             'nominaldebit' => 0,
                             'nominalkredit' => (int)(abs($produk->selisih) * $produk->harga_modal),
+                            'ref_id' => $produk->id_penyesuaiangudangdetail
                         ]
                     ];
                 }
