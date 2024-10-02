@@ -34,4 +34,11 @@ Trait JurnalService {
         }
         Jurnal::query()->insert($detailTransaksi);
     }
+    public function deleteJurnal(int $idTransaksi, $refId = null) {
+        $jurnal = Jurnal::where('id_transaksi', $idTransaksi);
+        if ($refId) {
+            $jurnal->where('ref_id', $refId);
+        }
+        $jurnal->delete();
+    }
 }

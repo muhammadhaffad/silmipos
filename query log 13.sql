@@ -1,0 +1,1 @@
+﻿alter table toko_griyanaura.ms_produkpersediaan add check (stok >= 0);

@@ -68,8 +68,11 @@ Route::group([
         });
         Route::prefix('/invoice')->group(function () {
             Route::get('/create', [PurchaseInvoiceController::class, 'createPurchaseInvoice'])->name('purchase.invoice.create');
+            Route::get('/edit/{idPembelian}', [PurchaseInvoiceController::class, 'editPurchaseInvoice'])->name('purchase.invoice.edit');
+            Route::get('/detail/{idPembelian}', [PurchaseInvoiceController::class, 'detailPurchaseInvoice'])->name('purchase.invoice.detail');
 
             Route::post('/store', [PurchaseInvoiceController::class, 'storePurchaseInvoice'])->name('purchase.invoice.store');
+            Route::put('/update/{idPembelian}', [PurchaseInvoiceController::class, 'updatePurchaseInvoice'])->name('purchase.invoice.update');
         });
     });
     Route::prefix('ajax')->group(function () {
