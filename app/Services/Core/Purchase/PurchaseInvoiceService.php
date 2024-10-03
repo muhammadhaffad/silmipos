@@ -59,17 +59,14 @@ class PurchaseInvoiceService
             ]);
             $rawTotal = 0;
             foreach ($request['pembelianDetail'] as $key => $item) {
-                PembelianDetail::create([
-                    'id_pembelian' => $pembelianInvoice->id_pembelian,
+                $newData = [
                     'kode_produkvarian' => $item['kode_produkvarian'],
                     'harga' => (int)$item['harga'],
                     'qty' => $item['qty'],
-                    'diskonjenis' => 'persen',
                     'diskon' => $item['diskon'] ?: 0,
-                    'total' => (int)($item['harga'] * $item['qty'] * (1 - ($item['diskon'] ?: 0) / 100)),
-                    'totalraw' => (int)$item['harga'] * $item['qty'],
                     'id_gudang' => $request['id_gudang']
-                ]);
+                ];
+                $this->storePurchaseInvoiceItem($pembelianInvoice, $newData);
                 $rawTotal += (int)($item['harga'] * $item['qty'] * (1 - ($item['diskon'] ?: 0) / 100));
             }
             $grandTotal = (int)($rawTotal * (1 - $request['diskon'] / 100));
@@ -81,33 +78,6 @@ class PurchaseInvoiceService
             $pembelianInvoice = Pembelian::with('pembelianDetail.produkVarian.produk')->find($pembelianInvoice->id_pembelian);
             $detailTransaksi = [];
             foreach ($pembelianInvoice->pembelianDetail as $item) {
-                if ($item->produkVarian->produk->in_stok == true) {
-                    $persediaanProduk = ProdukPersediaan::where('kode_produkvarian', $item['kode_produkvarian'])->where('id_gudang', $item['id_gudang'])->first();
-                    if (!$persediaanProduk) {
-                        if (ProdukVarianHarga::where('kode_produkvarian', $item['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $item['id_gudang'])->first()) {
-                            $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $item['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $item['id_gudang'])->first()->id_produkvarianharga;
-                        } else {
-                            $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $item['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', 1 /* Reguler */)->first()->id_produkvarianharga;
-                        }
-                        $persediaanProduk = ProdukPersediaan::create([
-                            'id_gudang' => $item['id_gudang'],
-                            'kode_produkvarian' => $item['kode_produkvarian'],
-                            'stok' => 0,
-                            'default_varianharga' => $defaultVarianHarga
-                        ]);
-                    }
-                    ProdukPersediaan::where('kode_produkvarian', $item->kode_produkvarian)->where('id_gudang', $item->id_gudang)->update([
-                        'stok' => DB::raw('stok +' . (int)$item->qty)
-                    ]);
-                    $dataPersediaanDetail = ProdukPersediaanDetail::create([
-                        'id_persediaan' => $persediaanProduk->id_persediaan,
-                        'tanggal' => $pembelianInvoice->tanggal,
-                        'keterangan' => "#{$pembelianInvoice->transaksi_no} Invoice Pembelian",
-                        'stok_in' => $item->qty,
-                        'hargabeli' => (int)($item->harga * (1 - $item->diskon / 100) * (1 - $pembelianInvoice->diskon / 100)),
-                        'ref_id' => $item->id_pembeliandetail
-                    ]);
-                }
                 $detailTransaksi[] = [
                     'kode_akun' => $item->produkVarian->produk->default_akunpersediaan,
                     'keterangan' => $item->produkVarian->varian,
@@ -161,7 +131,7 @@ class PurchaseInvoiceService
             ]);
             $pembelian->refresh();
             $oldItem = $pembelian->pembelianDetail->keyBy('id_pembeliandetail');
-            
+
             foreach ($request['pembelianDetail'] as $key => $item) {
                 if ($item['_remove_'] == 0) {
                     /* Jika tidak dihapus */
@@ -177,113 +147,23 @@ class PurchaseInvoiceService
                             $newData['total'] = $newData['qty'] * $newData['harga'] * (1 - $newData['diskon'] / 100);
                         }
                         if (!empty($newData)) {
-                            $qtyTelahDiretur = DB::select('(select sum(qty) as jumlah from toko_griyanaura.tr_pembelianreturdetail where id_pembeliandetail = ?)', [$item['id_pembeliandetail']])[0]->jumlah;
-                            if (DB::select('select exists(select 1 from toko_griyanaura.tr_pembelianreturdetail where id_pembeliandetail = ?)', [$item['id_pembeliandetail']])[0]->exists) {
-                                if ($newData['harga'] != $oldItem[$item['id_pembeliandetail']]->harga or $newData['diskon'] != $oldItem[$item['id_pembeliandetail']]->diskon) {
-                                    throw new PurchaseInvoiceException('Produk yang sudah diretur hanya boleh merubah jumlah saja');
-                                }
-                                if ($qtyTelahDiretur > $item['qty']) {
-                                    throw new PurchaseInvoiceException('Jumlah produk kurang dari jumlah yang diretur');
-                                }
-                            }
-                            $diBayar = DB::select('select coalesce(sum(nominal),0) as jumlah from toko_griyanaura.tr_pembelianalokasipembayaran where id_pembelianinvoice = ?', [$pembelian->id_pembelian])[0]->jumlah;
-                            $diRetur = DB::select('select coalesce(sum(grandtotal),0) as jumlah from toko_griyanaura.tr_pembelianretur where id_pembelian = ?', [$pembelian->id_pembelian])[0]->jumlah;
-                            if ($diBayar > ($pembelian->grandtotal + ($newData['total'] - $oldItem[$item['id_pembeliandetail']]->total)) or $diRetur > ($pembelian->grandtotal + ($newData['total'] - $oldItem[$item['id_pembeliandetail']]->total))) {
-                                throw new PurchaseInvoiceException('Sisa tagihan tidak boleh kurang dari 0');
-                            }
-                            /* Kurangi / Tambah Persediaan */
-                            $selisih = $newData['qty'] - $oldItem[$item['id_pembeliandetail']]['qty'];
-                            if ($selisih > 0) {
-                                $oldItem[$item['id_pembeliandetail']]->produkPersediaan->increment('stok', $selisih);
-                            } else if ($selisih < 0) {
-                                $oldItem[$item['id_pembeliandetail']]->produkPersediaan->decrement('stok', $selisih);
-                            }
-                            /* Tambah persediaan detail (untuk riwayat persediaan) */
-                            ProdukPersediaanDetail::create([
-                                'id_persediaan' => $oldItem[$item['id_pembeliandetail']]->produkPersediaan->id_persediaan,
-                                'tanggal' => $pembelian->tanggal,
-                                'keterangan' => "#{$pembelian->transaksi_no} Update item pembelian invoice",
-                                'stok_out' => $oldItem[$item['id_pembeliandetail']]->qty,
-                                'hargabeli' => (int)($oldItem[$item['id_pembeliandetail']]->harga * (1 - $oldItem[$item['id_pembeliandetail']]->diskon / 100) * (1 - $pembelian->diskon / 100)),
-                                'ref_id' => $oldItem[$item['id_pembeliandetail']]->id_pembeliandetail
-                            ]);
-                            ProdukPersediaanDetail::create([
-                                'id_persediaan' => $oldItem[$item['id_pembeliandetail']]->produkPersediaan->id_persediaan,
-                                'tanggal' => $pembelian->tanggal,
-                                'keterangan' => "#{$pembelian->transaksi_no} Update item pembelian invoice",
-                                'stok_in' => $newData['qty'],
-                                'hargabeli' => (int)($newData['harga'] * (1 - $newData['diskon'] / 100) * (1 - $pembelian->diskon / 100)),
-                                'ref_id' => $oldItem[$item['id_pembeliandetail']]->id_pembeliandetail
-                            ]);
-                            PembelianDetail::where('id_pembeliandetail', $item['id_pembeliandetail'])->update($newData);
+                            $this->updatePurchaseInvoiceItem($item['id_pembeliandetail'], $pembelian, $newData, $oldItem);
                         }
                     } else {
                         /* Jika ditambah baru */
-                        $pembelianDetail = PembelianDetail::create([
-                            'id_pembelian' => $pembelian->id_pembelian,
+                        $newData = [
                             'kode_produkvarian' => $item['kode_produkvarian'],
                             'harga' => (int)$item['harga'],
                             'qty' => $item['qty'],
-                            'diskonjenis' => 'persen',
                             'diskon' => $item['diskon'] ?: 0,
-                            'total' => (int)($item['harga'] * $item['qty'] * (1 - ($item['diskon'] ?: 0) / 100)),
-                            'totalraw' => (int)$item['harga'] * $item['qty'],
                             'id_gudang' => $request['id_gudang']
-                        ]);
-                        $produkVarian = ProdukVarian::with('produk')->where('kode_produkvarian', $item['kode_produkvarian'])->first();
-                        if ($produkVarian->produk->in_stok == true) {
-                            $persediaanProduk = ProdukPersediaan::where('kode_produkvarian', $item['kode_produkvarian'])->where('id_gudang', $item['id_gudang'])->first();
-                            if (!$persediaanProduk) {
-                                if (ProdukVarianHarga::where('kode_produkvarian', $item['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $item['id_gudang'])->first()) {
-                                    $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $item['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $item['id_gudang'])->first()->id_produkvarianharga;
-                                } else {
-                                    $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $item['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', 1 /* Reguler */)->first()->id_produkvarianharga;
-                                }
-                                $persediaanProduk = ProdukPersediaan::create([
-                                    'id_gudang' => $item['id_gudang'],
-                                    'kode_produkvarian' => $item['kode_produkvarian'],
-                                    'stok' => 0,
-                                    'default_varianharga' => $defaultVarianHarga
-                                ]);
-                            }
-                            $persediaanProduk->update([
-                                'stok' => DB::raw('stok +' . number($item['qty']))
-                            ]);
-                            $dataPersediaanDetail = ProdukPersediaanDetail::create([
-                                'id_persediaan' => $persediaanProduk->id_persediaan,
-                                'tanggal' => $pembelian->tanggal,
-                                'keterangan' => "#{$pembelian->transaksi_no} Update item pembelian invoice",
-                                'stok_in' => $item['qty'],
-                                'hargabeli' => (int)($item->harga * (1 - $item->diskon / 100) * (1 - $pembelian->diskon / 100)),
-                                'ref_id' => $pembelianDetail->id_pembeliandetail
-                            ]);
-                        }
+                        ];
+                        $this->storePurchaseInvoiceItem($pembelian, $newData);
                     }
                 } else {
+                    /* Jika dihapus */
                     if (isset($oldItem[$item['id_pembeliandetail']])) {
-                        /* Check apakah item sudah di retur */
-                        if (DB::select('select exists(select 1 from toko_griyanaura.tr_pembelianreturdetail where id_pembeliandetail = ?)', [$item['id_pembeliandetail']])[0]->exists) {
-                            throw new PurchaseInvoiceException('Terdapat item yang sudah diretur');
-                        }
-                        /* Check apakah ketika di kurangi, total tagihan akan minus (alias yang dibayar lebih) */
-                        $diBayar = DB::select('select coalesce(sum(nominal),0) as jumlah from toko_griyanaura.tr_pembelianalokasipembayaran where id_pembelianinvoice = ?', [$pembelian->id_pembelian])[0]->jumlah;
-                        $diRetur = DB::select('select coalesce(sum(grandtotal),0) as jumlah from toko_griyanaura.tr_pembelianretur where id_pembelian = ?', [$pembelian->id_pembelian])[0]->jumlah;
-                        if ($diBayar > ($pembelian->grandtotal - $oldItem[$item['id_pembeliandetail']]->total) or $diRetur > ($pembelian->grandtotal - $oldItem[$item['id_pembeliandetail']]->total)) {
-                            throw new PurchaseInvoiceException('Sisa tagihan tidak boleh kurang dari 0');
-                        }
-                        /* Kurangi persediaan */
-                        $oldItem[$item['id_pembeliandetail']]->produkPersediaan->decrement($oldItem[$item['id_pembeliandetail']]->qty);
-                        /* tambah persediaan detail (untuk riwayat keluar masuk stok) */
-                        ProdukPersediaanDetail::create([
-                            'id_persediaan' => $oldItem[$item['id_pembeliandetail']]->produkPersediaan->id_persediaan,
-                            'tanggal' => $pembelian->tanggal,
-                            'keterangan' => "#{$pembelian->transaksi_no} Delete item pembelian invoice",
-                            'stok_out' => $oldItem[$item['id_pembeliandetail']]->qty,
-                            'hargabeli' => (int)($oldItem[$item['id_pembeliandetail']]->harga * (1 - $oldItem[$item['id_pembeliandetail']]->diskon / 100) * (1 - $pembelian->diskon / 100)),
-                            'ref_id' => $oldItem[$item['id_pembeliandetail']]->id_pembeliandetail
-                        ]);
-                        /* Delete item */
-                        PembelianDetail::whereIn('id_pembeliandetail', $oldItem[$item['id_pembeliandetail']]->id_pembeliandetail)->delete();
+                        $this->deletePurchaseInvoiceItem($item['id_pembeliandetail'], $pembelian, $oldItem);
                     }
                 }
             }
@@ -326,5 +206,125 @@ class PurchaseInvoiceService
             DB::rollBack();
             throw $e;
         }
+    }
+
+    protected function storePurchaseInvoiceItem($invoice, $newData) 
+    {
+        $pembelianDetail = PembelianDetail::create([
+            'id_pembelian' => $invoice->id_pembelian,
+            'kode_produkvarian' => $newData['kode_produkvarian'],
+            'harga' => (int)$newData['harga'],
+            'qty' => $newData['qty'],
+            'diskonjenis' => 'persen',
+            'diskon' => $newData['diskon'] ?: 0,
+            'total' => (int)($newData['harga'] * $newData['qty'] * (1 - ($newData['diskon'] ?: 0) / 100)),
+            'totalraw' => (int)$newData['harga'] * $newData['qty'],
+            'id_gudang' => $newData['id_gudang']
+        ]);
+        $produkVarian = ProdukVarian::with('produk')->where('kode_produkvarian', $newData['kode_produkvarian'])->first();
+        if ($produkVarian->produk->in_stok == true) {
+            $persediaanProduk = ProdukPersediaan::where('kode_produkvarian', $newData['kode_produkvarian'])->where('id_gudang', $newData['id_gudang'])->first();
+            if (!$persediaanProduk) {
+                if (ProdukVarianHarga::where('kode_produkvarian', $newData['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $newData['id_gudang'])->first()) {
+                    $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $newData['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $newData['id_gudang'])->first()->id_produkvarianharga;
+                } else {
+                    $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $newData['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', 1 /* Reguler */)->first()->id_produkvarianharga;
+                }
+                $persediaanProduk = ProdukPersediaan::create([
+                    'id_gudang' => $newData['id_gudang'],
+                    'kode_produkvarian' => $newData['kode_produkvarian'],
+                    'stok' => 0,
+                    'default_varianharga' => $defaultVarianHarga
+                ]);
+            }
+            $persediaanProduk->update([
+                'stok' => DB::raw('stok +' . number($newData['qty']))
+            ]);
+            $dataPersediaanDetail = ProdukPersediaanDetail::create([
+                'id_persediaan' => $persediaanProduk->id_persediaan,
+                'tanggal' => $invoice->tanggal,
+                'keterangan' => "#{$invoice->transaksi_no} Update item pembelian invoice",
+                'stok_in' => $newData['qty'],
+                'hargabeli' => (int)($newData['harga'] * (1 - $newData['diskon'] / 100) * (1 - $invoice['diskon'] / 100)),
+                'ref_id' => $pembelianDetail->id_pembeliandetail
+            ]);
+        }
+    }
+
+    protected function updatePurchaseInvoiceItem($idItem, $invoice, $newData, $oldData)
+    {
+        DB::beginTransaction();
+        try {
+            $qtyTelahDiretur = DB::select('(select sum(qty) as jumlah from toko_griyanaura.tr_pembelianreturdetail where id_pembeliandetail = ?)', [$idItem])[0]->jumlah;
+            if (DB::select('select exists(select 1 from toko_griyanaura.tr_pembelianreturdetail where id_pembeliandetail = ?)', [$idItem])[0]->exists) {
+                if ($newData['harga'] != $oldData[$idItem]->harga or $newData['diskon'] != $oldData[$idItem]->diskon) {
+                    throw new PurchaseInvoiceException('Produk yang sudah diretur hanya boleh merubah jumlah saja');
+                }
+                if ($qtyTelahDiretur > $newData['qty']) {
+                    throw new PurchaseInvoiceException('Jumlah produk kurang dari jumlah yang diretur');
+                }
+            }
+            $diBayar = DB::select('select coalesce(sum(nominal),0) as jumlah from toko_griyanaura.tr_pembelianalokasipembayaran where id_pembelianinvoice = ?', [$invoice->id_pembelian])[0]->jumlah;
+            $diRetur = DB::select('select coalesce(sum(grandtotal),0) as jumlah from toko_griyanaura.tr_pembelianretur where id_pembelian = ?', [$invoice->id_pembelian])[0]->jumlah;
+            if ($diBayar > ($invoice->grandtotal + ($newData['total'] - $oldData[$idItem]->total)) or $diRetur > ($invoice->grandtotal + ($newData['total'] - $oldData[$idItem]->total))) {
+                throw new PurchaseInvoiceException('Sisa tagihan tidak boleh kurang dari 0');
+            }
+            /* Kurangi / Tambah Persediaan */
+            $selisih = $newData['qty'] - $oldData[$idItem]['qty'];
+            if ($selisih > 0) {
+                $oldData[$idItem]->produkPersediaan->increment('stok', $selisih);
+            } else if ($selisih < 0) {
+                $oldData[$idItem]->produkPersediaan->decrement('stok', $selisih);
+            }
+            /* Tambah persediaan detail (untuk riwayat persediaan) */
+            ProdukPersediaanDetail::create([
+                'id_persediaan' => $oldData[$idItem]->produkPersediaan->id_persediaan,
+                'tanggal' => $invoice->tanggal,
+                'keterangan' => "#{$invoice->transaksi_no} Update item pembelian invoice",
+                'stok_out' => $oldData[$idItem]->qty,
+                'hargabeli' => (int)($oldData[$idItem]->harga * (1 - $oldData[$idItem]->diskon / 100) * (1 - $invoice->diskon / 100)),
+                'ref_id' => $oldData[$idItem]->id_pembeliandetail
+            ]);
+            ProdukPersediaanDetail::create([
+                'id_persediaan' => $oldData[$idItem]->produkPersediaan->id_persediaan,
+                'tanggal' => $invoice->tanggal,
+                'keterangan' => "#{$invoice->transaksi_no} Update item pembelian invoice",
+                'stok_in' => $newData['qty'],
+                'hargabeli' => (int)($newData['harga'] * (1 - $newData['diskon'] / 100) * (1 - $invoice->diskon / 100)),
+                'ref_id' => $oldData[$idItem]->id_pembeliandetail
+            ]);
+            PembelianDetail::where('id_pembeliandetail', $idItem)->update($newData);
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
+
+    protected function deletePurchaseInvoiceItem($idItem, $invoice, $oldData) 
+    {
+        /* Check apakah item sudah di retur */
+        if (DB::select('select exists(select 1 from toko_griyanaura.tr_pembelianreturdetail where id_pembeliandetail = ?)', [$idItem])[0]->exists) {
+            throw new PurchaseInvoiceException('Terdapat item yang sudah diretur');
+        }
+        /* Check apakah ketika di kurangi, total tagihan akan minus (alias yang dibayar lebih) */
+        $diBayar = DB::select('select coalesce(sum(nominal),0) as jumlah from toko_griyanaura.tr_pembelianalokasipembayaran where id_pembelianinvoice = ?', [$invoice->id_pembelian])[0]->jumlah;
+        $diRetur = DB::select('select coalesce(sum(grandtotal),0) as jumlah from toko_griyanaura.tr_pembelianretur where id_pembelian = ?', [$invoice->id_pembelian])[0]->jumlah;
+        if ($diBayar > ($invoice->grandtotal - $oldData[$idItem]->total) or $diRetur > ($invoice->grandtotal - $oldData[$idItem]->total)) {
+            throw new PurchaseInvoiceException('Sisa tagihan tidak boleh kurang dari 0');
+        }
+        /* Kurangi persediaan */
+        $oldData[$idItem]->produkPersediaan->decrement($oldData[$idItem]->qty);
+        /* tambah persediaan detail (untuk riwayat keluar masuk stok) */
+        ProdukPersediaanDetail::create([
+            'id_persediaan' => $oldData[$idItem]->produkPersediaan->id_persediaan,
+            'tanggal' => $invoice->tanggal,
+            'keterangan' => "#{$invoice->transaksi_no} Delete item pembelian invoice",
+            'stok_out' => $oldData[$idItem]->qty,
+            'hargabeli' => (int)($oldData[$idItem]->harga * (1 - $oldData[$idItem]->diskon / 100) * (1 - $invoice->diskon / 100)),
+            'ref_id' => $oldData[$idItem]->id_pembeliandetail
+        ]);
+        /* Delete item */
+        PembelianDetail::whereIn('id_pembeliandetail', $oldData[$idItem]->id_pembeliandetail)->delete();
     }
 }
