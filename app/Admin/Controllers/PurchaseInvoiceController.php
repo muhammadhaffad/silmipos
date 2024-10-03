@@ -2,6 +2,7 @@
 
 namespace App\Admin\Controllers;
 
+use App\Exceptions\PurchaseInvoiceException;
 use App\Models\Pembelian;
 use App\Services\Core\Purchase\PurchaseInvoiceService;
 use Encore\Admin\Controllers\AdminController;
@@ -23,7 +24,8 @@ class PurchaseInvoiceController extends AdminController
     {
         $this->purchaseInvoiceService = $purchaseInvoiceService;
     }
-    public function createPurchaseInvoiceForm($model) {
+    public function createPurchaseInvoiceForm($model) 
+    {
         $form = new Form($model);
         $form->setAction(route(admin_get_route('purchase.invoice.store')));
         $data = $form->model();
@@ -53,16 +55,21 @@ class PurchaseInvoiceController extends AdminController
         });
         return $form;
     }
-    public function editPurchaseInvoiceForm($model, $idPembelian) {
+    public function editPurchaseInvoiceForm($model, $idPembelian) 
+    {
         $form = new Form($model);
         $form->builder()->setMode('edit');
         $form->setAction(route(admin_get_route('purchase.invoice.update'), ['idPembelian' => $idPembelian]));
-        $data = $form->model()->with('pembelianDetail.produkVarian')->where('id_pembelian', $idPembelian)->first();
+        $data = $form->model()->with(['pembelianDetail' => function ($q) {
+            $q->orderBy('id_pembeliandetail');
+            $q->with('produkVarian');
+        }])->where('id_pembelian', $idPembelian)->first();
         $form->tools(function (Tools $tools) use ($idPembelian, $data) {
             $tools->disableList();
             $tools->disableView();
             $tools->disableDelete();
-            // $tools->append($tools->renderDelete(route(admin_get_route('purchase.invoice.delete'), ['idPembelian' => $idPembelian]), listPath: route(admin_get_route('purchase.invoice.create'))));
+            
+            $tools->append($tools->renderDelete(route(admin_get_route('purchase.invoice.delete'), ['idPembelian' => $idPembelian]), listPath: route(admin_get_route('purchase.invoice.create'))));
             $tools->append($tools->renderView(route(admin_get_route('purchase.invoice.detail'), ['idPembelian' => $idPembelian])));
             $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
         });
@@ -110,8 +117,63 @@ class PurchaseInvoiceController extends AdminController
         });
         return $form;
     }
+    public function detailPurchaseInvoiceForm($model, $idPembelian) 
+    {
+        $form = new Form($model);
+        $form->setAction('');
+        $data = $form->model()->with(['kontak','pembelianDetail' => function ($rel) {
+            $rel->orderBy('id_pembeliandetail');
+            $rel->leftJoin(DB::raw("(select id_pembeliandetailparent, sum(qty) as jumlah_diinvoice from toko_griyanaura.tr_pembeliandetail where id_pembeliandetailparent is not null group by id_pembeliandetailparent) as x"), 'x.id_pembeliandetailparent', 'toko_griyanaura.tr_pembeliandetail.id_pembeliandetail');
+            $rel->with('produkVarian');
+        } ])->where('id_pembelian', $idPembelian)->join(DB::raw("(select id_gudang, nama as nama_gudang from toko_griyanaura.lv_gudang) as gdg"), 'gdg.id_gudang', 'toko_griyanaura.tr_pembelian.id_gudang')->first();
+        $form->tools(function (Tools $tools) use ($idPembelian, $data) {
+            $tools->disableList();
+            $tools->disableView();
+            $tools->disableDelete();
+            $tools->append($tools->renderDelete(route(admin_get_route('purchase.invoice.delete'), ['idPembelian' => $idPembelian]), listPath: route(admin_get_route('purchase.invoice.create'))));
+            $tools->append($tools->renderEdit(route(admin_get_route('purchase.invoice.edit'), ['idPembelian' => $idPembelian])));
+            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Supplier')->setWidth(3);
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $tanggalTempo = date('d F Y', strtotime($data->tanggaltempo));
+            $tanggal = date('d F Y', strtotime($data->tanggal));
+            $form->html("<div style='padding-top: 7px;'>#{$data->transaksi_no}</div>", 'No. Transaksi')->setWidth(2, 8);
+            $form->html("<div style='padding-top: 7px;'>{$tanggal}</div>", 'Tanggal')->setWidth(2, 8);
+            $form->html("<div style='padding-top: 7px;'>{$tanggalTempo}</div>", 'Tanggal Tempo')->setWidth(2, 8);
+            $form->html("<div style='padding-top: 7px;'>{$data->nama_gudang}</div>", 'Gudang')->setWidth(2, 8);
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->tablehasmany('pembelianDetail', function (NestedForm $form) {
+                $data = $form->model();
+                $form->html($data?->produkVarian?->varian, 'Produk')->required();
+                $form->text('qty', 'Qty')->customFormat(function ($val) {
+                    return number($val);
+                })->disable()->attribute('type', 'number')->withoutIcon()->required()->setGroupClass('w-100px');
+                $form->currency('harga', 'Harga')->disable()->required()->symbol('Rp');
+                $form->currency('diskon', 'Diskon')->disable()->symbol('%');
+                $form->currency('total', 'Total')->disable()->symbol('Rp')->readonly();
+            })->value($data->pembelianDetail->toArray())->useTable()->disableCreate()->disableDelete();
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->currency('totalraw', 'Sub total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->totalraw);
+            $form->currency('diskon')->setWidth(2, 8)->width('100%')->symbol('%')->readonly()->value($data->diskon);
+            $form->currency('total', 'Total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->grandtotal);
+            $form->textarea('catatan')->setWidth(4)->readonly()->value($data->catatan);
+        });
+        $form->disableCreatingCheck();
+        $form->disableEditingCheck();
+        $form->disableViewCheck();
+        $form->disableSubmit();
+        $form->disableReset();
 
-    public function createPurchaseInvoice(Content $content) {
+        return $form;
+    }
+
+    public function createPurchaseInvoice(Content $content) 
+    {
         $style = <<<STYLE
             .input-group {
                 width: 100% !important;   
@@ -234,7 +296,8 @@ class PurchaseInvoiceController extends AdminController
             ->description('Buat')
             ->body($this->createPurchaseInvoiceForm($pembelian));
     }
-    public function editPurchaseInvoice(Content $content, $idPembelian) {
+    public function editPurchaseInvoice(Content $content, $idPembelian) 
+    {
         $style = <<<STYLE
             .input-group {
                 width: 100% !important;   
@@ -429,18 +492,97 @@ class PurchaseInvoiceController extends AdminController
             ->description('Ubah')
             ->body($this->editPurchaseInvoiceForm($pembelian, $idPembelian));
     }
-    public function detailPurchaseInvoice() {
-        return 'TODO: detail';
+    public function detailPurchaseInvoice(Content $content, $idPembelian) {
+        $style = <<<STYLE
+            .input-group {
+                width: 100% !important;   
+            }
+            .w-200px {
+                width: 200px;
+            }
+            .w-100px {
+                width: 100px;
+            }
+            [id^="has-many-"] {
+                position: relative;
+                overflow: auto;
+                white-space: nowrap;
+            }
+            [id^="has-many-"] table td:nth-child(1), [id^="has-many-"] table th:nth-child(1) {
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0;
+                background: white;
+                z-index: 20;
+                width: 200px;
+            }
+            [id^="has-many-"] table td:last-child, [id^="has-many-"] table th:last-child {
+                position: -webkit-sticky;
+                position: sticky;
+                right: 0px;
+                background: white;
+                z-index: 10;
+            }
+            [id^="has-many-"] .form-group:has(.add) {
+                width: 100%;
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0px;
+                background: white;
+                z-index: 10;
+            }
+            [class*='col-md-'] {
+                margin-bottom: 2rem;
+            }
+        STYLE;
+        Admin::style($style);
+        $script = <<<SCRIPT
+            $('select.form-control').each(function () {
+                const select = this;
+                const defaultValue = select.dataset.value.split(',');
+                const defaultUrl = select.dataset.url;
+                defaultValue.forEach(function (value) {
+                    $.ajax({
+                        type: 'GET',
+                        url: defaultUrl + '?id=' + value
+                    }).then(function (data) {
+                        const option = new Option(data.text, data.id, true, true);
+                        $(select).append(option).trigger('change');
+                        $(select).trigger({
+                            type: 'select2:select',
+                            params: {
+                                data: data
+                            }
+                        });
+                    });
+                })
+            });
+        SCRIPT;
+        Admin::script($script);
+        $pembelian = new Pembelian();
+        if (!$pembelian->where('id_pembelian', $idPembelian)->where('jenis', 'invoice')->first()) {
+            abort(404);
+        }
+        return $content
+            ->title('Invoice Pembelian')
+            ->description('Detail')
+            ->body($this->detailPurchaseInvoiceForm($pembelian, $idPembelian));
     }
 
     public function storePurchaseInvoice(Request $request) {
         try {
             $result = $this->purchaseInvoiceService->storePurchaseInvoice($request->all());
             admin_toastr('Sukses buat transaksi pembelian');
-            // return redirect()->route(admin_get_route('purchase.invoice.detail'), ['idPembelian' => $result->id_pembelian]);
-            return redirect()->route(admin_get_route('purchase.invoice.create'));
+            return redirect()->route(admin_get_route('purchase.invoice.detail'), ['idPembelian' => $result->id_pembelian]);
         } catch (ValidationException $e) {
             return $e->validator->getMessageBag();
+        } catch (PurchaseInvoiceException $e) {
+            admin_toastr($e->getMessage(), 'warning');
+            return [
+                'status' => false,
+                'then' => ['action' => 'refresh', 'value' => true],
+                'message' => $e->getMessage()
+            ];
         } catch (\Exception $e) {
             throw $e;
         }
@@ -450,9 +592,36 @@ class PurchaseInvoiceController extends AdminController
             $result = $this->purchaseInvoiceService->updatePurchaseInvoice($idPembelian, $request->all());
             admin_toastr('Sukses ubah transaksi pembelian');
             // return redirect()->route(admin_get_route('purchase.invoice.detail'), ['idPembelian' => $result->id_pembelian]);
-            return redirect()->route(admin_get_route('purchase.invoice.create'));
+            return redirect()->route(admin_get_route('purchase.invoice.edit'), ['idPembelian' => $result->id_pembelian]);
         } catch (ValidationException $e) {
             return $e->validator->getMessageBag();
+        } catch (PurchaseInvoiceException $e) {
+            admin_toastr($e->getMessage(), 'warning');
+            return [
+                'status' => false,
+                'then' => ['action' => 'refresh', 'value' => true],
+                'message' => $e->getMessage()
+            ];
+        } catch (\Exception $e) {
+            return $e;
+        }
+    }
+    public function deletePurchaseInvoice(Request $request, $idPembelian) {
+        try {
+            $this->purchaseInvoiceService->deletePurchaseInvoice($idPembelian);
+            admin_toastr('Sukses hapus invoice pembelian');
+            return [
+                'status' => true,
+                'then' => ['action' => 'refresh', 'value' => true],
+                'message' => 'Sukses hapus order pembelian'
+            ];
+        } catch (PurchaseInvoiceException $e) {
+            admin_toastr($e->getMessage(), 'warning');
+            return [
+                'status' => false,
+                'then' => ['action' => 'refresh', 'value' => true],
+                'message' => $e->getMessage()
+            ];
         } catch (\Exception $e) {
             throw $e;
         }

@@ -73,6 +73,7 @@ Route::group([
 
             Route::post('/store', [PurchaseInvoiceController::class, 'storePurchaseInvoice'])->name('purchase.invoice.store');
             Route::put('/update/{idPembelian}', [PurchaseInvoiceController::class, 'updatePurchaseInvoice'])->name('purchase.invoice.update');
+            Route::match(['delete', 'post'],'/delete/{idPembelian}', [PurchaseInvoiceController::class, 'deletePurchaseInvoice'])->name('purchase.invoice.delete');
         });
     });
     Route::prefix('ajax')->group(function () {

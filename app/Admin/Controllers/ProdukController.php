@@ -556,8 +556,8 @@ class ProdukController extends Controller
                 foreach ($data->produkHarga as $key => $jenisHarga) {
                     $produkVarianHarga = array_filter($form->model()?->getAttribute('produk_varian_harga'), function ($varianHarga) use ($jenisHarga) { return $varianHarga['id_produkharga'] == $jenisHarga['id_produkharga']; });
                     $produkVarianHarga = array_pop($produkVarianHarga);
-                    $form->currency('harga_jual_' . $jenisHarga['id_produkharga'], 'Harga Jual ' . $jenisHarga['nama'])->symbol('Rp')->default($produkVarianHarga['hargajual']);
-                    $form->currency('harga_beli_' . $jenisHarga['id_produkharga'], 'Harga Modal ' . $jenisHarga['nama'])->symbol('Rp')->default($produkVarianHarga['hargabeli']);
+                    $form->currency('harga_jual_' . $jenisHarga['id_produkharga'], 'Harga Jual ' . $jenisHarga['nama'])->symbol('Rp')->default($produkVarianHarga['hargajual']??0);
+                    $form->currency('harga_beli_' . $jenisHarga['id_produkharga'], 'Harga Modal ' . $jenisHarga['nama'])->symbol('Rp')->default($produkVarianHarga['hargabeli']??0);
                 }
             } else {
                 foreach ($data->produkHarga as $key => $jenisHarga) {
