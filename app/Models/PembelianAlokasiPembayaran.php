@@ -13,4 +13,9 @@ class PembelianAlokasiPembayaran extends Model
     protected $table = 'toko_griyanaura.tr_pembelianalokasipembayaran';
     protected $primaryKey = 'id_pembelianalokasipembayaran';
     protected $guarded = [];
+
+    public function pembelian() 
+    {
+        return $this->hasOne(Pembelian::class, 'id_pembelian', 'id_pembelianinvoice');
+    }
 }

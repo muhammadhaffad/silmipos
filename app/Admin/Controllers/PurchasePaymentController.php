@@ -2,7 +2,9 @@
 
 namespace App\Admin\Controllers;
 
+use App\Exceptions\PurchasePaymentException;
 use App\Models\PembelianPembayaran;
+use App\Services\Core\Purchase\PurchasePaymentService;
 use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
@@ -12,9 +14,15 @@ use Encore\Admin\Layout\Content;
 use Encore\Admin\Show;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class PurchasePaymentController extends AdminController
 {
+    protected $purchasePaymentService;
+    public function __construct(PurchasePaymentService $purchasePaymentService)
+    {
+        $this->purchasePaymentService = $purchasePaymentService;
+    }
     public function createPaymentForm($model)
     {
         $form = new Form($model);
@@ -28,7 +36,7 @@ class PurchasePaymentController extends AdminController
         });
         $form->column(12, function (Form $form) {
             $form->tablehasmany('pembelianAlokasiPembayaran', '', function (NestedForm $form) {
-                $invoice = $form->select('transaksi_no', 'No. Transaksi')->setGroupClass('w-200px');
+                $invoice = $form->select('id_pembelian', 'No. Transaksi')->setGroupClass('w-200px');
                 $url = route(admin_get_route('ajax.pembelian'));
                 $urlDetailInvoice = route(admin_get_route('ajax.pembelian-detail'));
                 $selectAjaxInvoice = <<<SCRIPT
@@ -181,7 +189,26 @@ class PurchasePaymentController extends AdminController
     public function editPayment(Content $content, $idPembayaran) {}
     public function detailPayment(Content $content, $idPembayaran) {}
 
-    public function storePayment(Request $request) {}
+    public function storePayment(Request $request) 
+    {
+        try {
+            $result = $this->purchasePaymentService->storePayment($request->all());;
+            admin_toastr('Sukses buat transaksi pembayaran');
+            return redirect()->route(admin_get_route('purchase.payment.detail'), ['idPembayaran' => $result->id_pembelianpembayaran]);
+        } catch (ValidationException $e) {
+            return $e->validator->getMessageBag();
+        } catch (PurchasePaymentException $e) {
+            admin_toastr($e->getMessage(), 'warning');
+            // return [
+            //     'status' => false,
+            //     'then' => ['action' => 'refresh', 'value' => true],
+            //     'message' => $e->getMessage()
+            // ];
+            return redirect()->back();
+        } catch (\Exception $e) {
+            throw $e;
+        }
+    }
     public function updatePayment(Request $request, $idPembayaran) {}
     public function deletePayment(Request $request, $idPembayaran) {}
 }
