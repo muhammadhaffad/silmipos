@@ -751,9 +751,9 @@ class PurchaseOrderController extends AdminController
     }
     public function storeToInvoicePurchaseOrder(Request $request, $idPembelian) {
         try {
-            $this->purchaseOrderService->storeToInvoicePurchaseOrder($idPembelian, $request->all());
+            $result = $this->purchaseOrderService->storeToInvoicePurchaseOrder($idPembelian, $request->all());
             admin_toastr('Sukses buat invoice pembelian');
-            return redirect()->route(admin_get_route('purchase.order.create'));
+            return redirect()->route(admin_get_route('purchase.invoice.detail'), ['idPembelian' => $result->id_pembelian]);
         } catch (ValidationException $e) {
             return $e->validator->getMessageBag();
         } catch (\Exception $e) {

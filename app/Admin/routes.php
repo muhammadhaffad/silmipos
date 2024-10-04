@@ -9,6 +9,7 @@ use App\Admin\Controllers\ProdukMutasiController;
 use App\Admin\Controllers\ProdukPenyesuaianController;
 use App\Admin\Controllers\PurchaseInvoiceController;
 use App\Admin\Controllers\PurchaseOrderController;
+use App\Admin\Controllers\PurchasePaymentController;
 use Encore\Admin\Actions\Action;
 use Encore\Admin\Actions\RowAction;
 use Encore\Admin\Facades\Admin;
@@ -75,6 +76,15 @@ Route::group([
             Route::put('/update/{idPembelian}', [PurchaseInvoiceController::class, 'updatePurchaseInvoice'])->name('purchase.invoice.update');
             Route::match(['delete', 'post'],'/delete/{idPembelian}', [PurchaseInvoiceController::class, 'deletePurchaseInvoice'])->name('purchase.invoice.delete');
         });
+        Route::prefix('/payment')->group(function () {
+            Route::get('/create', [PurchasePaymentController::class, 'createPayment'])->name('purchase.payment.create');
+            Route::get('/detail/{idPembayaran}', [PurchasePaymentController::class, 'createPayment'])->name('purchase.payment.edit');
+            Route::get('/edit/{idPembayaran}', [PurchasePaymentController::class, 'createPayment'])->name('purchase.payment.detail');
+            
+            Route::post('/store', [PurchasePaymentController::class, 'storePayment'])->name('purchase.payment.store');
+            Route::put('/update/{idPembayaran}', [PurchasePaymentController::class, 'updatePayment'])->name('purchase.payment.update');
+            Route::match(['delete', 'post'], '/delete/{idPembayaran}', [PurchasePaymentController::class, 'deletePayment'])->name('purchase.payment.delete');
+        });
     });
     Route::prefix('ajax')->group(function () {
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');
@@ -83,5 +93,7 @@ Route::group([
         Route::get('/produk', [AjaxController::class, 'getProduk'])->name('ajax.produk');
         Route::get('/kontak', [AjaxController::class, 'getKontak'])->name('ajax.kontak');
         Route::get('/detail-produk', [AjaxController::class, 'getProdukDetail'])->name('ajax.produk-detail');
+        Route::get('/pembelian', [AjaxController::class, 'getPembelian'])->name('ajax.pembelian');
+        Route::get('/pembelian-detail', [AjaxController::class, 'getPembelianDetail'])->name('ajax.pembelian-detail');
     });
 });

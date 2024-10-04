@@ -5,6 +5,7 @@ namespace App\Admin\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\Akun;
 use App\Models\Dynamic;
+use App\Models\Pembelian;
 use App\Models\Produk;
 use App\Models\ProdukPersediaan;
 use App\Models\ProdukVarian;
@@ -70,5 +71,19 @@ class AjaxController extends Controller
             }, 'produkPersediaan' => function ($q) use ($gudang) {
                 $q->with('produkVarianHarga')->where('gdg.id_gudang', $gudang?->id_gudang)->first();
             }])->where('kode_produkvarian', $kode)->first()->toArray();
+    }
+    public function getPembelian(Request $request)
+    {
+        $q = $request->get('q');
+        $idSupplier = $request->get('id_supplier');
+        if ($request->get('id')) {
+            return Pembelian::select('id_pembelian as id', 'transaksi_no as text')->where('jenis', 'invoice')->where(DB::raw('toko_griyanaura.f_getsisatagihan(transaksi_no)'), '<>', 0)->where('id_kontak', $idSupplier)->where('id_pembelian', $request->get('id'))->first(['id_pembelian as id', DB::raw("transaksi_no as text")]);
+        }
+        return Pembelian::select('id_pembelian as id', 'transaksi_no as text')->where('id_kontak', $idSupplier)->where('jenis', 'invoice')->where(DB::raw('toko_griyanaura.f_getsisatagihan(transaksi_no)'), '<>', 0)->where('transaksi_no', 'ilike', "%$q%")->paginate(null, ['id_pembelian as id', DB::raw("transaksi_no as text")]);
+    }
+    public function getPembelianDetail(Request $request) {
+        $id = $request->get('id_pembelian');
+        $idSupplier = $request->get('id_supplier');
+        return Pembelian::select('id_pembelian', 'transaksi_no', DB::raw("TO_CHAR(tanggaltempo, 'YYYY-MM-DD') as tanggaltempo"), 'grandtotal', DB::raw('toko_griyanaura.f_getsisatagihan(transaksi_no) as sisatagihan'))->where('id_kontak', $idSupplier)->where('id_pembelian', $id)->first()?->toArray() ?: [];
     }
 }
