@@ -78,8 +78,8 @@ Route::group([
         });
         Route::prefix('/payment')->group(function () {
             Route::get('/create', [PurchasePaymentController::class, 'createPayment'])->name('purchase.payment.create');
-            Route::get('/detail/{idPembayaran}', [PurchasePaymentController::class, 'createPayment'])->name('purchase.payment.edit');
-            Route::get('/edit/{idPembayaran}', [PurchasePaymentController::class, 'createPayment'])->name('purchase.payment.detail');
+            Route::get('/detail/{idPembayaran}', [PurchasePaymentController::class, 'detailPayment'])->name('purchase.payment.detail');
+            Route::get('/edit/{idPembayaran}', [PurchasePaymentController::class, 'editPayment'])->name('purchase.payment.edit');
             
             Route::post('/store', [PurchasePaymentController::class, 'storePayment'])->name('purchase.payment.store');
             Route::put('/update/{idPembayaran}', [PurchasePaymentController::class, 'updatePayment'])->name('purchase.payment.update');
