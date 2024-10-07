@@ -293,8 +293,8 @@ class PurchaseInvoiceService
                 }
                 $diBayar = DB::select('select coalesce(sum(nominal),0) as jumlah from toko_griyanaura.tr_pembelianalokasipembayaran where id_pembelianinvoice = ?', [$invoice->id_pembelian])[0]->jumlah;
                 $diRetur = DB::select('select coalesce(sum(grandtotal),0) as jumlah from toko_griyanaura.tr_pembelianretur where id_pembelian = ?', [$invoice->id_pembelian])[0]->jumlah;
-                if ($diBayar > ($invoice->grandtotal + ($newData['total'] - $oldData[$idItem]->total) * (1 - $invoice->diskon/100)) or $diRetur > ($invoice->grandtotal + ($newData['total'] - $oldData[$idItem]->total) * (1 - $invoice->diskon/100))) {
-                    throw new PurchaseInvoiceException('Sisa tagihan tidak boleh kurang dari 0');
+                if (DB::select('select toko_griyanaura.f_getsisatagihan(?) as sisatagihan', [$invoice->transaksi_no])[0]->sisatagihan < ($oldData[$idItem]->total - $newData['total']) * (1 - $invoice->diskon/100)) {
+                    throw new PurchaseInvoiceException('Sisa tagihan tidak boleh minus');
                 }
                 PembelianDetail::where('id_pembeliandetail', $idItem)->update($newData);
             } 
@@ -345,8 +345,8 @@ class PurchaseInvoiceService
             /* Check apakah ketika di kurangi, total tagihan akan minus (alias yang dibayar lebih) */
             $diBayar = DB::select('select coalesce(sum(nominal),0) as jumlah from toko_griyanaura.tr_pembelianalokasipembayaran where id_pembelianinvoice = ?', [$invoice->id_pembelian])[0]->jumlah;
             $diRetur = DB::select('select coalesce(sum(grandtotal),0) as jumlah from toko_griyanaura.tr_pembelianretur where id_pembelian = ?', [$invoice->id_pembelian])[0]->jumlah;
-            if ($diBayar > ($invoice->grandtotal - $oldData[$idItem]->total * (1 - $invoice->diskon/100)) or $diRetur > ($invoice->grandtotal - $oldData[$idItem]->total* (1 - $invoice->diskon/100))) {
-                throw new PurchaseInvoiceException('Sisa tagihan tidak boleh kurang dari 0');
+            if (DB::select('select toko_griyanaura.f_getsisatagihan(?) as sisatagihan', [$invoice->transaksi_no])[0]->sisatagihan < $oldData[$idItem]->total* (1 - $invoice->diskon/100)) {
+                throw new PurchaseInvoiceException('Sisa tagihan tidak boleh minus');
             }
             if ($oldData[$idItem]->produkVarian->produk->in_stok == true) {
                 /* Kurangi persediaan */

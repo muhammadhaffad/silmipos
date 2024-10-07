@@ -597,11 +597,7 @@ class PurchaseInvoiceController extends AdminController
             return $e->validator->getMessageBag();
         } catch (PurchaseInvoiceException $e) {
             admin_toastr($e->getMessage(), 'warning');
-            return [
-                'status' => false,
-                'then' => ['action' => 'refresh', 'value' => true],
-                'message' => $e->getMessage()
-            ];
+            return redirect()->back();
         } catch (\Exception $e) {
             return $e;
         }

@@ -134,7 +134,7 @@ class PurchasePaymentController extends AdminController
     {
         $form = new Form($model);
         $data = $form->model()->with('pembelianAlokasiPembayaran')->find($idPembayaran);
-        $form->setAction(route(admin_get_route('purchase.payment.store')));
+        $form->setAction(route(admin_get_route('purchase.payment.update'), ['idPembayaran' => $idPembayaran]));
         $form->column(12, function (Form $form) use ($data) {
             $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak')))->attribute([
                 'data-url' => route(admin_get_route('ajax.kontak')),
@@ -296,6 +296,14 @@ class PurchasePaymentController extends AdminController
             $('select.id_kontak').change(function () {
                 idSupplier = $('select.id_kontak').val();
             });
+            $('#has-many-pembelianAlokasiPembayaran').on('click', '.remove', function () {
+                let total = 0;
+                $('.nominalbayar').each(function () {
+                    total += parseInt($(this).inputmask('unmaskedvalue')) || 0;
+                });
+                console.info(total); 
+                $('input.total').val(total);
+            });
         SCRIPT;
         Admin::script($scriptDereferred, true);
         return $content
@@ -370,6 +378,22 @@ class PurchasePaymentController extends AdminController
                     });
                 })
             });
+            $('#has-many-pembelianAlokasiPembayaran').on('click', '.remove', function () {
+                let total = 0;
+                $('.nominalbayar:visible').each(function () {
+                    total += parseInt($(this).inputmask('unmaskedvalue')) || 0;
+                });
+                console.info(total); 
+                $('input.total').val(total);
+            });
+            {
+                let total = 0;
+                $('.nominalbayar').each(function () {
+                    total += parseInt($(this).inputmask('unmaskedvalue')) || 0;
+                });
+                console.info(total); 
+                $('input.total').val(total);
+            }
         SCRIPT;
         Admin::script($scriptDereferred, true);
         return $content
@@ -399,6 +423,9 @@ class PurchasePaymentController extends AdminController
             throw $e;
         }
     }
-    public function updatePayment(Request $request, $idPembayaran) {}
+    public function updatePayment(Request $request, $idPembayaran) 
+    {
+        return dd($request->all());
+    }
     public function deletePayment(Request $request, $idPembayaran) {}
 }
