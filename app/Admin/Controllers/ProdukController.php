@@ -62,7 +62,7 @@ class ProdukController extends Controller
         if (request()->get('produk')) {
             $grid->model()->where('nama', 'ilike', "%" . request()->get('produk') . "%");
         }
-        if (!empty(request()->get('varian')[0])) {
+        if (isset(request()->get('varian')[0]) and !empty(request()->get('varian')[0])) {
             $grid->model()->whereHas('produkVarian', function ($query) {
                 $query->leftJoin('toko_griyanaura.ms_produkattributvarian as pav', 'pav.kode_produkvarian', 'toko_griyanaura.ms_produkvarian.kode_produkvarian')
                     ->whereIn('pav.id_attributvalue', request()->get('varian'));
@@ -152,8 +152,12 @@ class ProdukController extends Controller
         });
         $grid->column('namaunit', 'Unit')->addHeader(new Sorter('_customSort', 'namaunit', null));
         $grid->column('hargajual', 'Harga jual')->display(function () {
-            $min = min(array_column($this['produkVarian']->map(function ($item) {return $item->produkVarianHarga->where('id_varianharga', 1)[0];})->toArray(), 'hargajual'));
-            $max = max(array_column($this['produkVarian']->map(function ($item) {return $item->produkVarianHarga->where('id_varianharga', 1)[0];})->toArray(), 'hargajual'));
+            $min = min(array_column($this['produkVarian']->map(function ($item) {
+                return @$item->produkVarianHarga->where('id_varianharga', 1)->first();
+            })->toArray(), 'hargajual') ?: [0]);
+            $max = max(array_column($this['produkVarian']->map(function ($item) {
+                return @$item->produkVarianHarga->where('id_varianharga', 1)->first();
+            })->toArray(), 'hargajual') ?: [0]);
             return 'Rp ' . number_format($min) . ' s/d ' . 'Rp ' . number_format($max);
         })->addHeader(new Sorter('_customSort', 'hargajual', null));
         $grid->column('totalvarian', 'Total varian')->display(function () {
@@ -202,12 +206,12 @@ class ProdukController extends Controller
             $footer->disableSubmit();
         });
         $form->tab('Produk', function (Form $form) use ($data) {
-            $form->display('SKU', __('SKU'))->setWidth(2)->value($data->produkVarian[0]->kode_produkvarian);
+            $form->display('SKU', __('SKU'))->setWidth(2)->value(@$data->produkVarian[0]->kode_produkvarian);
             $form->display('nama', __('Nama produk'))->value($data->nama);
             $form->select('default_unit', 'Satuan')->setWidth(2)->options((new Dynamic)->setTable('toko_griyanaura.lv_unit')->select('kode_unit as id', 'nama as text')->pluck('text', 'id')->toArray())->disable()->value($data->default_unit);
             $form->display('deskripsi')->attribute('style', 'height:300px;overflow:auto;')->value($data->deskripsi);
-            $form->display('hargajual', 'Harga Jual')->attribute('align', 'right')->value('Rp ' . number_format($data->produkVarian[0]->hargajual))->setWidth(2);
-            $form->display('hargabeli', 'Harga Modal')->attribute('align', 'right')->value('Rp ' . number_format($data->produkVarian[0]->default_hargabeli))->setWidth(2);
+            $form->display('hargajual', 'Harga Jual')->attribute('align', 'right')->value('Rp ' . number_format(@$data->produkVarian[0]->hargajual))->setWidth(2);
+            $form->display('hargabeli', 'Harga Modal')->attribute('align', 'right')->value('Rp ' . number_format(@$data->produkVarian[0]->default_hargabeli))->setWidth(2);
             $form->switch('in_stok', 'Produk di-stok?')->disable()->states([
                 'on' => ['value' => 1, 'text' => 'Iya', 'color' => 'success'],
                 'off' => ['value' => 0, 'text' => 'Tidak', 'color' => 'danger']

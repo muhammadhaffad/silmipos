@@ -156,9 +156,30 @@ class PurchasePaymentService
                 $this->entryJurnal($alokasi->id_transaksi, $detailTransaksi);
             }
             DB::commit();
+            return $pembayaran;
         } catch (\Exception $th) {
             DB::rollBack();
             throw $th;
+        }
+    }
+    public function deletePayment($idPembayaran)
+    {
+        DB::beginTransaction();
+        try {
+            $pembayaran = (new PembelianPembayaran())->with('pembelianAlokasiPembayaran.pembelian')->where('id_pembelianpembayaran', $idPembayaran)->first();
+            $oldItem = $pembayaran->pembelianAlokasiPembayaran->keyBy('id_pembelianalokasipembayaran');
+            $this->deleteJurnal($pembayaran->id_transaksi);
+            foreach ($pembayaran->pembelianAlokasiPembayaran as $item) {
+                $this->deleteJurnal($item->id_transaksi);
+                $this->deleteAllocatePaymentToInvoice($item->id_pembelianalokasipembayaran, $pembayaran, $oldItem);
+                Transaksi::where('id_transaksi', $item->id_transaksi)->delete();
+            }
+            $pembayaran->delete();
+            Transaksi::where('id_transaksi', $pembayaran->id_transaksi)->delete();
+            DB::commit();   
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
         }
     }
 
