@@ -9,6 +9,7 @@ use App\Models\PembelianPembayaran;
 use App\Models\Transaksi;
 use App\Services\Core\Jurnal\JurnalService;
 use Encore\Admin\Facades\Admin;
+use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
@@ -85,6 +86,81 @@ class PurchasePaymentService
             throw $e;
         }
     }
+    public function updatePayment($idPembayaran, $request)
+    {
+        $rules = [
+            'tanggal' => 'required|date_format:Y-m-d H:i:s',
+            'catatan' => 'nullable|string',
+            'total' => 'required|numeric',
+            'pembelianAlokasiPembayaran' => 'array',
+            'pembelianAlokasiPembayaran.*.nominalbayar' => 'required|numeric',
+            'pembelianAlokasiPembayaran.*.id_pembelian' => 'nullable|numeric',
+        ];
+        $validator = Validator::make($request, $rules);
+        $validator->validate();
+        DB::beginTransaction();
+        try {
+            $pembayaranOld = (new PembelianPembayaran())->with('pembelianAlokasiPembayaran.pembelian')->where('id_pembelianpembayaran', $idPembayaran)->first();
+            $pembayaran = (new PembelianPembayaran())->with('pembelianAlokasiPembayaran.pembelian')->where('id_pembelianpembayaran', $idPembayaran)->first();
+            $pembayaran->update([
+                'tanggal' => $request['tanggal'],
+                'catatan' => $request['catatan'],
+                'nominal' => (int)$request['total']
+            ]);
+            $pembayaran->refresh();
+            $oldItem = $pembayaran->pembelianAlokasiPembayaran->keyBy('id_pembelianalokasipembayaran');
+            foreach ($request['pembelianAlokasiPembayaran'] as $key => $item) {
+                if ($item['_remove_'] == 0) {
+                    /* Jika tidak dihapus */
+                    if (isset($oldItem[$item['id_pembelianalokasipembayaran']])) {
+                        /* Jika di-update */
+                        $newData = [];
+                        if ($item['nominalbayar'] != $oldItem[$item['id_pembelianalokasipembayaran']]['nominalbayar']) {
+                            $newData['nominal'] = (int)$item['nominalbayar'];
+                        }
+                        $this->updateAllocatePaymentToInvoice($item['id_pembelianalokasipembayaran'], $pembayaran, $pembayaranOld, $newData, $oldItem);
+                    } else {
+                        /* Jika ditambah baru */
+                        $newData = [
+                            'id_pembelian' => $item['id_pembelian'],
+                            'nominalbayar' => (int)$item['nominalbayar']
+                        ];
+                        $this->storeAllocatePaymentToInvoice($pembayaran, $newData);
+                    }
+                } else {
+                    /* Jika dihapus */
+                    if (isset($oldItem[$item['id_pembelianalokasipembayaran']])) {
+                        $this->deleteAllocatePaymentToInvoice($item['id_pembelianalokasipembayaran'], $pembayaran, $oldItem);
+                    }
+                }
+            }
+            $pembayaran->refresh();
+            foreach ($pembayaran->pembelianAlokasiPembayaran as $alokasi) {
+                $this->deleteJurnal($alokasi->id_transaksi);
+                $detailTransaksi = [
+                    [
+                        'kode_akun' => '2001',
+                        'keterangan' => 'Pembayaran #' . $alokasi->pembelian->transaksi_no,
+                        'nominaldebit' => $alokasi->nominal,
+                        'nominalkredit' => 0,
+                        'ref_id' => $alokasi->id_pembelianalokasipembayaran
+                    ],
+                    [
+                        'kode_akun' => '1001',
+                        'keterangan' => 'Pembayaran #' . $alokasi->pembelian->transaksi_no,
+                        'nominaldebit' => 0,
+                        'nominalkredit' => $alokasi->nominal,
+                        'ref_id' => $alokasi->id_pembelianalokasipembayaran
+                    ],
+                ];
+                $this->entryJurnal($alokasi->id_transaksi, $detailTransaksi);
+            }
+            DB::commit();
+        } catch (\Exception $th) {
+            DB::rollBack();
+            throw $th;
+        }
+    }
 
     protected function storeAllocatePaymentToInvoice($payment, $newData)
     {
@@ -129,20 +205,50 @@ class PurchasePaymentService
             throw $th;
         }
     }
-    protected function updateAllocatePaymentToInvoice()
+    protected function updateAllocatePaymentToInvoice($idItem, $payment, $oldPayment, $newData, $oldData)
     {
         /**
          * rencana:
          * cek apakah pembayaran pernah direfund, jika iya maka gagal
          * cek apakah setelah tanggal alokasi pembayaran terdapat retur pembelian, jika iya maka gagal
          */
+        DB::beginTransaction();
+        try {
+            if (DB::table('toko_griyanaura.tr_pembelianrefunddetail')->where('id_pembelianpembayaran', $payment->id_pembelianpembayaran)->exists()) {
+                throw new PurchasePaymentException('Pembayaran tidak dapat diubah, karena sudah direfund.');
+            }
+            if (DB::table('toko_griyanaura.tr_pembelianretur')->where('id_pembelian', $oldData[$idItem]->id_pembelianinvoice)->where('tanggal', '>', $oldData[$idItem]->tanggal)->exists())
+            {
+                throw new PurchasePaymentException('Alokasi pembayaran tidak dapat diubah, karena terdapat transaksi retur.');
+            }
+            PembelianAlokasiPembayaran::where('id_pembelianalokasipembayaran', $idItem)->update($newData);
+            DB::commit();
+        } catch (\Exception $th) {
+            DB::rollBack();
+            throw $th;
+        }
     }
-    protected function deleteAllocatePaymentToInvoice()
+    protected function deleteAllocatePaymentToInvoice($idItem, $payment, $oldData)
     {
         /**
          * rencana:
          * cek apakah pembayaran pernah direfund, jika iya maka gagal
          * cek apakah setelah tanggal alokasi pembayaran terdapat retur pembelian, jika iya maka gagal
          */
+        DB::beginTransaction();
+        try {
+            if (DB::table('toko_griyanaura.tr_pembelianrefunddetail')->where('id_pembelianpembayaran', $payment->id_pembelianpembayaran)->exists()) {
+                throw new PurchasePaymentException('Pembayaran tidak dapat dihapus, karena sudah direfund.');
+            }
+            if (DB::table('toko_griyanaura.tr_pembelianretur')->where('id_pembelian', $oldData[$idItem]->id_pembelianinvoice)->where('tanggal', '>', $oldData[$idItem]->tanggal)->exists())
+            {
+                throw new PurchasePaymentException('Alokasi pembayaran tidak dapat dihapus, karena terdapat transaksi retur.');
+            }
+            PembelianAlokasiPembayaran::where('id_pembelianalokasipembayaran', $idItem)->delete();
+            DB::commit();
+        } catch (\Exception $th) {
+            DB::rollBack();
+            throw $th;
+        }
     }
 }

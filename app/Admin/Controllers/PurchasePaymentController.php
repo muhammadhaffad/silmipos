@@ -133,13 +133,14 @@ class PurchasePaymentController extends AdminController
     public function editPaymentForm($idPembayaran, $model)
     {
         $form = new Form($model);
-        $data = $form->model()->with('pembelianAlokasiPembayaran')->find($idPembayaran);
+        $form->builder()->setMode('edit');
         $form->setAction(route(admin_get_route('purchase.payment.update'), ['idPembayaran' => $idPembayaran]));
+        $data = $form->model()->with('pembelianAlokasiPembayaran')->find($idPembayaran);
         $form->column(12, function (Form $form) use ($data) {
             $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak')))->attribute([
                 'data-url' => route(admin_get_route('ajax.kontak')),
                 'select2' => null
-            ])->value($data->id_kontak)->setWidth(3);
+            ])->disable()->value($data->id_kontak)->setWidth(3);
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->text('transaksi_no', 'No. Transaksi')->placeholder('[AUTO]')->setLabelClass(['text-nowrap'])->withoutIcon()->width('100%')->setWidth(2, 8)->disable()->value($data->transaksi_no);
@@ -425,7 +426,7 @@ class PurchasePaymentController extends AdminController
     }
     public function updatePayment(Request $request, $idPembayaran) 
     {
-        return dd($request->all());
+        $this->purchasePaymentService->updatePayment($idPembayaran, $request->all());
     }
     public function deletePayment(Request $request, $idPembayaran) {}
 }
