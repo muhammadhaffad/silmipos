@@ -10,6 +10,7 @@ use App\Admin\Controllers\ProdukPenyesuaianController;
 use App\Admin\Controllers\PurchaseInvoiceController;
 use App\Admin\Controllers\PurchaseOrderController;
 use App\Admin\Controllers\PurchasePaymentController;
+use App\Admin\Controllers\PurchaseReturnController;
 use Encore\Admin\Actions\Action;
 use Encore\Admin\Actions\RowAction;
 use Encore\Admin\Facades\Admin;
@@ -84,6 +85,15 @@ Route::group([
             Route::post('/store', [PurchasePaymentController::class, 'storePayment'])->name('purchase.payment.store');
             Route::put('/update/{idPembayaran}', [PurchasePaymentController::class, 'updatePayment'])->name('purchase.payment.update');
             Route::match(['delete', 'post'], '/delete/{idPembayaran}', [PurchasePaymentController::class, 'deletePayment'])->name('purchase.payment.delete');
+        });
+        Route::prefix('/return')->group(function () {
+            Route::get('/create', [PurchaseReturnController::class, 'createReturn'])->name('purchase.return.create');
+            Route::get('/edit/{idRetur}', [PurchaseReturnController::class, 'editReturn'])->name('purchase.return.edit');
+            Route::get('/detail/{idRetur}', [PurchaseReturnController::class, 'detailReturn'])->name('purchase.return.detail');
+
+            Route::post('/store', [PurchaseReturnController::class, 'storeReturn'])->name('purchase.return.store');
+            Route::put('/update/{idRetur}', [PurchaseReturnController::class, 'updateReturn'])->name('purchase.return.update');
+            Route::match(['post', 'delete'], '/delete/{idRetur}', [PurchaseReturnController::class, 'deleteReturn'])->name('purchase.return.delete');
         });
     });
     Route::prefix('ajax')->group(function () {
