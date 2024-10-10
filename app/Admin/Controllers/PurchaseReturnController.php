@@ -70,17 +70,18 @@ class PurchaseReturnController extends AdminController
     {
         $form = new Form($model);
         $form->setAction(route(admin_get_route('purchase.return.edit'), ['idRetur' => $idRetur]));
-        $data = $form->model();
+        $data = $form->model()->with(['pembelian', 'pembelianDetail', 'kontak', 'pembelianReturDetail'])->findOrFail($idRetur);
+        dump($data);
         $form->column(12, function (Form $form) use ($data) {
-            $form->html("<div style='padding-top: 7px'></div>", 'Supplier')->setWidth(3);
-            $form->html("<div style='padding-top: 7px'>#YYYYYY</div>", 'Invoice')->setWidth(3);
+            $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Supplier')->setWidth(3);
+            $form->html("<div style='padding-top: 7px'>#{$data->pembelian->transaksi_no}</div>", 'Invoice yang diretur')->setWidth(3);
         });
-        $form->column(12, function (Form $form) {
-            $form->text('transaksi_no', 'No. Transaksi')->placeholder('[AUTO]')->setLabelClass(['text-nowrap'])->withoutIcon()->width('100%')->setWidth(2, 8);
+        $form->column(12, function (Form $form) use ($data) {
+            $form->html("<div style='padding-top: 7px'>#{$data->transaksi_no}</div>", 'No. Transaksi')->setWidth(2, 8);
             $form->datetime('tanggal', 'Tanggal')->required()->width('100%')->setWidth(2, 8)->value(date('Y-m-d H:i:s'));
         });
         $form->column(12, function (Form $form) use ($data) {
-            $form->tablehasmany('pembelianReturDetail', function (NestedForm $form) {
+            $form->tablehasmany('pembelianDetail', 'Detail retur', function (NestedForm $form) {
                 $data = $form->model();
                 $checkDisable = $data?->jumlah_diinvoice == $data?->qty;
                 if (!$checkDisable) {

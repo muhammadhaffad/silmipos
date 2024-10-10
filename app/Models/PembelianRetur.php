@@ -22,4 +22,12 @@ class PembelianRetur extends Model
     {
         return $this->hasOne(Kontak::class, 'id_kontak', 'id_kontak');
     }
+    public function pembelian()
+    {
+        return $this->hasOne(Pembelian::class, 'id_pembelian', 'id_pembelian');
+    }
+    public function pembelianDetail()
+    {
+        return $this->hasMany(PembelianDetail::class, 'id_pembelian', 'id_pembelian');
+    }
 }
