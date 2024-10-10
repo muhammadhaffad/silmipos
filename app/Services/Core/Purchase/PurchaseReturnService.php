@@ -83,7 +83,7 @@ class PurchaseReturnService
             foreach ($request['pembelianDetail'] as $returItem) {
                 if (isset($oldItem[$returItem['id_pembelianreturdetail']])) {
                     if ($returItem['qty_diretur'] > 0) {
-                        
+
                     } else {
 
                     }
@@ -137,6 +137,7 @@ class PurchaseReturnService
                 'hargabeli' => (int)($pembelianDetail['harga'] * (1 - $pembelianDetail['diskon'] / 100) * (1 - $return['diskon'] / 100)),
                 'ref_id' => $pembelianReturDetail->id_pembelianreturdetail
             ]);
+            return $pembelianReturDetail;
             DB::commit();
         } catch (\Exception $th) {
             DB::rollBack();
@@ -145,7 +146,13 @@ class PurchaseReturnService
     }
     public function updateReturnItem($idItem, $return, $oldReturn, $newData, $oldData)
     {
-
+        DB::beginTransaction();
+        try {
+            DB::commit();
+        } catch (\Exception $th) {
+            DB::rollBack();
+            throw $th;
+        }
     }
     public function deleteReturnItem($idItem, $return, $oldData)
     {
