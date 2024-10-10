@@ -243,8 +243,18 @@ class PurchaseReturnController extends AdminController
     }
     public function updateReturn(Request $request, $idRetur)
     {
-        dd($request->all());
-        return redirect()->back();
+        try {
+            $result = $this->purchaseReturnService->updateReturn($idRetur, $request->all());
+            admin_toastr('Sukses ubah transaksi retur pembelian');
+            return redirect()->route(admin_get_route('purchase.return.edit'), ['idRetur' => $result->id_pembelianretur]);
+        } catch (ValidationException $e) {
+            return $e->validator->getMessageBag();
+        } catch (PurchaseReturnException $e) {
+            admin_toastr($e->getMessage(), 'warning');
+            return redirect()->back();
+        } catch (\Exception $e) {
+            return $e;
+        }
     }
     public function deleteReturn(Request $request, $idRetur)
     {}
