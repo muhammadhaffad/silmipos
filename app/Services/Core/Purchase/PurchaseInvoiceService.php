@@ -237,44 +237,51 @@ class PurchaseInvoiceService
 
     protected function storePurchaseInvoiceItem($invoice, $newData)
     {
-        $pembelianDetail = PembelianDetail::create([
-            'id_pembelian' => $invoice->id_pembelian,
-            'kode_produkvarian' => $newData['kode_produkvarian'],
-            'harga' => (int)$newData['harga'],
-            'qty' => $newData['qty'],
-            'diskonjenis' => 'persen',
-            'diskon' => $newData['diskon'] ?: 0,
-            'total' => (int)($newData['harga'] * $newData['qty'] * (1 - ($newData['diskon'] ?: 0) / 100)),
-            'totalraw' => (int)$newData['harga'] * $newData['qty'],
-            'id_gudang' => $newData['id_gudang']
-        ]);
-        $produkVarian = ProdukVarian::with('produk')->where('kode_produkvarian', $newData['kode_produkvarian'])->first();
-        if ($produkVarian->produk->in_stok == true) {
-            $persediaanProduk = ProdukPersediaan::where('kode_produkvarian', $newData['kode_produkvarian'])->where('id_gudang', $newData['id_gudang'])->first();
-            if (!$persediaanProduk) {
-                if (ProdukVarianHarga::where('kode_produkvarian', $newData['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $newData['id_gudang'])->first()) {
-                    $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $newData['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $newData['id_gudang'])->first()->id_produkvarianharga;
-                } else {
-                    $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $newData['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', 1 /* Reguler */)->first()->id_produkvarianharga;
+        DB::beginTransaction();
+        try {
+            $pembelianDetail = PembelianDetail::create([
+                'id_pembelian' => $invoice->id_pembelian,
+                'kode_produkvarian' => $newData['kode_produkvarian'],
+                'harga' => (int)$newData['harga'],
+                'qty' => $newData['qty'],
+                'diskonjenis' => 'persen',
+                'diskon' => $newData['diskon'] ?: 0,
+                'total' => (int)($newData['harga'] * $newData['qty'] * (1 - ($newData['diskon'] ?: 0) / 100)),
+                'totalraw' => (int)$newData['harga'] * $newData['qty'],
+                'id_gudang' => $newData['id_gudang']
+            ]);
+            $produkVarian = ProdukVarian::with('produk')->where('kode_produkvarian', $newData['kode_produkvarian'])->first();
+            if ($produkVarian->produk->in_stok == true) {
+                $persediaanProduk = ProdukPersediaan::where('kode_produkvarian', $newData['kode_produkvarian'])->where('id_gudang', $newData['id_gudang'])->first();
+                if (!$persediaanProduk) {
+                    if (ProdukVarianHarga::where('kode_produkvarian', $newData['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $newData['id_gudang'])->first()) {
+                        $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $newData['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $newData['id_gudang'])->first()->id_produkvarianharga;
+                    } else {
+                        $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $newData['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', 1 /* Reguler */)->first()->id_produkvarianharga;
+                    }
+                    $persediaanProduk = ProdukPersediaan::create([
+                        'id_gudang' => $newData['id_gudang'],
+                        'kode_produkvarian' => $newData['kode_produkvarian'],
+                        'stok' => 0,
+                        'default_varianharga' => $defaultVarianHarga
+                    ]);
                 }
-                $persediaanProduk = ProdukPersediaan::create([
-                    'id_gudang' => $newData['id_gudang'],
-                    'kode_produkvarian' => $newData['kode_produkvarian'],
-                    'stok' => 0,
-                    'default_varianharga' => $defaultVarianHarga
+                $persediaanProduk->update([
+                    'stok' => DB::raw('stok +' . number($newData['qty']))
+                ]);
+                $dataPersediaanDetail = ProdukPersediaanDetail::create([
+                    'id_persediaan' => $persediaanProduk->id_persediaan,
+                    'tanggal' => $invoice->tanggal,
+                    'keterangan' => "#{$invoice->transaksi_no} Store item pembelian invoice",
+                    'stok_in' => $newData['qty'],
+                    'hargabeli' => (int)($newData['harga'] * (1 - $newData['diskon'] / 100) * (1 - $invoice['diskon'] / 100)),
+                    'ref_id' => $pembelianDetail->id_pembeliandetail
                 ]);
             }
-            $persediaanProduk->update([
-                'stok' => DB::raw('stok +' . number($newData['qty']))
-            ]);
-            $dataPersediaanDetail = ProdukPersediaanDetail::create([
-                'id_persediaan' => $persediaanProduk->id_persediaan,
-                'tanggal' => $invoice->tanggal,
-                'keterangan' => "#{$invoice->transaksi_no} Store item pembelian invoice",
-                'stok_in' => $newData['qty'],
-                'hargabeli' => (int)($newData['harga'] * (1 - $newData['diskon'] / 100) * (1 - $invoice['diskon'] / 100)),
-                'ref_id' => $pembelianDetail->id_pembeliandetail
-            ]);
+            DB::commit();
+        } catch (\Exception $th) {
+            DB::rollBack();
+            throw $th;
         }
     }
     protected function updatePurchaseInvoiceItem($idItem, $invoice, $oldInvoice, $newData, $oldData)
