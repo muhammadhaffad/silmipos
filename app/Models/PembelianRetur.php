@@ -30,4 +30,8 @@ class PembelianRetur extends Model
     {
         return $this->hasMany(PembelianDetail::class, 'id_pembelian', 'id_pembelian');
     }
+    public function pembelianReturAlokasiKembalianDana()
+    {
+        return $this->hasMany(PembelianReturAlokasiKembalianDana::class, 'id_pembelianretur', 'id_pembelianretur');
+    }
 }

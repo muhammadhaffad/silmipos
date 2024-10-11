@@ -11,12 +11,14 @@ use App\Models\ProdukPersediaan;
 use App\Models\ProdukPersediaanDetail;
 use App\Models\ProdukVarian;
 use App\Models\Transaksi;
+use App\Services\Core\Jurnal\JurnalService;
 use Encore\Admin\Facades\Admin;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class PurchaseReturnService
 {
+    use JurnalService;
     public function storeReturn($request)
     {
         $rules = [
@@ -79,7 +81,7 @@ class PurchaseReturnService
         $validator->validate();
         DB::beginTransaction();
         try {
-            $pembelianRetur = PembelianRetur::with('pembelianReturDetail')->find($idRetur);
+            $pembelianRetur = PembelianRetur::with('pembelianReturDetail.produkVarian.produk')->find($idRetur);
             $oldItem = $pembelianRetur->pembelianReturDetail->keyBy('id_pembelianreturdetail');
             $rawTotal = 0;
             foreach ($request['pembelianDetail'] as $returItem) {
@@ -99,13 +101,36 @@ class PurchaseReturnService
                 }
                 $rawTotal += $result->total ?? 0;
             }
-            DB::commit();
             $pembelianRetur->update([
                 'totalraw' => $rawTotal,
                 'grandtotal' => $rawTotal * (1-$pembelianRetur->diskon/100)
             ]);
-            //TODO: calc kembalian retur
             $pembelianRetur->refresh();
+            $kembalianDana = DB::select('select toko_griyanaura.f_calckembaliandanareturpembelian(?) as kembaliandana', [$pembelianRetur->transaksi_no])[0]->kembaliandana;
+            $this->deleteJurnal($pembelianRetur->id_transaksi);
+            $detailTransaksi = [];
+            $total = 0;
+            foreach ($pembelianRetur->pembelianReturDetail as $item) {
+                $total += (int)($item->qty * $item->harga * (1 - $item->diskon / 100) * (1 - $pembelianRetur->diskon / 100));
+                $detailTransaksi[] = [
+                    'kode_akun' => $item->produkVarian->produk->default_akunpersediaan,
+                    'keterangan' => 'Retur pembelian ' . $item->produkVarian->varian,
+                    'nominaldebit' => 0,
+                    'nominalkredit' => (int)($item->qty * $item->harga * (1 - $item->diskon / 100) * (1 - $pembelianRetur->diskon / 100)),
+                    'ref_id' => $item->id_pembelianreturdetail
+                ];
+            }
+            if (isset($detailTransaksi)) {
+                $detailTransaksi[] = [
+                    'kode_akun' => '2001',
+                    'keterangan' => null,
+                    'nominaldebit' => $pembelianRetur->grandtotal,
+                    'nominalkredit' => 0
+                ];
+                dd($detailTransaksi);
+                $this->entryJurnal($pembelianRetur->id_transaksi, $detailTransaksi);
+            }
+            DB::commit();
             return $pembelianRetur;
         } catch (\Exception $th) {
             DB::rollBack();

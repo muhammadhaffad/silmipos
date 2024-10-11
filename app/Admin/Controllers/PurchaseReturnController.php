@@ -85,7 +85,7 @@ class PurchaseReturnController extends AdminController
             $q->join(DB::raw("(select kode_produkvarian, id_produk from toko_griyanaura.ms_produkvarian) as y"), 'y.kode_produkvarian', 'toko_griyanaura.tr_pembeliandetail.kode_produkvarian');
             $q->join(DB::raw("(select id_produk, in_stok from toko_griyanaura.ms_produk) as z"), 'z.id_produk', 'y.id_produk');
             $q->where('z.in_stok', true);
-        }, 'kontak', 'pembelianReturDetail'])->findOrFail($idRetur);
+        }, 'kontak', 'pembelianReturDetail', 'pembelianReturAlokasiKembalianDana'])->findOrFail($idRetur);
         $form->column(12, function (Form $form) use ($data) {
             $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Supplier')->setWidth(3);
             $form->html("<div style='padding-top: 7px'>#{$data->pembelian->transaksi_no}</div>", 'Invoice yang diretur')->setWidth(3);
@@ -115,8 +115,14 @@ class PurchaseReturnController extends AdminController
             $form->currency('totalraw', 'Sub total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->totalraw);
             $form->currency('diskon')->setWidth(2, 8)->width('100%')->symbol('%')->readonly()->value($data->diskon);
             $form->currency('total', 'Total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->grandtotal);
+            $form->currency('kembaliandana', 'Kembalian Dana')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->kembaliandana);
             $form->textarea('catatan')->setWidth(4)->value($data->catatan);
         });
+        $form->html('<div class="modal-kembalian-dana-retur">')->plain();
+        $form->tablehasmany('pembelianReturAlokasiKembalianDana', '', function (NestedForm $form) {
+            $form->text('id_pembelianpembayaran');
+        })->useTable()->value($data->pembelianReturAlokasiKembalianDana->toArray());
+        $form->html('</div>')->plain();
         return $form;
     }
     public function detailReturnForm()
