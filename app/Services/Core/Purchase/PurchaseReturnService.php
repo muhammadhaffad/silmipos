@@ -82,30 +82,34 @@ class PurchaseReturnService
         DB::beginTransaction();
         try {
             $pembelianRetur = PembelianRetur::with('pembelianReturDetail.produkVarian.produk')->find($idRetur);
+            $pembelianRetur->tanggal = $request['tanggal'];
+            $pembelianRetur->catatan = $request['catatan'];
+            $pembelianRetur->save();
             $oldItem = $pembelianRetur->pembelianReturDetail->keyBy('id_pembelianreturdetail');
             $rawTotal = 0;
             foreach ($request['pembelianDetail'] as $returItem) {
-                if (!$returItem['qty_diretur']) {
-                    $returItem['qty_diretur'] = 0;
-                }
                 if (isset($oldItem[$returItem['id_pembelianreturdetail']])) {
-                    if ($returItem['qty_diretur'] > 0 and ($oldItem[$returItem['id_pembelianreturdetail']]['qty'] != $returItem['qty_diretur'])) {
-                        $result = $this->updateReturnItem($returItem['id_pembelianreturdetail'], $pembelianRetur, $returItem, $oldItem);
+                    if ($returItem['qty_diretur'] > 0) {
+                        if ($oldItem[$returItem['id_pembelianreturdetail']]['qty'] != $returItem['qty_diretur']) {
+                            $this->updateReturnItem($returItem['id_pembelianreturdetail'], $pembelianRetur, $returItem, $oldItem);
+                        }
                     } else {
                         $this->deleteReturnItem($returItem['id_pembelianreturdetail'], $pembelianRetur, $oldItem);
                     }
                 } else {
                     if ($returItem['qty_diretur'] > 0) {
-                        $result = $this->storeReturnItem($pembelianRetur, $returItem);
+                        $this->storeReturnItem($pembelianRetur, $returItem);
                     }
                 }
-                $rawTotal += $result->total ?? 0;
             }
-            $pembelianRetur->update([
-                'totalraw' => $rawTotal,
-                'grandtotal' => $rawTotal * (1-$pembelianRetur->diskon/100)
-            ]);
             $pembelianRetur->refresh();
+            $rawTotal = 0;
+            foreach ($pembelianRetur->pembelianReturDetail as $item) {
+                $rawTotal += $item->total;
+            }
+            $pembelianRetur->totalraw = $rawTotal;
+            $pembelianRetur->grandtotal = $rawTotal * (1-$pembelianRetur->diskon/100);
+            $pembelianRetur->save();
             $kembalianDana = DB::select('select toko_griyanaura.f_calckembaliandanareturpembelian(?) as kembaliandana', [$pembelianRetur->transaksi_no])[0]->kembaliandana;
             $this->deleteJurnal($pembelianRetur->id_transaksi);
             $detailTransaksi = [];
@@ -124,10 +128,9 @@ class PurchaseReturnService
                 $detailTransaksi[] = [
                     'kode_akun' => '2001',
                     'keterangan' => null,
-                    'nominaldebit' => $pembelianRetur->grandtotal,
+                    'nominaldebit' => $total,
                     'nominalkredit' => 0
                 ];
-                dd($detailTransaksi);
                 $this->entryJurnal($pembelianRetur->id_transaksi, $detailTransaksi);
             }
             DB::commit();

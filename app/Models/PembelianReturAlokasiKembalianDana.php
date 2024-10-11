@@ -13,4 +13,9 @@ class PembelianReturAlokasiKembalianDana extends Model
     protected $table = 'toko_griyanaura.tr_pembelianreturalokasikembaliandana';
     protected $primaryKey = 'id_pembelianreturalokasikembaliandana';
     protected $guarded = [];
+
+    public function pembelianPembayaran() 
+    {
+        return $this->hasOne(PembelianPembayaran::class,  'id_pembelianpembayaran', 'id_pembelianpembayaran');
+    }
 }

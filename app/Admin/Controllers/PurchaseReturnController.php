@@ -12,6 +12,7 @@ use Encore\Admin\Form\NestedForm;
 use Encore\Admin\Grid;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Show;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -85,14 +86,14 @@ class PurchaseReturnController extends AdminController
             $q->join(DB::raw("(select kode_produkvarian, id_produk from toko_griyanaura.ms_produkvarian) as y"), 'y.kode_produkvarian', 'toko_griyanaura.tr_pembeliandetail.kode_produkvarian');
             $q->join(DB::raw("(select id_produk, in_stok from toko_griyanaura.ms_produk) as z"), 'z.id_produk', 'y.id_produk');
             $q->where('z.in_stok', true);
-        }, 'kontak', 'pembelianReturDetail', 'pembelianReturAlokasiKembalianDana'])->findOrFail($idRetur);
+        }, 'kontak', 'pembelianReturDetail', 'pembelianReturAlokasiKembalianDana.pembelianPembayaran'])->findOrFail($idRetur);
         $form->column(12, function (Form $form) use ($data) {
             $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Supplier')->setWidth(3);
             $form->html("<div style='padding-top: 7px'>#{$data->pembelian->transaksi_no}</div>", 'Invoice yang diretur')->setWidth(3);
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->html("<div style='padding-top: 7px'>#{$data->transaksi_no}</div>", 'No. Transaksi')->setWidth(2, 8);
-            $form->datetime('tanggal', 'Tanggal')->required()->width('100%')->setWidth(2, 8)->value(date('Y-m-d H:i:s'));
+            $form->datetime('tanggal', 'Tanggal')->required()->width('100%')->setWidth(2, 8)->value($data->tanggal);
         });
         $form->column(12, function (Form $form) use ($data) {
             $returItem = $data->pembelianReturDetail->keyBy('id_pembeliandetail');
@@ -120,7 +121,14 @@ class PurchaseReturnController extends AdminController
         });
         $form->html('<div class="modal-kembalian-dana-retur">')->plain();
         $form->tablehasmany('pembelianReturAlokasiKembalianDana', '', function (NestedForm $form) {
-            $form->text('id_pembelianpembayaran');
+            if ($form->model()) {
+                dump($form->model());
+                $form->html($form->model()['pembelian_pembayaran']['transaksi_no'], 'Pembayaran');
+            } else {
+                $form->select('id_pembelianpembayaran', 'Pembayaran');
+            }
+            $form->currency('nominal')->symbol('Rp');
+            $form->currency('sisapembayaran')->symbol('Rp');
         })->useTable()->value($data->pembelianReturAlokasiKembalianDana->toArray());
         $form->html('</div>')->plain();
         return $form;
@@ -258,8 +266,12 @@ class PurchaseReturnController extends AdminController
         } catch (PurchaseReturnException $e) {
             admin_toastr($e->getMessage(), 'warning');
             return redirect()->back();
+        } catch (QueryException $e) {
+            admin_toastr($e->getPrevious()->getMessage(), 'warning');
+            return redirect()->back();
         } catch (\Exception $e) {
-            return $e;
+            admin_toastr('Internal Server Error', 'error');
+            return redirect()->back();
         }
     }
     public function deleteReturn(Request $request, $idRetur)
