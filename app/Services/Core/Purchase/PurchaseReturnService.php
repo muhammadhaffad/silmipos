@@ -6,6 +6,7 @@ use App\Exceptions\PurchaseReturnException;
 use App\Models\Pembelian;
 use App\Models\PembelianDetail;
 use App\Models\PembelianRetur;
+use App\Models\PembelianReturAlokasiKembalianDana;
 use App\Models\PembelianReturDetail;
 use App\Models\ProdukPersediaan;
 use App\Models\ProdukPersediaanDetail;
@@ -40,7 +41,7 @@ class PurchaseReturnService
             $noTransaksi = DB::select("select ('PRET' || lpad(nextval('toko_griyanaura.tr_pembelianretur_seq')::varchar, 6, '0')) as no_transaksi")[0]->no_transaksi;
             $transaksi = Transaksi::create([
                 'transaksi_no' => $noTransaksi,
-                'id_transaksijenis' => 'pembelianpembayaran_tunai',
+                'id_transaksijenis' => 'pembelianretur',
                 'tanggal' => $request['tanggal'],
                 'inserted_by' => Admin::user()->username,
                 'updated_by' => Admin::user()->username
@@ -66,7 +67,6 @@ class PurchaseReturnService
             throw $e;
         }
     }
-
     public function updateReturn($idRetur, $request)
     {
         $rules = [
@@ -140,8 +140,45 @@ class PurchaseReturnService
             throw $th;
         }
     }
+    public function updateAllocate($idRetur, $request)
+    {
+        $rules = [
+            'pembelianReturAlokasiKembalianDana.*.id_pembelianpembayaran' => 'nullable|numeric',
+            'pembelianReturAlokasiKembalianDana.*.nominal' => 'required|numeric'
+        ];
+        $validator = Validator::make($request, $rules);
+        $validator->validate();
+        DB::beginTransaction();
+        try {
+            $pembelianRetur = PembelianRetur::with('pembelianReturAlokasiKembalianDana')->find($idRetur);
+            $oldAlokasi = $pembelianRetur->pembelianReturAlokasiKembalianDana->keyBy('id_pembelianreturalokasikembaliandana');
+            foreach ($request['pembelianReturAlokasiKembalianDana'] as $item) {
+                if ($item['_remove_'] == 0) {
+                    if (isset($oldAlokasi[$item['id_pembelianreturalokasikembaliandana']])) {
+                        // UPDATE
+                    } else {
+                        $transaksi = Transaksi::create([
+                            'transaksi_no' => null,
+                            'id_transaksijenis' => 'pembelianreturalokasikembaliandana_dp',
+                            'tanggal' => date('Y-m-d H:i:s'),
+                            'inserted_by' => Admin::user()->username,
+                            'updated_by' => Admin::user()->username
+                        ]);
+                        // STORE
+                    }
+                } else {
+                    // DELETE
 
-    public function storeReturnItem($return, $newData)
+                }
+            }
+            DB::commit();
+        } catch (\Exception $th) {
+            DB::rollBack();
+            throw $th;
+        }
+    }
+
+    protected function storeReturnItem($return, $newData)
     {
         $pembelianDetail = (new PembelianDetail)->setTable('toko_griyanaura.tr_pembeliandetail as x')->select('x.*', DB::raw("x.qty - coalesce(sum(prd.qty),0) as sisaqty"))
             ->leftJoin('toko_griyanaura.tr_pembelianreturdetail as prd', 'x.id_pembeliandetail', 'prd.id_pembeliandetail')
@@ -151,6 +188,12 @@ class PurchaseReturnService
             ->first();
         if (!$pembelianDetail) {
             throw new PurchaseReturnException('Produk tidak ditemukan atau jumlah yang diretur lebih besar dari pembelian');
+        }
+        if (DB::table('toko_griyanaura.tr_pembelianrefunddetail')->where('id_pembelianretur', $return->id_pembelianretur)->exists()) {
+            throw new PurchaseReturnException('Transaksi retur tidak dapat diubah, karena terkait dengan transaksi lain.');
+        }
+        if (DB::table('toko_griyanaura.tr_pembelianreturalokasikembaliandana')->where('id_pembelianretur', $return->id_pembelianretur)->exists()) {
+            throw new PurchaseReturnException('Transaksi retur tidak dapat diubah, karena terkait dengan transaksi lain.');
         }
         DB::beginTransaction();
         try {
@@ -184,7 +227,7 @@ class PurchaseReturnService
             throw $th;
         }
     }
-    public function updateReturnItem($idItem, $return, $newData, $oldData)
+    protected function updateReturnItem($idItem, $return, $newData, $oldData)
     {
         DB::beginTransaction();
         try {
@@ -237,7 +280,7 @@ class PurchaseReturnService
             throw $th;
         }
     }
-    public function deleteReturnItem($idItem, $return, $oldData) 
+    protected function deleteReturnItem($idItem, $return, $oldData) 
     {
         DB::beginTransaction();
         try {
@@ -274,4 +317,27 @@ class PurchaseReturnService
             throw $th;
         }
     }
+
+    protected function storeAllocateRemainingReturnFund($return, $newData)
+    {
+        DB::beginTransaction();
+        try {
+            $alokasiDanaRetur = PembelianReturAlokasiKembalianDana::create([
+                'id_pembelianretur' => $return->id_pembelianretur,
+                'id_pembelianpembayaran' => $newData['id_pembelianpembayaran'],
+                'nominal' => $newData['nominal'],
+                'id_transaksi' => $newData['id_transaksi'],
+                'tanggal' => $newData['tanggal']
+            ]);
+            DB::commit();
+            return $alokasiDanaRetur;
+        } catch (\Exception $th) {
+            DB::rollBack();
+            throw $th;
+        }
+    }
+    protected function updateAllocateRemainingReturnFund($idItem, $return, $newData, $oldData)
+    {}
+    protected function deleteAllocateRemainingReturnFund($idItem, $return, $oldData)
+    {}
 }

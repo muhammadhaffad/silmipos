@@ -177,8 +177,6 @@ class PurchasePaymentController extends AdminController
                         'data-url' => route(admin_get_route('ajax.pembelian')),
                         'select2' => null
                     ])->default($data['id_pembelianinvoice'] ?? null);
-                    if ($data)
-                        $invoice->disable();
                     $url = route(admin_get_route('ajax.pembelian'));
                     $urlDetailInvoice = route(admin_get_route('ajax.pembelian-detail'));
                     $selectAjaxInvoice = <<<SCRIPT

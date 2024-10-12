@@ -94,6 +94,8 @@ Route::group([
             Route::post('/store', [PurchaseReturnController::class, 'storeReturn'])->name('purchase.return.store');
             Route::put('/update/{idRetur}', [PurchaseReturnController::class, 'updateReturn'])->name('purchase.return.update');
             Route::match(['post', 'delete'], '/delete/{idRetur}', [PurchaseReturnController::class, 'deleteReturn'])->name('purchase.return.delete');
+
+            Route::put('/update-allocate/{idRetur}', [PurchaseReturnController::class, 'updateAllocate'])->name('purchase.return.update-allocate');
         });
     });
     Route::prefix('ajax')->group(function () {
@@ -105,5 +107,7 @@ Route::group([
         Route::get('/detail-produk', [AjaxController::class, 'getProdukDetail'])->name('ajax.produk-detail');
         Route::get('/pembelian', [AjaxController::class, 'getPembelian'])->name('ajax.pembelian');
         Route::get('/pembelian-detail', [AjaxController::class, 'getPembelianDetail'])->name('ajax.pembelian-detail');
+        Route::get('/pembelian-pembayaran', [AjaxController::class, 'getPembelianPembayaran'])->name('ajax.pembelian-pembayaran');
+        Route::get('/pembelian-pembayaran-detail', [AjaxController::class, 'getPembelianPembayaranDetail'])->name('ajax.pembelian-pembayaran-detail');
     });
 });

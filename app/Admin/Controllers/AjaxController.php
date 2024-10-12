@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Akun;
 use App\Models\Dynamic;
 use App\Models\Pembelian;
+use App\Models\PembelianPembayaran;
 use App\Models\Produk;
 use App\Models\ProdukPersediaan;
 use App\Models\ProdukVarian;
@@ -85,5 +86,19 @@ class AjaxController extends Controller
         $id = $request->get('id_pembelian');
         $idSupplier = $request->get('id_supplier');
         return Pembelian::select('id_pembelian', 'transaksi_no', DB::raw("TO_CHAR(tanggaltempo, 'YYYY-MM-DD') as tanggaltempo"), 'grandtotal', DB::raw('toko_griyanaura.f_getsisatagihan(transaksi_no) as sisatagihan'))->where('id_kontak', $idSupplier)->where('id_pembelian', $id)->first()?->toArray() ?: [];
+    }
+    public function getPembelianPembayaran(Request $request)
+    {
+        $q = $request->get('q');
+        $idSupplier = $request->get('id_supplier');
+        if ($request->get('id')) {
+            return PembelianPembayaran::select('id_pembelianpembayaran as id', 'transaksi_no as text')->where('jenisbayar', 'DP')->where(DB::raw('toko_griyanaura.f_getsisapembayaran(transaksi_no)'), '<>', 0)->where('id_kontak', $idSupplier)->where('id_pembelianpembayaran', $request->get('id'))->first(['id_pembelianpembayaran as id', DB::raw("transaksi_no as text")]);
+        }
+        return PembelianPembayaran::select('id_pembelianpembayaran as id', 'transaksi_no as text')->where('id_kontak', $idSupplier)->where('jenisbayar', 'DP')->where(DB::raw('toko_griyanaura.f_getsisapembayaran(transaksi_no)'), '<>', 0)->where('transaksi_no', 'ilike', "%$q%")->paginate(null, ['id_pembelianpembayaran as id', DB::raw("transaksi_no as text")]);
+    }
+    public function getPembelianPembayaranDetail(Request $request) {
+        $id = $request->get('id_pembelianpembayaran');
+        $idSupplier = $request->get('id_supplier');
+        return PembelianPembayaran::select('id_pembelianpembayaran', 'transaksi_no', 'nominal', DB::raw('toko_griyanaura.f_getsisapembayaran(transaksi_no) as sisapembayaran'))->where('id_kontak', $idSupplier)->where('jenisbayar', 'DP')->where('id_pembelianpembayaran', $id)->first()?->toArray() ?: [];
     }
 }

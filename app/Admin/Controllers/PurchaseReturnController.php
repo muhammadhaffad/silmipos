@@ -8,9 +8,11 @@ use App\Services\Core\Purchase\PurchaseReturnService;
 use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
+use Encore\Admin\Form\Layout\Column;
 use Encore\Admin\Form\NestedForm;
 use Encore\Admin\Grid;
 use Encore\Admin\Layout\Content;
+use Encore\Admin\Layout\Row;
 use Encore\Admin\Show;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -33,7 +35,6 @@ class PurchaseReturnController extends AdminController
         $form->select('id_kontak', 'Supplier')->setWidth(2)->ajax(route(admin_get_route('ajax.kontak')));
         $invoice = $form->select('id_pembelian', 'No. Transaksi')->setWidth(2);
         $url = route(admin_get_route('ajax.pembelian'));
-        $urlDetailInvoice = route(admin_get_route('ajax.pembelian-detail'));
         $selectAjaxInvoice = <<<SCRIPT
             $("{$invoice->getElementClassSelector()}").select2({
                 ajax: {
@@ -76,6 +77,123 @@ class PurchaseReturnController extends AdminController
         $form->disableViewCheck();
         return $form;
     }
+    public function editAllocateRemainingReturnFund($model, $idRetur)
+    {
+        $form = new Form($model);
+        $form->builder()->setTitle('Alokasi Kembalian Dana Retur')->setMode('edit');
+        $form->tools(function ($tools) {
+            $tools->disableList();
+            $tools->disableDelete();
+            $tools->disableView();
+        });
+        $form->setAction(route(admin_get_route('purchase.return.update-allocate'), ['idRetur' => $idRetur]));
+        $data = $form->model()->with(['kontak', 'pembelianReturDetail', 'pembelianReturAlokasiKembalianDana.pembelianPembayaran' => function ($q) {
+            $q->addSelect('*', DB::raw('toko_griyanaura.f_getsisapembayaran(transaksi_no) as sisapembayaran'));
+        }])->findOrFail($idRetur);
+        $form->html('<div class="modal-kembalian-dana-retur">')->plain();
+        $url = route(admin_get_route('purchase.return.update-allocate'), [$idRetur]);
+        $form->tablehasmany('pembelianReturAlokasiKembalianDana', '', function (NestedForm $form) use ($data) {
+            $row = $form->model();
+            if ($row) {
+                $form->html($row['pembelian_pembayaran']['transaksi_no'], 'Pembayaran');
+            } else {
+                $payment = $form->select('id_pembelianpembayaran', 'Pembayaran')->setGroupClass('w-200px')->attribute([
+                    'data-url' => route(admin_get_route('ajax.pembelian-pembayaran')),
+                    'select2' => null
+                ])->default($row['pembelian_pembayaran']['id_pembelianpembayaran'] ?? null);
+                $url = route(admin_get_route('ajax.pembelian-pembayaran'));
+                $urlDetailPayment = route(admin_get_route('ajax.pembelian-pembayaran-detail'));
+                $selectAjaxPayment = <<<SCRIPT
+                    $("{$payment->getElementClassSelector()}").select2({
+                        ajax: {
+                            url: "$url",
+                            dataType: 'json',
+                            delay: 250,
+                            data: function (params) {
+                            return {
+                                q: params.term,
+                                page: params.page,
+                                id_supplier: "{$data['id_kontak']}"
+                            };
+                            },
+                            processResults: function (data, params) {
+                            params.page = params.page || 1;
+
+                            return {
+                                results: $.map(data.data, function (d) {
+                                        d.id = d.id;
+                                        d.text = d.text;
+                                        return d;
+                                        }),
+                                pagination: {
+                                more: data.next_page_url
+                                }
+                            };
+                            },
+                            cache: true
+                        },
+                        escapeMarkup: function (markup) {
+                            return markup;
+                        }
+                    });
+                    $("{$payment->getElementClassSelector()}").on('select2:select', function (e) {
+                        const kode = e.params.data.id;
+                        $.ajax({
+                            url: '$urlDetailPayment',
+                            type: 'GET',
+                            data: {
+                                id_pembelianpembayaran: kode,
+                                id_supplier: "{$data['id_kontak']}"
+                            },
+                            success: function(data) {
+                                // Jika permintaan berhasil
+                                console.log('Data berhasil diterima:', data);
+                                const row = $(e.target).closest('tr');
+                                if (data) {
+                                    row.find('[name*="nominalpembayaran"]').val(data.nominal);
+                                    row.find('[name*="sisapembayaran"]').val(data.sisapembayaran);
+                                }
+                            },
+                            error: function(jqXHR, textStatus, errorThrown) {
+                                // Menangani kesalahan
+                                switch (jqXHR.status) {
+                                    case 404:
+                                        console.log('Error 404: Tidak ditemukan.');
+                                        break;
+                                    case 500:
+                                        console.log('Error 500: Kesalahan server.');
+                                        break;
+                                    default:
+                                        console.log('Kesalahan: ' + textStatus);
+                                        break;
+                                }
+                            }
+                        });
+                    });
+                    $('.pembelianReturAlokasiKembalianDana.nominal').change(function () {
+                        let allocated = 0;
+                        $('.pembelianReturAlokasiKembalianDana.nominal:visible').each(function () {
+                            allocated += parseInt($(this).inputmask('unmaskedvalue')) || 0;
+                        });
+                        console.info(allocated);
+                        const kembalianDana = $('[name="kembaliandana"]').first().inputmask('unmaskedvalue');
+                        $('[name="sisakembaliandana"]').val(kembalianDana - allocated);
+                    });
+                SCRIPT;
+                $payment->setScript($selectAjaxPayment);
+            }
+            $form->currency('nominalpembayaran', 'Pembayaran awal')->disable()->symbol('Rp')->default($row['pembelian_pembayaran']['nominal'] ?? null);
+            $form->currency('sisapembayaran', 'Sisa pembayaran')->disable()->symbol('Rp')->default($row['pembelian_pembayaran']['sisapembayaran'] ?? null);
+            $form->currency('nominal', 'Nominal alokasi')->symbol('Rp');
+        })->useTable()->value($data->pembelianReturAlokasiKembalianDana->toArray());
+        $form->currency('sisakembaliandana', 'Sisa kembalian dana')->setWidth(2, 8)->width('100%')->setGroupClass('mt-4')->symbol('Rp')->readonly()->value($data->kembaliandana);
+        $form->html('</div>')->plain();
+        $form->disableReset();
+        $form->disableCreatingCheck();
+        $form->disableEditingCheck();
+        $form->disableViewCheck();
+        return $form;
+    }
     public function editReturnForm($model, $idRetur)
     {
         $form = new Form($model);
@@ -86,7 +204,9 @@ class PurchaseReturnController extends AdminController
             $q->join(DB::raw("(select kode_produkvarian, id_produk from toko_griyanaura.ms_produkvarian) as y"), 'y.kode_produkvarian', 'toko_griyanaura.tr_pembeliandetail.kode_produkvarian');
             $q->join(DB::raw("(select id_produk, in_stok from toko_griyanaura.ms_produk) as z"), 'z.id_produk', 'y.id_produk');
             $q->where('z.in_stok', true);
-        }, 'kontak', 'pembelianReturDetail', 'pembelianReturAlokasiKembalianDana.pembelianPembayaran'])->findOrFail($idRetur);
+        }, 'kontak', 'pembelianReturDetail', 'pembelianReturAlokasiKembalianDana.pembelianPembayaran' => function ($q) {
+            $q->addSelect('*', DB::raw('toko_griyanaura.f_getsisapembayaran(transaksi_no) as sisapembayaran'));
+        }])->findOrFail($idRetur);
         $form->column(12, function (Form $form) use ($data) {
             $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Supplier')->setWidth(3);
             $form->html("<div style='padding-top: 7px'>#{$data->pembelian->transaksi_no}</div>", 'Invoice yang diretur')->setWidth(3);
@@ -119,31 +239,22 @@ class PurchaseReturnController extends AdminController
             $form->currency('kembaliandana', 'Kembalian Dana')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->kembaliandana);
             $form->textarea('catatan')->setWidth(4)->value($data->catatan);
         });
-        $form->html('<div class="modal-kembalian-dana-retur">')->plain();
-        $form->tablehasmany('pembelianReturAlokasiKembalianDana', '', function (NestedForm $form) {
-            if ($form->model()) {
-                dump($form->model());
-                $form->html($form->model()['pembelian_pembayaran']['transaksi_no'], 'Pembayaran');
-            } else {
-                $form->select('id_pembelianpembayaran', 'Pembayaran');
-            }
-            $form->currency('nominal')->symbol('Rp');
-            $form->currency('sisapembayaran')->symbol('Rp');
-        })->useTable()->value($data->pembelianReturAlokasiKembalianDana->toArray());
-        $form->html('</div>')->plain();
+        $form->disableReset();
+        $form->disableCreatingCheck();
+        $form->disableEditingCheck();
+        $form->disableViewCheck();
         return $form;
     }
-    public function detailReturnForm()
-    {}
+    public function detailReturnForm() {}
 
     public function createReturn(Content $content)
     {
-        $scriptDereferred = <<<SCRIPT
+        $scriptDereferred = <<<JS
             let idSupplier = null;
             $('select.id_kontak').change(function () {
                 idSupplier = $('select.id_kontak').val();
             });
-        SCRIPT;
+        JS;
         Admin::script($scriptDereferred, true);
         return $content
             ->title('Retur Pembelian')
@@ -152,7 +263,7 @@ class PurchaseReturnController extends AdminController
     }
     public function editReturn(Content $content, $idRetur)
     {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
@@ -193,9 +304,9 @@ class PurchaseReturnController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
-        $script = <<<SCRIPT
+        $dereferredScript = <<<JS
             $('input.qty_diretur').on('change', function () {
                 let rawTotal = 0;
                 $('#has-many-pembelianDetail tbody tr').each(function () {
@@ -210,6 +321,12 @@ class PurchaseReturnController extends AdminController
                 const diskon = $('[name="diskon"]').val();
                 $('[name="total"]').val(rawTotal * (1-diskon/100));
             });
+            let allocated = 0;
+            $('.pembelianReturAlokasiKembalianDana.nominal:visible').each(function () {
+                allocated += parseInt($(this).inputmask('unmaskedvalue')) || 0;
+            });
+            const kembalianDana = parseInt($('[name="kembaliandana"]').first().inputmask('unmaskedvalue')) || 0;
+            $('[name="sisakembaliandana"]').val(kembalianDana - allocated);
             $('select.form-control').each(function () {
                 const select = this;
                 const defaultValue = select.dataset.value.split(',');
@@ -230,15 +347,27 @@ class PurchaseReturnController extends AdminController
                     });
                 })
             });
-        SCRIPT;
-        Admin::script($script);
+            $('#has-many-pembelianReturAlokasiKembalianDana').on('click', '.remove', function () {
+                let allocated = 0;
+                $('.pembelianReturAlokasiKembalianDana.nominal:visible').each(function () {
+                    allocated += parseInt($(this).inputmask('unmaskedvalue')) || 0;
+                });
+                console.info(allocated);
+                const kembalianDana = parseInt($('[name="kembaliandana"]').first().inputmask('unmaskedvalue')) || 0;
+                $('[name="sisakembaliandana"]').val(kembalianDana - allocated);
+            });
+        JS;
+        Admin::script($dereferredScript, true);
         return $content
             ->title('Retur Pembelian')
             ->description('edit')
-            ->body($this->editReturnForm(new PembelianRetur, $idRetur));
+            ->row(function (Row $row) use ($idRetur) {
+                $row->column(12, $this->editReturnForm(new PembelianRetur, $idRetur));
+                $row->column(12, $this->editAllocateRemainingReturnFund(new PembelianRetur, $idRetur));
+            });
+        // ->body($this->editReturnForm(new PembelianRetur, $idRetur));
     }
-    public function detailReturn(Content $content, $idRetur)
-    {}
+    public function detailReturn(Content $content, $idRetur) {}
 
     public function storeReturn(Request $request)
     {
@@ -274,6 +403,11 @@ class PurchaseReturnController extends AdminController
             return redirect()->back();
         }
     }
-    public function deleteReturn(Request $request, $idRetur)
-    {}
+    public function deleteReturn(Request $request, $idRetur) {}
+    public function updateAllocate(Request $request, $idRetur) 
+    {
+        dump($request->all());
+        admin_toastr('Berhasil hit!', 'info');
+        return redirect()->back();
+    }
 }
