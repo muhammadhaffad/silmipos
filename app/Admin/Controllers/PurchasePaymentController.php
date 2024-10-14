@@ -138,7 +138,10 @@ class PurchasePaymentController extends AdminController
         $form->setAction(route(admin_get_route('purchase.payment.update'), ['idPembayaran' => $idPembayaran]));
         $data = $form->model()->with(['pembelianAlokasiPembayaran.pembelian' => function ($q) {
             $q->addSelect(DB::raw('*,toko_griyanaura.f_getsisatagihan(transaksi_no) as sisatagihan'));
-        }])->find($idPembayaran);
+        }])->findOrFail($idPembayaran);
+        if ($data->jenisbayar != 'tunai') {
+            \abort(404);
+        }
         $form->tools(function (Tools $tools) use ($idPembayaran, $data) {
             $tools->disableList();
             $tools->disableView();
@@ -278,7 +281,10 @@ class PurchasePaymentController extends AdminController
         $form->setAction(route(admin_get_route('purchase.payment.update'), ['idPembayaran' => $idPembayaran]));
         $data = $form->model()->with(['pembelianAlokasiPembayaran.pembelian' => function ($q) {
             $q->addSelect('*', DB::raw('toko_griyanaura.f_getsisatagihan(transaksi_no) as sisatagihan'));
-        }])->find($idPembayaran);
+        }])->findOrFail($idPembayaran);
+        if ($data->jenisbayar != 'tunai') {
+            \abort(404);
+        }
         $form->tools(function (Tools $tools) use ($idPembayaran, $data) {
             $tools->disableList();
             $tools->disableView();

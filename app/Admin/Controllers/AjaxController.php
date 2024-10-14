@@ -78,9 +78,9 @@ class AjaxController extends Controller
         $q = $request->get('q');
         $idSupplier = $request->get('id_supplier');
         if ($request->get('id')) {
-            return Pembelian::select('id_pembelian as id', 'transaksi_no as text')->where('jenis', 'invoice')->where(DB::raw('toko_griyanaura.f_getsisatagihan(transaksi_no)'), '<>', 0)->where('id_kontak', $idSupplier)->where('id_pembelian', $request->get('id'))->first(['id_pembelian as id', DB::raw("transaksi_no as text")]);
+            return Pembelian::select('id_pembelian as id', 'transaksi_no as text')->where('jenis', 'invoice')->where('id_kontak', $idSupplier)->where('id_pembelian', $request->get('id'))->first(['id_pembelian as id', DB::raw("transaksi_no as text")]);
         }
-        return Pembelian::select('id_pembelian as id', 'transaksi_no as text')->where('id_kontak', $idSupplier)->where('jenis', 'invoice')->where(DB::raw('toko_griyanaura.f_getsisatagihan(transaksi_no)'), '<>', 0)->where('transaksi_no', 'ilike', "%$q%")->paginate(null, ['id_pembelian as id', DB::raw("transaksi_no as text")]);
+        return Pembelian::select('id_pembelian as id', 'transaksi_no as text')->where('id_kontak', $idSupplier)->where('jenis', 'invoice')->where('transaksi_no', 'ilike', "%$q%")->paginate(null, ['id_pembelian as id', DB::raw("transaksi_no as text")]);
     }
     public function getPembelianDetail(Request $request) {
         $id = $request->get('id_pembelian');
@@ -92,9 +92,9 @@ class AjaxController extends Controller
         $q = $request->get('q');
         $idSupplier = $request->get('id_supplier');
         if ($request->get('id')) {
-            return PembelianPembayaran::select('id_pembelianpembayaran as id', 'transaksi_no as text')->where('jenisbayar', 'DP')->where(DB::raw('toko_griyanaura.f_getsisapembayaran(transaksi_no)'), '<>', 0)->where('id_kontak', $idSupplier)->where('id_pembelianpembayaran', $request->get('id'))->first(['id_pembelianpembayaran as id', DB::raw("transaksi_no as text")]);
+            return PembelianPembayaran::select('id_pembelianpembayaran as id', 'transaksi_no as text')->where('jenisbayar', 'DP')->where('id_kontak', $idSupplier)->where('id_pembelianpembayaran', $request->get('id'))->first(['id_pembelianpembayaran as id', DB::raw("transaksi_no as text")]);
         }
-        return PembelianPembayaran::select('id_pembelianpembayaran as id', 'transaksi_no as text')->where('id_kontak', $idSupplier)->where('jenisbayar', 'DP')->where(DB::raw('toko_griyanaura.f_getsisapembayaran(transaksi_no)'), '<>', 0)->where('transaksi_no', 'ilike', "%$q%")->paginate(null, ['id_pembelianpembayaran as id', DB::raw("transaksi_no as text")]);
+        return PembelianPembayaran::select('id_pembelianpembayaran as id', 'transaksi_no as text')->where('id_kontak', $idSupplier)->where('jenisbayar', 'DP')->where('transaksi_no', 'ilike', "%$q%")->paginate(null, ['id_pembelianpembayaran as id', DB::raw("transaksi_no as text")]);
     }
     public function getPembelianPembayaranDetail(Request $request) {
         $id = $request->get('id_pembelianpembayaran');

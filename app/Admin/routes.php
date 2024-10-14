@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Route;
 use App\Admin\Controllers\ProdukController;
 use App\Admin\Controllers\ProdukMutasiController;
 use App\Admin\Controllers\ProdukPenyesuaianController;
+use App\Admin\Controllers\PurchaseDownPaymentController;
 use App\Admin\Controllers\PurchaseInvoiceController;
 use App\Admin\Controllers\PurchaseOrderController;
 use App\Admin\Controllers\PurchasePaymentController;
@@ -76,6 +77,15 @@ Route::group([
             Route::post('/store', [PurchaseInvoiceController::class, 'storePurchaseInvoice'])->name('purchase.invoice.store');
             Route::put('/update/{idPembelian}', [PurchaseInvoiceController::class, 'updatePurchaseInvoice'])->name('purchase.invoice.update');
             Route::match(['delete', 'post'],'/delete/{idPembelian}', [PurchaseInvoiceController::class, 'deletePurchaseInvoice'])->name('purchase.invoice.delete');
+        });
+        Route::prefix('/down-payment')->group(function () {
+            Route::get('/create', [PurchaseDownPaymentController::class, 'createPayment'])->name('purchase.down-payment.create');
+            Route::get('/detail/{idPembayaran}', [PurchaseDownPaymentController::class, 'detailPayment'])->name('purchase.down-payment.detail');
+            Route::get('/edit/{idPembayaran}', [PurchaseDownPaymentController::class, 'editPayment'])->name('purchase.down-payment.edit');
+            
+            Route::post('/store', [PurchaseDownPaymentController::class, 'storePayment'])->name('purchase.down-payment.store');
+            Route::put('/update/{idPembayaran}', [PurchaseDownPaymentController::class, 'updatePayment'])->name('purchase.down-payment.update');
+            Route::match(['delete', 'post'], '/delete/{idPembayaran}', [PurchaseDownPaymentController::class, 'deletePayment'])->name('purchase.down-payment.delete');
         });
         Route::prefix('/payment')->group(function () {
             Route::get('/create', [PurchasePaymentController::class, 'createPayment'])->name('purchase.payment.create');
