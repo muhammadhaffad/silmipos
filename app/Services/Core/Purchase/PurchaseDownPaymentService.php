@@ -24,6 +24,7 @@ class PurchaseDownPaymentService
             'tanggal' => 'required|date_format:Y-m-d H:i:s',
             'id_kontak' => 'required|numeric',
             'catatan' => 'nullable|string',
+            'totaldp' => 'required|numeric',
             'pembelianAlokasiPembayaran' => 'required|array',
             'pembelianAlokasiPembayaran.*.id_pembelian' => 'required|string',
             'pembelianAlokasiPembayaran.*.nominalbayar' => 'required|numeric',
@@ -48,10 +49,17 @@ class PurchaseDownPaymentService
                 'jenisbayar' => 'DP',
                 'tanggal' => $request['tanggal'],
                 'catatan' => $request['catatan'],
-                'nominal' => (int)$request['total'],
+                'nominal' => (int)$request['totaldp'],
                 'inserted_by' => Admin::user()->username,
                 'updated_by' => Admin::user()->username
             ]);
+            $total = 0;
+            foreach ($request['pembelianAlokasiPembayaran'] as $item) {
+                $total += $item['nominalbayar'];
+            }
+            if ($total > $request['totaldp']) {
+                throw new PurchasePaymentException('Total pembayaran melebihi total DP');
+            }
             foreach ($request['pembelianAlokasiPembayaran'] as $item) {
                 $newData = [
                     'nominalbayar' => $item['nominalbayar'],
@@ -60,6 +68,23 @@ class PurchaseDownPaymentService
                 $this->storeAllocatePaymentToInvoice($payment, $newData);
             }
             $payment = PembelianPembayaran::find($payment->id_pembelianpembayaran)->load('pembelianAlokasiPembayaran');
+            $detailTransaksi = [
+                [
+                    'kode_akun' => '1410',
+                    'keterangan' => 'Uang muka pembelian #' . $payment->transaksi_no,
+                    'nominaldebit' => $payment->nominal,
+                    'nominalkredit' => 0,
+                    'ref_id' => null
+                ],
+                [
+                    'kode_akun' => '1001',
+                    'keterangan' => 'Uang muka pembelian #' . $payment->transaksi_no,
+                    'nominaldebit' => 0,
+                    'nominalkredit' => $payment->nominal,
+                    'ref_id' => null
+                ]
+            ];
+            $this->entryJurnal($payment->id_transaksi, $detailTransaksi);
             foreach ($payment->pembelianAlokasiPembayaran as $alokasi) {
                 $detailTransaksi = [
                     [
@@ -70,7 +95,7 @@ class PurchaseDownPaymentService
                         'ref_id' => $alokasi->id_pembelianalokasipembayaran
                     ],
                     [
-                        'kode_akun' => '1001',
+                        'kode_akun' => '1410',
                         'keterangan' => 'Pembayaran #' . $alokasi->pembelian->transaksi_no,
                         'nominaldebit' => 0,
                         'nominalkredit' => $alokasi->nominal,
@@ -91,7 +116,7 @@ class PurchaseDownPaymentService
         $rules = [
             'tanggal' => 'required|date_format:Y-m-d H:i:s',
             'catatan' => 'nullable|string',
-            'total' => 'required|numeric',
+            'totaldp' => 'required|numeric',
             'pembelianAlokasiPembayaran' => 'array',
             'pembelianAlokasiPembayaran.*.nominalbayar' => 'required|numeric',
             'pembelianAlokasiPembayaran.*.id_pembelian' => 'nullable|numeric',
@@ -105,9 +130,18 @@ class PurchaseDownPaymentService
             $pembayaran->update([
                 'tanggal' => $request['tanggal'],
                 'catatan' => $request['catatan'],
-                'nominal' => (int)$request['total']
+                'nominal' => (int)$request['totaldp']
             ]);
             $pembayaran->refresh();
+            $sisaPembayaran = DB::select('select toko_griyanaura.f_getsisapembayaran(?) as sisapembayaran', [$pembayaran->transaksi_no])[0]->sisapembayaran;
+            
+            $total = 0;
+            foreach ($request['pembelianAlokasiPembayaran'] as $item) {
+                $total += $item['nominalbayar'];
+            }
+            if ($total > $sisaPembayaran) {
+                throw new PurchasePaymentException('Total pembayaran melebihi sisa pembayaran');
+            }
             $oldItem = $pembayaran->pembelianAlokasiPembayaran->keyBy('id_pembelianalokasipembayaran');
             foreach ($request['pembelianAlokasiPembayaran'] as $key => $item) {
                 if ($item['_remove_'] == 0) {
@@ -135,6 +169,24 @@ class PurchaseDownPaymentService
                 }
             }
             $pembayaran->refresh();
+            $this->deleteJurnal($pembayaran->id_transaksi);
+            $detailTransaksi = [
+                [
+                    'kode_akun' => '1410',
+                    'keterangan' => 'Uang muka pembelian #' . $pembayaran->transaksi_no,
+                    'nominaldebit' => $pembayaran->nominal,
+                    'nominalkredit' => 0,
+                    'ref_id' => null
+                ],
+                [
+                    'kode_akun' => '1001',
+                    'keterangan' => 'Uang muka pembelian #' . $pembayaran->transaksi_no,
+                    'nominaldebit' => 0,
+                    'nominalkredit' => $pembayaran->nominal,
+                    'ref_id' => null
+                ]
+            ];
+            $this->entryJurnal($pembayaran->id_transaksi, $detailTransaksi);
             foreach ($pembayaran->pembelianAlokasiPembayaran as $alokasi) {
                 $this->deleteJurnal($alokasi->id_transaksi);
                 $detailTransaksi = [
@@ -146,7 +198,7 @@ class PurchaseDownPaymentService
                         'ref_id' => $alokasi->id_pembelianalokasipembayaran
                     ],
                     [
-                        'kode_akun' => '1001',
+                        'kode_akun' => '1410',
                         'keterangan' => 'Pembayaran #' . $alokasi->pembelian->transaksi_no,
                         'nominaldebit' => 0,
                         'nominalkredit' => $alokasi->nominal,
@@ -241,6 +293,14 @@ class PurchaseDownPaymentService
             if (DB::table('toko_griyanaura.tr_pembelianretur')->where('id_pembelian', $oldData[$idItem]->id_pembelianinvoice)->where('tanggal', '>', $oldData[$idItem]->tanggal)->exists())
             {
                 throw new PurchasePaymentException('Alokasi pembayaran tidak dapat diubah, karena terdapat transaksi retur.');
+            }
+            $pembelianInvoice = Pembelian::where([['id_pembelian', '=', $oldData[$idItem]->id_pembelianinvoice], ['jenis', '=', 'invoice'], ['id_kontak', '=', $payment->id_kontak]])->first();
+            if (!$pembelianInvoice) {
+                throw new PurchasePaymentException('Supplier invoice tidak valid.');
+            }
+            $sisaTagihan = DB::select('select toko_griyanaura.f_getsisatagihan(?) as sisatagihan', [$pembelianInvoice->transaksi_no])[0]->sisatagihan - ($newData['nominal'] - $oldData[$idItem]->nominal);
+            if ($sisaTagihan < 0) {
+                throw new PurchasePaymentException('Pembayaran melebihi tagihan, sisa tagihan Anda: ' . $sisaTagihan);
             }
             PembelianAlokasiPembayaran::where('id_pembelianalokasipembayaran', $idItem)->update($newData);
             DB::commit();

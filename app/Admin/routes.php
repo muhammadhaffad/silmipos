@@ -11,6 +11,7 @@ use App\Admin\Controllers\PurchaseDownPaymentController;
 use App\Admin\Controllers\PurchaseInvoiceController;
 use App\Admin\Controllers\PurchaseOrderController;
 use App\Admin\Controllers\PurchasePaymentController;
+use App\Admin\Controllers\PurchaseRefundPaymentController;
 use App\Admin\Controllers\PurchaseReturnController;
 use Encore\Admin\Actions\Action;
 use Encore\Admin\Actions\RowAction;
@@ -106,6 +107,9 @@ Route::group([
             Route::match(['post', 'delete'], '/delete/{idRetur}', [PurchaseReturnController::class, 'deleteReturn'])->name('purchase.return.delete');
 
             Route::put('/update-allocate/{idRetur}', [PurchaseReturnController::class, 'updateAllocate'])->name('purchase.return.update-allocate');
+        });
+        Route::prefix('/refund')->group(function () {
+            Route::get('/create', [PurchaseRefundPaymentController::class, 'createRefund'])->name('purchase.refund.create');
         });
     });
     Route::prefix('ajax')->group(function () {

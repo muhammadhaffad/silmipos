@@ -4,6 +4,7 @@ namespace App\Admin\Controllers;
 
 use App\Exceptions\PurchasePaymentException;
 use App\Models\PembelianPembayaran;
+use App\Services\Core\Purchase\PurchaseDownPaymentService;
 use App\Services\Core\Purchase\PurchasePaymentService;
 use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
@@ -19,10 +20,10 @@ use Illuminate\Validation\ValidationException;
 
 class PurchaseDownPaymentController extends AdminController
 {
-    protected $purchasePaymentService;
-    public function __construct(PurchasePaymentService $purchasePaymentService)
+    protected $purchaseDownPaymentService;
+    public function __construct(PurchaseDownPaymentService $purchaseDownPaymentService)
     {
-        $this->purchasePaymentService = $purchasePaymentService;
+        $this->purchaseDownPaymentService = $purchaseDownPaymentService;
     }
     public function createPaymentForm($model)
     {
@@ -34,6 +35,10 @@ class PurchaseDownPaymentController extends AdminController
         $form->column(12, function (Form $form) {
             $form->text('transaksi_no', 'No. Transaksi')->placeholder('[AUTO]')->setLabelClass(['text-nowrap'])->withoutIcon()->width('100%')->setWidth(2, 8);
             $form->datetime('tanggal', 'Tanggal')->required()->width('100%')->setWidth(2, 8)->value(date('Y-m-d H:i:s'));
+        });
+        
+        $form->column(12, function (Form $form) {
+            $form->currency('totaldp', 'Nominal DP')->symbol('Rp');
         });
         $form->column(12, function (Form $form) {
             $form->tablehasmany('pembelianAlokasiPembayaran', '', function (NestedForm $form) {
@@ -162,7 +167,7 @@ class PurchaseDownPaymentController extends AdminController
             $form->datetime('tanggal', 'Tanggal')->required()->width('100%')->setWidth(2, 8)->value($data->tanggal);
         });
         $form->column(12, function (Form $form) use ($data) {
-            $form->currency('total', 'Total')->symbol('Rp');
+            $form->currency('totaldp', 'Nominal DP')->symbol('Rp')->value($data->nominal);
             $form->currency('sisapembayaran', 'Sisa Pembayaran')->symbol('Rp')->disable()->value($data->sisapembayaran);
         });
         $form->column(12, function (Form $form) use ($data) {
@@ -273,6 +278,7 @@ class PurchaseDownPaymentController extends AdminController
             })->value($data->pembelianAlokasiPembayaran->toArray())->useTable();
         });
         $form->column(12, function (Form $form) use ($data) {
+            $form->currency('total', 'Total')->symbol('Rp')->disable()->setWidth(2, 8);
             $form->textarea('catatan')->setWidth(4)->value($data->catatan);
         });
         return $form;
@@ -283,8 +289,8 @@ class PurchaseDownPaymentController extends AdminController
         $form->builder()->setMode('edit');
         $form->setAction(route(admin_get_route('purchase.down-payment.update'), ['idPembayaran' => $idPembayaran]));
         $data = $form->model()->with(['pembelianAlokasiPembayaran.pembelian' => function ($q) {
-            $q->addSelect('*', DB::raw('toko_griyanaura.f_getsisatagihan(transaksi_no) as sisatagihan'));
-        }])->findOrFail($idPembayaran);
+            $q->addSelect(DB::raw('*,toko_griyanaura.f_getsisatagihan(transaksi_no) as sisatagihan'));
+        }])->addSelect('*', DB::raw('toko_griyanaura.f_getsisapembayaran(transaksi_no) as sisapembayaran'))->findOrFail($idPembayaran);
         if ($data->jenisbayar != 'DP') {
             \abort(404);
         }
@@ -305,6 +311,10 @@ class PurchaseDownPaymentController extends AdminController
             $form->html("<div style='padding-top: 7px;'>#{$data->transaksi_no}</div>", 'No. Transaksi')->setLabelClass(['text-nowrap'])->width('100%')->setWidth(2, 8);
             $form->html("<div style='padding-top: 7px;'>{$tanggal}</div>", 'Tanggal')->width('100%')->setWidth(2, 8);
             // $form->datetime('tanggal', 'Tanggal')->required()->width('100%')->setWidth(2, 8)->disable()->value($data->tanggal);
+        });
+        $form->column(12, function (Form $form) use ($data) {
+            $form->currency('totaldp', 'Nominal DP')->symbol('Rp')->disable()->value($data->nominal);
+            $form->currency('sisapembayaran', 'Sisa Pembayaran')->symbol('Rp')->disable()->value($data->sisapembayaran);
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->tablehasmany('pembelianAlokasiPembayaran', '', function (NestedForm $form) {
@@ -578,7 +588,7 @@ class PurchaseDownPaymentController extends AdminController
     public function storePayment(Request $request) 
     {
         try {
-            $result = $this->purchasePaymentService->storePayment($request->all());;
+            $result = $this->purchaseDownPaymentService->storePayment($request->all());;
             admin_toastr('Sukses buat transaksi pembayaran');
             return redirect()->route(admin_get_route('purchase.down-payment.detail'), ['idPembayaran' => $result->id_pembelianpembayaran]);
         } catch (ValidationException $e) {
@@ -598,7 +608,7 @@ class PurchaseDownPaymentController extends AdminController
     public function updatePayment(Request $request, $idPembayaran) 
     {
         try {
-            $result = $this->purchasePaymentService->updatePayment($idPembayaran, $request->all());;
+            $result = $this->purchaseDownPaymentService->updatePayment($idPembayaran, $request->all());;
             admin_toastr('Sukses ubah transaksi pembayaran');
             return redirect()->route(admin_get_route('purchase.down-payment.edit'), ['idPembayaran' => $result->id_pembelianpembayaran]);
         } catch (ValidationException $e) {
@@ -618,7 +628,7 @@ class PurchaseDownPaymentController extends AdminController
     public function deletePayment(Request $request, $idPembayaran) 
     {
         try {
-            $this->purchasePaymentService->deletePayment($idPembayaran);
+            $this->purchaseDownPaymentService->deletePayment($idPembayaran);
             admin_toastr('Sukses hapus pembayaran pembelian');
             return [
                 'status' => true,

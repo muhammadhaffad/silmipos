@@ -52,11 +52,19 @@ class PurchasePaymentService
                 'inserted_by' => Admin::user()->username,
                 'updated_by' => Admin::user()->username
             ]);
+            $total = 0;
+            foreach ($request['pembelianAlokasiPembayaran'] as $item) {
+                $total += $item['nominalbayar'];
+            }
+            if ($total != $request['total']) {
+                throw new PurchasePaymentException('Total pembayaran tidak sama');
+            }
             foreach ($request['pembelianAlokasiPembayaran'] as $item) {
                 $newData = [
                     'nominalbayar' => $item['nominalbayar'],
                     'id_pembelian' => $item['id_pembelian']
                 ];
+                $total += $newData['nominalbayar'];
                 $this->storeAllocatePaymentToInvoice($payment, $newData);
             }
             $payment = PembelianPembayaran::find($payment->id_pembelianpembayaran)->load('pembelianAlokasiPembayaran');
@@ -109,6 +117,14 @@ class PurchasePaymentService
             ]);
             $pembayaran->refresh();
             $oldItem = $pembayaran->pembelianAlokasiPembayaran->keyBy('id_pembelianalokasipembayaran');
+            $total = 0;
+            foreach ($request['pembelianAlokasiPembayaran'] as $item) {
+                if ($item['_remove_'] == 0)
+                    $total += $item['nominalbayar'];
+            }
+            if ($total != $request['total']) {
+                throw new PurchasePaymentException('Total pembayaran tidak sama');
+            }
             foreach ($request['pembelianAlokasiPembayaran'] as $key => $item) {
                 if ($item['_remove_'] == 0) {
                     /* Jika tidak dihapus */
@@ -241,6 +257,14 @@ class PurchasePaymentService
             if (DB::table('toko_griyanaura.tr_pembelianretur')->where('id_pembelian', $oldData[$idItem]->id_pembelianinvoice)->where('tanggal', '>', $oldData[$idItem]->tanggal)->exists())
             {
                 throw new PurchasePaymentException('Alokasi pembayaran tidak dapat diubah, karena terdapat transaksi retur.');
+            }
+            $pembelianInvoice = Pembelian::where([['id_pembelian', '=', $oldData[$idItem]->id_pembelianinvoice], ['jenis', '=', 'invoice'], ['id_kontak', '=', $payment->id_kontak]])->first();
+            if (!$pembelianInvoice) {
+                throw new PurchasePaymentException('Supplier invoice tidak valid.');
+            }
+            $sisaTagihan = DB::select('select toko_griyanaura.f_getsisatagihan(?) as sisatagihan', [$pembelianInvoice->transaksi_no])[0]->sisatagihan - ($newData['nominal'] - $oldData[$idItem]->nominal);
+            if ($sisaTagihan < 0) {
+                throw new PurchasePaymentException('Pembayaran melebihi tagihan, sisa tagihan Anda: ' . $sisaTagihan);
             }
             PembelianAlokasiPembayaran::where('id_pembelianalokasipembayaran', $idItem)->update($newData);
             DB::commit();
