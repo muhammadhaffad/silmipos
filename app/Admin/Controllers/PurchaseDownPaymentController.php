@@ -126,6 +126,7 @@ class PurchaseDownPaymentController extends AdminController
                 $form->date('tanggaltempo', 'Tempo')->disable();
                 $form->currency('grandtotal', 'Grand total')->symbol('Rp')->disable();
                 $form->currency('sisatagihan', 'Sisa tagihan')->symbol('Rp')->disable();
+                $form->date('tanggal', 'Tanggal')->default(date('Y-m-d H:i:s'))->disable();
                 $form->currency('nominalbayar', 'Jumlah bayar')->symbol('Rp')->setGroupClass('w-200px');
 
             })->useTable();
@@ -273,6 +274,7 @@ class PurchaseDownPaymentController extends AdminController
                 $form->date('tanggaltempo', 'Tempo')->disable()->default($data['pembelian']['tanggaltempo'] ?? null);
                 $form->currency('grandtotal', 'Grand total')->symbol('Rp')->disable()->default($data['pembelian']['grandtotal'] ?? null);
                 $form->currency('sisatagihan', 'Sisa tagihan')->symbol('Rp')->disable()->default($data['pembelian']['sisatagihan'] ?? null);
+                $form->date('tanggaltransaksi', 'Tanggal transaksi')->default($data['tanggal'] ?? date('Y-m-d'))->disable();
                 $form->currency('nominalbayar', 'Jumlah bayar')->symbol('Rp')->setGroupClass('w-200px')->default($data['nominal'] ?? null);
 
             })->value($data->pembelianAlokasiPembayaran->toArray())->useTable();
@@ -323,6 +325,7 @@ class PurchaseDownPaymentController extends AdminController
                 $form->date('tanggaltempo', 'Tempo')->default($data['pembelian']['tanggaltempo'] ?? null)->disable();
                 $form->currency('grandtotal', 'Grand total')->symbol('Rp')->default($data['pembelian']['grandtotal'] ?? null)->disable();
                 $form->currency('sisatagihan', 'Sisa tagihan')->symbol('Rp')->default($data['pembelian']['sisatagihan'] ?? null)->disable();
+                $form->date('tanggal', 'Tanggal')->default(date('Y-m-d', strtotime($data['tanggal'])) ?? null)->disable();
                 $form->currency('nominalbayar', 'Jumlah bayar')->symbol('Rp')->setGroupClass('w-200px')->default($data['nominal'] ?? null)->disable();
 
             })->disableCreate()->disableDelete()->value($data->pembelianAlokasiPembayaran->toArray())->useTable();

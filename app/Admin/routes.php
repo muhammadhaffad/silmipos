@@ -110,6 +110,12 @@ Route::group([
         });
         Route::prefix('/refund')->group(function () {
             Route::get('/create', [PurchaseRefundPaymentController::class, 'createRefund'])->name('purchase.refund.create');
+            Route::get('/edit/{idRefund}', [PurchaseRefundPaymentController::class, 'editRefund'])->name('purchase.refund.edit');
+            Route::get('/detail/{idRefund}', [PurchaseRefundPaymentController::class, 'detailRefund'])->name('purchase.refund.detail');
+
+            Route::post('/store', [PurchaseRefundPaymentController::class, 'storeRefund'])->name('purchase.refund.store');
+            Route::put('/update/{idRefund}', [PurchaseRefundPaymentController::class, 'updateRefund'])->name('purchase.refund.update');
+            Route::match(['post', 'delete'], '/delete/{idRefund}', [PurchaseRefundPaymentController::class, 'deleteRefund'])->name('purchase.refund.delete');
         });
     });
     Route::prefix('ajax')->group(function () {

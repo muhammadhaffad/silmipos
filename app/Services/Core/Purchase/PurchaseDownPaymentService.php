@@ -133,15 +133,6 @@ class PurchaseDownPaymentService
                 'nominal' => (int)$request['totaldp']
             ]);
             $pembayaran->refresh();
-            $sisaPembayaran = DB::select('select toko_griyanaura.f_getsisapembayaran(?) as sisapembayaran', [$pembayaran->transaksi_no])[0]->sisapembayaran;
-            
-            $total = 0;
-            foreach ($request['pembelianAlokasiPembayaran'] as $item) {
-                $total += $item['nominalbayar'];
-            }
-            if ($total > $sisaPembayaran) {
-                throw new PurchasePaymentException('Total pembayaran melebihi sisa pembayaran');
-            }
             $oldItem = $pembayaran->pembelianAlokasiPembayaran->keyBy('id_pembelianalokasipembayaran');
             foreach ($request['pembelianAlokasiPembayaran'] as $key => $item) {
                 if ($item['_remove_'] == 0) {
@@ -149,10 +140,12 @@ class PurchaseDownPaymentService
                     if (isset($oldItem[$item['id_pembelianalokasipembayaran']])) {
                         /* Jika di-update */
                         $newData = [];
-                        if ($item['nominalbayar'] != $oldItem[$item['id_pembelianalokasipembayaran']]['nominalbayar']) {
+                        if ($item['nominalbayar'] != $oldItem[$item['id_pembelianalokasipembayaran']]['nominal']) {
                             $newData['nominal'] = (int)$item['nominalbayar'];
                         }
-                        $this->updateAllocatePaymentToInvoice($item['id_pembelianalokasipembayaran'], $pembayaran, $pembayaranOld, $newData, $oldItem);
+                        if (!empty($newData)) {
+                            $this->updateAllocatePaymentToInvoice($item['id_pembelianalokasipembayaran'], $pembayaran, $pembayaranOld, $newData, $oldItem);
+                        }
                     } else {
                         /* Jika ditambah baru */
                         $newData = [
@@ -169,6 +162,10 @@ class PurchaseDownPaymentService
                 }
             }
             $pembayaran->refresh();
+            $sisaPembayaran = DB::select('select toko_griyanaura.f_getsisapembayaran(?) as sisapembayaran', [$pembayaran->transaksi_no])[0]->sisapembayaran;
+            if (0 > $sisaPembayaran) {
+                throw new PurchasePaymentException('Total pembayaran melebihi sisa pembayaran');
+            }
             $this->deleteJurnal($pembayaran->id_transaksi);
             $detailTransaksi = [
                 [
@@ -287,9 +284,9 @@ class PurchaseDownPaymentService
          */
         DB::beginTransaction();
         try {
-            if (DB::table('toko_griyanaura.tr_pembelianrefunddetail')->where('id_pembelianpembayaran', $payment->id_pembelianpembayaran)->exists()) {
-                throw new PurchasePaymentException('Pembayaran tidak dapat diubah, karena sudah direfund.');
-            }
+            // if (DB::table('toko_griyanaura.tr_pembelianrefunddetail')->where('id_pembelianpembayaran', $payment->id_pembelianpembayaran)->exists()) {
+            //     throw new PurchasePaymentException('Pembayaran tidak dapat diubah, karena sudah direfund.');
+            // }
             if (DB::table('toko_griyanaura.tr_pembelianretur')->where('id_pembelian', $oldData[$idItem]->id_pembelianinvoice)->where('tanggal', '>', $oldData[$idItem]->tanggal)->exists())
             {
                 throw new PurchasePaymentException('Alokasi pembayaran tidak dapat diubah, karena terdapat transaksi retur.');
@@ -318,9 +315,9 @@ class PurchaseDownPaymentService
          */
         DB::beginTransaction();
         try {
-            if (DB::table('toko_griyanaura.tr_pembelianrefunddetail')->where('id_pembelianpembayaran', $payment->id_pembelianpembayaran)->exists()) {
-                throw new PurchasePaymentException('Pembayaran tidak dapat dihapus, karena sudah direfund.');
-            }
+            // if (DB::table('toko_griyanaura.tr_pembelianrefunddetail')->where('id_pembelianpembayaran', $payment->id_pembelianpembayaran)->exists()) {
+            //     throw new PurchasePaymentException('Pembayaran tidak dapat dihapus, karena sudah direfund.');
+            // }
             if (DB::table('toko_griyanaura.tr_pembelianretur')->where('id_pembelian', $oldData[$idItem]->id_pembelianinvoice)->where('tanggal', '>', $oldData[$idItem]->tanggal)->exists())
             {
                 throw new PurchasePaymentException('Alokasi pembayaran tidak dapat dihapus, karena terdapat transaksi retur.');

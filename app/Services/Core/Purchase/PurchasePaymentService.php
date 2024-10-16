@@ -131,7 +131,7 @@ class PurchasePaymentService
                     if (isset($oldItem[$item['id_pembelianalokasipembayaran']])) {
                         /* Jika di-update */
                         $newData = [];
-                        if ($item['nominalbayar'] != $oldItem[$item['id_pembelianalokasipembayaran']]['nominalbayar']) {
+                        if ($item['nominalbayar'] != $oldItem[$item['id_pembelianalokasipembayaran']]['nominal']) {
                             $newData['nominal'] = (int)$item['nominalbayar'];
                         }
                         $this->updateAllocatePaymentToInvoice($item['id_pembelianalokasipembayaran'], $pembayaran, $pembayaranOld, $newData, $oldItem);
