@@ -85,16 +85,17 @@ class ProdukService
             }
             $produkAttribut = [];
             foreach ($request['produkAttribut'] as $key => $attribut) {
-                if ($attribut['id_attribut'] != null) {
+                if ($attribut['id_produkattribut'] != null) {
                     foreach ($attribut['id_attributvalue'] as $attVal) {
                         if ($attVal != null) {
-                            $produkAttribut[$key][] = [$attribut['id_attribut'] => $attVal];
+                            $produkAttribut[$key][] = [$attribut['id_produkattribut'] => $attVal];
                         }
                     }
                 }
             }
             $produkVarianValue = $this->generateCombinations($produkAttribut);
-            foreach ($request['produkVarian'] as $key => $item) {
+            $key = 0;
+            foreach ($request['produkVarian'] as $item) {
                 $data = [
                     'id_produk' => $produk->id_produk,
                     'minstok' => $item['minstok'],
@@ -134,6 +135,7 @@ class ProdukService
                         'updated_by' => Admin::user()->username
                     ]);
                 }
+                $key++;
             }
             DB::commit();
             return $produk->id_produk;

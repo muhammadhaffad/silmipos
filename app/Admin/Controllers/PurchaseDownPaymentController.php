@@ -30,7 +30,7 @@ class PurchaseDownPaymentController extends AdminController
         $form = new Form($model);
         $form->setAction(route(admin_get_route('purchase.down-payment.store')));
         $form->column(12, function (Form $form) {
-            $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak')))->setWidth(3);
+            $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak-supplier')))->setWidth(3);
         });
         $form->column(12, function (Form $form) {
             $form->text('transaksi_no', 'No. Transaksi')->placeholder('[AUTO]')->setLabelClass(['text-nowrap'])->withoutIcon()->width('100%')->setWidth(2, 8);
@@ -158,8 +158,8 @@ class PurchaseDownPaymentController extends AdminController
             $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
-            $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak')))->attribute([
-                'data-url' => route(admin_get_route('ajax.kontak')),
+            $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak-supplier')))->attribute([
+                'data-url' => route(admin_get_route('ajax.kontak-supplier')),
                 'select2' => null
             ])->disable()->value($data->id_kontak)->setWidth(3);
         });
@@ -325,7 +325,7 @@ class PurchaseDownPaymentController extends AdminController
                 $form->date('tanggaltempo', 'Tempo')->default($data['pembelian']['tanggaltempo'] ?? null)->disable();
                 $form->currency('grandtotal', 'Grand total')->symbol('Rp')->default($data['pembelian']['grandtotal'] ?? null)->disable();
                 $form->currency('sisatagihan', 'Sisa tagihan')->symbol('Rp')->default($data['pembelian']['sisatagihan'] ?? null)->disable();
-                $form->date('tanggal', 'Tanggal')->default(date('Y-m-d', strtotime($data['tanggal'])) ?? null)->disable();
+                $form->date('tanggal', 'Tanggal')->default(date('Y-m-d', strtotime($data['tanggal'] ?? null)))->disable();
                 $form->currency('nominalbayar', 'Jumlah bayar')->symbol('Rp')->setGroupClass('w-200px')->default($data['nominal'] ?? null)->disable();
 
             })->disableCreate()->disableDelete()->value($data->pembelianAlokasiPembayaran->toArray())->useTable();

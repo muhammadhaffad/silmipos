@@ -13,6 +13,8 @@ use App\Admin\Controllers\PurchaseOrderController;
 use App\Admin\Controllers\PurchasePaymentController;
 use App\Admin\Controllers\PurchaseRefundPaymentController;
 use App\Admin\Controllers\PurchaseReturnController;
+use App\Admin\Controllers\SalesInvoiceController;
+use App\Admin\Controllers\SalesOrderController;
 use Encore\Admin\Actions\Action;
 use Encore\Admin\Actions\RowAction;
 use Encore\Admin\Facades\Admin;
@@ -60,6 +62,7 @@ Route::group([
         Route::match(['post', 'delete'],'/delete/{idPenyesuaianGudang}', [ProdukPenyesuaianController::class, 'deleteProdukPenyesuaian'])->name('produk-penyesuaian.delete');
     });
     Route::prefix('/purchase')->group(function () {
+        Route::get('/', [PurchaseOrderController::class, 'listPurchaseOrder'])->name('purchase.list');
         Route::prefix('/order')->group(function () {
             Route::get('/create', [PurchaseOrderController::class, 'createPurchaseOrder'])->name('purchase.order.create');
             Route::get('/detail/{idPembelian}', [PurchaseOrderController::class, 'detailPurchaseOrder'])->name('purchase.order.detail');
@@ -118,12 +121,34 @@ Route::group([
             Route::match(['post', 'delete'], '/delete/{idRefund}', [PurchaseRefundPaymentController::class, 'deleteRefund'])->name('purchase.refund.delete');
         });
     });
+    Route::prefix('/sales')->group(function () {
+        Route::prefix('/order')->group(function () {
+            Route::get('/create', [SalesOrderController::class, 'createSalesOrder'])->name('sales.order.create');
+            Route::get('/detail/{idPenjualan}', [SalesOrderController::class, 'detailSalesOrder'])->name('sales.order.detail');
+            Route::get('/edit/{idPenjualan}', [SalesOrderController::class, 'editSalesOrder'])->name('sales.order.edit');
+            Route::get('/to-invoice/{idPenjualan}', [SalesOrderController::class, 'toInvoiceSalesOrder'])->name('sales.order.to-invoice');
+            Route::post('/store', [SalesOrderController::class, 'storeSalesOrder'])->name('sales.order.store');
+            Route::post('/to-invoice/store/{idPenjualan}', [SalesOrderController::class, 'storeToInvoiceSalesOrder'])->name('sales.order.to-invoice.store');
+            Route::put('/update/{idPenjualan}', [SalesOrderController::class, 'updateSalesOrder'])->name('sales.order.update');
+            Route::match(['delete', 'post'], '/delete/{idPenjualan}', [SalesOrderController::class, 'deleteSalesOrder'])->name('sales.order.delete');
+        });
+        Route::prefix('/invoice')->group(function () {
+            Route::get('/create', [SalesInvoiceController::class, 'createSalesInvoice'])->name('sales.invoice.create');
+            Route::get('/detail/{idPenjualan}', [SalesInvoiceController::class, 'detailSalesInvoice'])->name('sales.invoice.detail');
+            Route::get('/edit/{idPenjualan}', [SalesInvoiceController::class, 'editSalesInvoice'])->name('sales.invoice.edit');
+            
+            Route::post('/store', [SalesInvoiceController::class, 'storeSalesInvoice'])->name('sales.invoice.store');
+            Route::put('/update/{idPenjualan}', [SalesInvoiceController::class, 'updateSalesInvoice'])->name('sales.invoice.update');
+            Route::match(['delete', 'post'], '/delete/{idPenjualan}', [SalesInvoiceController::class, 'deleteSalesInvoice'])->name('sales.invoice.delete');
+        });
+    });
     Route::prefix('ajax')->group(function () {
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');
         Route::get('/varians', [AjaxController::class, 'getVarians'])->name('ajax.varians');
         Route::get('/attribut-value/{idAttribut?}', [AjaxController::class, 'attributValue'])->name('ajax.attribut-value');
         Route::get('/produk', [AjaxController::class, 'getProduk'])->name('ajax.produk');
-        Route::get('/kontak', [AjaxController::class, 'getKontak'])->name('ajax.kontak');
+        Route::get('/kontak/supplier', [AjaxController::class, 'getKontakSupplier'])->name('ajax.kontak-supplier');
+        Route::get('/kontak/customer', [AjaxController::class, 'getKontakCustomer'])->name('ajax.kontak-customer');
         Route::get('/detail-produk', [AjaxController::class, 'getProdukDetail'])->name('ajax.produk-detail');
         Route::get('/pembelian', [AjaxController::class, 'getPembelian'])->name('ajax.pembelian');
         Route::get('/pembelian-detail', [AjaxController::class, 'getPembelianDetail'])->name('ajax.pembelian-detail');

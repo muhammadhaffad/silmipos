@@ -9,6 +9,7 @@ use App\Admin\Form\Form;
 use App\Http\Controllers\Controller;
 use App\Models\PindahGudang;
 use App\Models\Produk;
+use App\Models\ProdukPersediaanDetail;
 use App\Models\ProdukVarian;
 use App\Services\Core\PindahGudang\PindahGudangService;
 use Encore\Admin\Admin;
@@ -121,22 +122,32 @@ class ProdukMutasiController extends Controller
             $filter->disableIdFilter();
             $filter->ilike('nama', 'Produk');
         });
-        $grid->model()->with(['produkVarian.produkVarianHarga', 'produkVarian.produkPersediaan.produkVarianHarga', 'produkVarian.pindahGudangDetail' => function ($q) use ($data) {
+        $grid->model()->with(['produkVarian.produkVarianHarga', 'produkVarian.produkPersediaan' => function ($rel) {
+            $rel->addSelect(['hargabeli_avg' => ProdukPersediaanDetail::select(DB::raw('(sum(hargabeli*coalesce(stok_in,0) - hargabeli*coalesce(stok_out,0))/nullif(sum(coalesce(stok_in,0))-sum(coalesce(stok_out,0)),0))::int'))
+                ->whereColumn('toko_griyanaura.ms_produkpersediaandetail.id_persediaan', 'toko_griyanaura.ms_produkpersediaan.id_persediaan')
+            ]);
+            $rel->with('produkVarianHarga');
+        }, 'produkVarian.pindahGudangDetail' => function ($q) use ($data) {
             $q->where('id_pindahgudang', $data->id_pindahgudang);
         }])->where('in_stok', true);
         $grid->column('nama', __('Nama'))->expand(function ($model) use ($data) {
             $produkVarian = $model->produkVarian->map(function ($varian) use ($data) {
                 $key = $varian['kode_produkvarian'];
                 // set harga modal 
-                if ($varian->produkPersediaan->firstWhere('id_gudang', $data->from_gudang)?->produkVarianHarga?->hargabeli) {
-                    // pakai harga modal dari default harga persediaan
-                    $dariGudangHargaModal = $varian->produkPersediaan->firstWhere('id_gudang', $data->from_gudang)?->produkVarianHarga?->hargabeli;
-                } else if ($varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_fromgudang)?->hargabeli) {
-                    // pakai harga modal dari default harga gudang
-                    $dariGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_fromgudang)?->hargabeli;
+                if ($varian->produkPersediaan->firstWhere('id_gudang', $data->from_gudang)?->hargabeli_avg) {
+                    // pakai harga rata rata jika ada
+                    $dariGudangHargaModal = $varian->produkPersediaan->firstWhere('id_gudang', $data->from_gudang)?->hargabeli_avg;
                 } else {
-                    // pakai harga modal reguler
-                    $dariGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', 1)->hargabeli;
+                    if ($varian->produkPersediaan->firstWhere('id_gudang', $data->from_gudang)?->produkVarianHarga?->hargabeli) {
+                        // pakai harga modal dari default harga persediaan
+                        $dariGudangHargaModal = $varian->produkPersediaan->firstWhere('id_gudang', $data->from_gudang)?->produkVarianHarga?->hargabeli;
+                    } else if ($varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_fromgudang)?->hargabeli) {
+                        // pakai harga modal dari default harga gudang
+                        $dariGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', $data->varianharga_fromgudang)?->hargabeli;
+                    } else {
+                        // pakai harga modal reguler
+                        $dariGudangHargaModal = $varian->produkVarianHarga->firstWhere('id_varianharga', 1)->hargabeli;
+                    }
                 }
 
                 if ($varian->produkPersediaan->firstWhere('id_gudang', $data->to_gudang)?->produkVarianHarga?->hargabeli) {
@@ -149,16 +160,17 @@ class ProdukMutasiController extends Controller
 
                 $varian->produkVarianHarga->firstWhere('id_varianharga', 1)->hargabeli;
                 $stokDariGudang = $varian->produkPersediaan->firstWhere('id_gudang', $data->from_gudang)?->stok ?: 0;
-                $stokDariGudang = (fmod($stokDariGudang, 1) !== 0.00) ? $stokDariGudang : (int)$stokDariGudang;
+                $stokDariGudang = \number($stokDariGudang);
                 $dariGudangHargaModal = $varian->pindahGudangDetail?->harga_modal_dari_gudang ?: $dariGudangHargaModal;
                 $dariGudangHargaModal =
                 <<<HTML
                     <div class="d-flex gap-2 align-items-center">
-                        <input form="pindah-gudang-{$key}" name="harga_modal_dari_gudang" value="{$dariGudangHargaModal}" class="form-control hargamodal" style="width:100px">
+                        <input form="pindah-gudang-{$key}" readonly name="harga_modal_dari_gudang" value="{$dariGudangHargaModal}" class="form-control hargamodal" style="width:100px">
                     </div>
                 HTML;
+                $jumlahPindah = \number($varian->pindahGudangDetail?->jumlah);
                 $stokKeGudang = $varian->produkPersediaan->firstWhere('id_gudang', $data->to_gudang)?->stok ?: 0;
-                $stokKeGudang = (fmod($stokKeGudang, 1) !== 0.00) ? $stokKeGudang : (int)$stokKeGudang;
+                $stokKeGudang = \number($stokKeGudang);
                 $keGudangHargaModal = $varian->pindahGudangDetail?->harga_modal_ke_gudang ?: $keGudangHargaModal;
                 $keGudangHargaModal =
                 <<<HTML
@@ -169,7 +181,7 @@ class ProdukMutasiController extends Controller
                 $dariGudang = 
                 <<<HTML
                     <div class="d-flex gap-2 align-items-center">
-                        <input form="pindah-gudang-{$key}" name="jumlah" class="form-control" style="width:100px" type="number" max="{$stokDariGudang}" value="{$varian->pindahGudangDetail?->jumlah}">
+                        <input form="pindah-gudang-{$key}" name="jumlah" class="form-control" style="width:100px" type="number" max="{$stokDariGudang}" value="{$jumlahPindah}">
                         <span class="stok-dari-gudang" style="width:50px" align="center">/ {$stokDariGudang}</span>
                     </div>
                 HTML;

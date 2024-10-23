@@ -82,7 +82,7 @@ class PurchaseReturnService
         $validator->validate();
         DB::beginTransaction();
         try {
-            $pembelianRetur = PembelianRetur::with('pembelianReturDetail.produkVarian.produk')->find($idRetur);
+            $pembelianRetur = PembelianRetur::with(['pembelianReturDetail.produkVarian.produk', 'pembelianReturDetail.produkPersediaan'])->find($idRetur);
             $pembelianRetur->tanggal = $request['tanggal'];
             $pembelianRetur->catatan = $request['catatan'];
             $pembelianRetur->save();
@@ -104,6 +104,7 @@ class PurchaseReturnService
                 }
             }
             $pembelianRetur->refresh();
+            $pembelianRetur->load('pembelianReturDetail.produkPersediaan');
             $rawTotal = 0;
             foreach ($pembelianRetur->pembelianReturDetail as $item) {
                 $rawTotal += $item->total;
@@ -113,25 +114,46 @@ class PurchaseReturnService
             $pembelianRetur->save();
             $kembalianDana = DB::select('select toko_griyanaura.f_calckembaliandanareturpembelian(?) as kembaliandana', [$pembelianRetur->transaksi_no])[0]->kembaliandana;
             $this->deleteJurnal($pembelianRetur->id_transaksi);
-            $detailTransaksi = [];
+            $detailTransaksi = [
+                [
+                    'kode_akun' => '2001',
+                    'keterangan' => null,
+                    'nominaldebit' => null,
+                    'nominalkredit' => 0
+                ]
+            ];
             $total = 0;
             foreach ($pembelianRetur->pembelianReturDetail as $item) {
-                $total += (int)($item->qty * $item->harga * (1 - $item->diskon / 100) * (1 - $pembelianRetur->diskon / 100));
+                $harga = (int)($item->qty * $item->harga * (1 - $item->diskon / 100) * (1 - $pembelianRetur->diskon / 100));
                 $detailTransaksi[] = [
                     'kode_akun' => $item->produkVarian->produk->default_akunpersediaan,
                     'keterangan' => 'Retur pembelian ' . $item->produkVarian->varian,
                     'nominaldebit' => 0,
-                    'nominalkredit' => (int)($item->qty * $item->harga * (1 - $item->diskon / 100) * (1 - $pembelianRetur->diskon / 100)),
+                    'nominalkredit' => (int)($item->qty*$item->produkPersediaan->hargabeli_avg),
                     'ref_id' => $item->id_pembelianreturdetail
                 ];
+                if ($harga - $item->qty*$item->produkPersediaan->hargabeli_avg > 0) {
+                    $detailTransaksi[] = [
+                        'kode_akun' => '8001', // pembulatan
+                        'keterangan' => 'Retur pembelian ' . $item->produkVarian->varian,
+                        'nominaldebit' => 0,
+                        'nominalkredit' => (int)($harga - $item->qty*$item->produkPersediaan->hargabeli_avg),
+                        'ref_id' => $item->id_pembelianreturdetail
+                    ];
+                } else if ($harga - $item->qty*$item->produkPersediaan->hargabeli_avg < 0) {
+                    $detailTransaksi[] = [
+                        'kode_akun' => '8001', // pembulatan
+                        'keterangan' => 'Retur pembelian ' . $item->produkVarian->varian,
+                        'nominaldebit' => (int)(\abs($harga - $item->qty*$item->produkPersediaan->hargabeli_avg)),
+                        'nominalkredit' => 0,
+                        'ref_id' => $item->id_pembelianreturdetail
+                    ];
+                }
+                
+                $total += $harga;
             }
             if (isset($detailTransaksi)) {
-                $detailTransaksi[] = [
-                    'kode_akun' => '2001',
-                    'keterangan' => null,
-                    'nominaldebit' => $total,
-                    'nominalkredit' => 0
-                ];
+                $detailTransaksi[0]['nominaldebit'] = $total;
                 $this->entryJurnal($pembelianRetur->id_transaksi, $detailTransaksi);
             }
             DB::commit();
@@ -256,9 +278,12 @@ class PurchaseReturnService
                 'diskonjenis' => $pembelianDetail['diskonjenis'],
                 'diskon' => $pembelianDetail['diskon'],
                 'total' => $pembelianDetail['harga'] * $newData['qty_diretur'] * (1 - $pembelianDetail['diskon'] / 100.0),
-                'totalraw' => $pembelianDetail['harga'] * $newData['qty_diretur']
+                'totalraw' => $pembelianDetail['harga'] * $newData['qty_diretur'],
+                'id_gudang' => $pembelianDetail['id_gudang']
             ]);
-            $persediaanProduk = ProdukPersediaan::where('kode_produkvarian', $pembelianDetail['kode_produkvarian'])->where('id_gudang', $pembelianDetail['id_gudang'])->first();
+            $persediaanProduk = ProdukPersediaan::addSelect(['hargabeli_avg' => ProdukPersediaanDetail::select(DB::raw('(sum(hargabeli*coalesce(stok_in,0) - hargabeli*coalesce(stok_out,0))/nullif(sum(coalesce(stok_in,0))-sum(coalesce(stok_out,0)),0))::int'))
+                ->whereColumn('toko_griyanaura.ms_produkpersediaandetail.id_persediaan', 'toko_griyanaura.ms_produkpersediaan.id_persediaan')
+            ])->where('kode_produkvarian', $pembelianDetail['kode_produkvarian'])->where('id_gudang', $pembelianDetail['id_gudang'])->first();
             $persediaanProduk->update([
                 'stok' => DB::raw('stok -' . number($newData['qty_diretur']))
             ]);
@@ -267,7 +292,7 @@ class PurchaseReturnService
                 'tanggal' => $return->tanggal,
                 'keterangan' => "#{$return->transaksi_no} Store item diretur",
                 'stok_out' => $newData['qty_diretur'],
-                'hargabeli' => (int)($pembelianReturDetail['harga'] * (1 - $pembelianReturDetail['diskon'] / 100) * (1 - $return['diskon'] / 100)),
+                'hargabeli' => (int)($persediaanProduk->hargabeli_avg),
                 'ref_id' => $pembelianReturDetail->id_pembelianreturdetail
             ]);
             DB::commit();
@@ -299,35 +324,39 @@ class PurchaseReturnService
             if (DB::table('toko_griyanaura.tr_pembelianalokasipembayaran')->where('id_pembelianinvoice', $return->id_pembelian)->where('tanggal', '>', $return->tanggal)->exists()) {
                 throw new PurchaseReturnException('Transaksi retur tidak dapat diubah, karena terkait dengan transaksi lain.');
             }
-            $pembelianReturDetail = PembelianReturDetail::where('id_pembelianreturdetail', $idItem)->first();
-            $pembelianReturDetail->update([
-                'qty' => $newData['qty_diretur'],
-                'total' => $pembelianDetail['harga'] * $newData['qty_diretur'] * (1 - $pembelianDetail['diskon'] / 100.0),
-                'totalraw' => $pembelianDetail['harga'] * $newData['qty_diretur']
-            ]);
-            $pembelianReturDetail->refresh();
-            $persediaanProduk = ProdukPersediaan::where('kode_produkvarian', $pembelianDetail['kode_produkvarian'])->where('id_gudang', $pembelianDetail['id_gudang'])->first();
+            $oldQty = $oldData[$idItem]->qty;
+            $oldData[$idItem]->qty = $newData['qty_diretur'];
+            $oldData[$idItem]->total = $pembelianDetail['harga'] * $newData['qty_diretur'] * (1 - $pembelianDetail['diskon'] / 100.0);
+            $oldData[$idItem]->totalraw = $pembelianDetail['harga'] * $newData['qty_diretur'];
+            $oldData[$idItem]->save();
+            $persediaanProduk = ProdukPersediaan::addSelect(['hargabeli_avg' => ProdukPersediaanDetail::select(DB::raw('(sum(hargabeli*coalesce(stok_in,0) - hargabeli*coalesce(stok_out,0))/nullif(sum(coalesce(stok_in,0))-sum(coalesce(stok_out,0)),0))::int'))
+                ->whereColumn('toko_griyanaura.ms_produkpersediaandetail.id_persediaan', 'toko_griyanaura.ms_produkpersediaan.id_persediaan')
+            ])->where('kode_produkvarian', $pembelianDetail['kode_produkvarian'])->where('id_gudang', $pembelianDetail['id_gudang'])->first();
             $persediaanProduk->update([
-                'stok' => DB::raw('stok + ' . number($oldData[$idItem]->qty) . ' - ' . number($newData['qty_diretur']))
+                'stok' => DB::raw('stok + ' . number($oldQty) . ' - ' . number($newData['qty_diretur']))
             ]);
+            $hargaBeliTerakhir = ProdukPersediaanDetail::where('keterangan', 'ilike', '#' . $return->transaksi_no . '%')->where('ref_id', $oldData[$idItem]->id_pembelianreturdetail)->latest('id_persediaandetail')->first()->hargabeli;
             ProdukPersediaanDetail::create([
                 'id_persediaan' => $persediaanProduk->id_persediaan,
                 'tanggal' => $return->tanggal,
                 'keterangan' => "#{$return->transaksi_no} Update item diretur",
-                'stok_in' => $oldData[$idItem]->qty,
-                'hargabeli' => (int)($pembelianReturDetail['harga'] * (1 - $pembelianReturDetail['diskon'] / 100) * (1 - $return['diskon'] / 100)),
-                'ref_id' => $pembelianReturDetail->id_pembelianreturdetail
+                'stok_in' => $oldQty,
+                'hargabeli' => (int)($hargaBeliTerakhir),
+                'ref_id' => $oldData[$idItem]->id_pembelianreturdetail
             ]);
+            $persediaanProduk = ProdukPersediaan::addSelect(['hargabeli_avg' => ProdukPersediaanDetail::select(DB::raw('(sum(hargabeli*coalesce(stok_in,0) - hargabeli*coalesce(stok_out,0))/nullif(sum(coalesce(stok_in,0))-sum(coalesce(stok_out,0)),0))::int'))
+                ->whereColumn('toko_griyanaura.ms_produkpersediaandetail.id_persediaan', 'toko_griyanaura.ms_produkpersediaan.id_persediaan')
+            ])->where('kode_produkvarian', $pembelianDetail['kode_produkvarian'])->where('id_gudang', $pembelianDetail['id_gudang'])->first();
             ProdukPersediaanDetail::create([
                 'id_persediaan' => $persediaanProduk->id_persediaan,
                 'tanggal' => $return->tanggal,
                 'keterangan' => "#{$return->transaksi_no} Update item diretur",
                 'stok_out' => $newData['qty_diretur'],
-                'hargabeli' => (int)($pembelianReturDetail['harga'] * (1 - $pembelianReturDetail['diskon'] / 100) * (1 - $return['diskon'] / 100)),
-                'ref_id' => $pembelianReturDetail->id_pembelianreturdetail
+                'hargabeli' => (int)($persediaanProduk->hargabeli_avg),
+                'ref_id' => $oldData[$idItem]->id_pembelianreturdetail
             ]);
             DB::commit();
-            return $pembelianReturDetail;
+            return $oldData[$idItem];
         } catch (\Exception $th) {
             DB::rollBack();
             throw $th;
@@ -358,12 +387,13 @@ class PurchaseReturnService
             $persediaanProduk->update([
                 'stok' => DB::raw('stok + ' . number($oldData[$idItem]->qty))
             ]);
+            $hargaBeliTerakhir = ProdukPersediaanDetail::where('keterangan', 'ilike', '#' . $return->transaksi_no . '%')->where('ref_id', $oldData[$idItem]->id_pembelianreturdetail)->latest('id_persediaandetail')->first()->hargabeli;
             ProdukPersediaanDetail::create([
                 'id_persediaan' => $persediaanProduk->id_persediaan,
                 'tanggal' => $return->tanggal,
                 'keterangan' => "#{$return->transaksi_no} Hapus item diretur",
                 'stok_in' => $oldData[$idItem]->qty,
-                'hargabeli' => (int)($pembelianReturDetail['harga'] * (1 - $pembelianReturDetail['diskon'] / 100) * (1 - $return['diskon'] / 100)),
+                'hargabeli' => (int)($hargaBeliTerakhir),
                 'ref_id' => $pembelianReturDetail->id_pembelianreturdetail
             ]);
             DB::commit();

@@ -78,7 +78,9 @@ class PenyesuaianGudangService
             if ($penyesuaianGudang->is_valid) {
                 abort(403);
             }
-            $persediaanProduk = ProdukPersediaan::where('kode_produkvarian', $request['kode_produkvarian'])->where('id_gudang', $request['id_gudang'])->first();
+            $persediaanProduk = ProdukPersediaan::where('kode_produkvarian', $request['kode_produkvarian'])->where('id_gudang', $request['id_gudang'])->addSelect(['hargabeli_avg' => ProdukPersediaanDetail::select(DB::raw('(sum(hargabeli*coalesce(stok_in,0) - hargabeli*coalesce(stok_out,0))/nullif(sum(coalesce(stok_in,0))-sum(coalesce(stok_out,0)),0))::int'))
+                ->whereColumn('toko_griyanaura.ms_produkpersediaandetail.id_persediaan', 'toko_griyanaura.ms_produkpersediaan.id_persediaan')
+            ])->first();
             if (!$persediaanProduk) {
                 if (ProdukVarianHarga::where('kode_produkvarian', $request['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $request['id_gudang'])->first()) {
                     $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $request['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $request['id_gudang'])->first()->id_produkvarianharga;
@@ -95,10 +97,19 @@ class PenyesuaianGudangService
             if ($request['id_penyesuaiangudangdetail']) {
                 if ($request['jumlah_penyesuaian'] != null) {
                     $penyesuaianGudangDetail = PenyesuaianGudangDetail::where('id_penyesuaiangudangdetail', $request['id_penyesuaiangudangdetail'])->first();
+                    if ($request['jumlah_penyesuaian'] - $persediaanProduk->stok < 0) {
+                        if ($persediaanProduk->hargabeli_avg) {
+                            $hargaModal = $persediaanProduk->hargabeli_avg;
+                        } else {
+                            $hargaModal = $request['hargamodal'];
+                        }
+                    } else {
+                        $hargaModal = $request['hargamodal'];
+                    }
                     $penyesuaianGudangDetail->update([
                         'jumlah' => $request['jumlah_penyesuaian'],
                         'selisih' => $request['jumlah_penyesuaian'] - $persediaanProduk->stok,
-                        'harga_modal' => $request['hargamodal']
+                        'harga_modal' => $hargaModal
                     ]);
                     $penyesuaianGudangDetail->refresh();
                 } else {
@@ -107,12 +118,21 @@ class PenyesuaianGudangService
                 }
             } else {
                 if ($request['jumlah_penyesuaian'] != null) {
+                    if ($request['jumlah_penyesuaian'] - $persediaanProduk->stok < 0) {
+                        if ($persediaanProduk->hargabeli_avg) {
+                            $hargaModal = $persediaanProduk->hargabeli_avg;
+                        } else {
+                            $hargaModal = $request['hargamodal'];
+                        }
+                    } else {
+                        $hargaModal = $request['hargamodal'];
+                    }
                     $penyesuaianGudangDetail = PenyesuaianGudangDetail::create([
                         'id_gudang' => $request['id_gudang'],
                         'kode_produkvarian' => $request['kode_produkvarian'],
                         'id_penyesuaiangudang' => $request['id_penyesuaiangudang'],
                         'id_gudang' => $request['id_gudang'],
-                        'harga_modal' => $request['hargamodal'],
+                        'harga_modal' => $hargaModal,
                         'jumlah' => $request['jumlah_penyesuaian'],
                         'selisih' => $request['jumlah_penyesuaian'] - $persediaanProduk->stok
                     ]);

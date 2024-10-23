@@ -32,7 +32,7 @@ class PurchaseReturnController extends AdminController
         $form->builder()->setTitle('Retur');
         $form->setAction(route(admin_get_route('purchase.return.store')));
         $form->text('transaksi_no')->withoutIcon()->placeholder('[AUTO]');
-        $form->select('id_kontak', 'Supplier')->setWidth(2)->ajax(route(admin_get_route('ajax.kontak')));
+        $form->select('id_kontak', 'Supplier')->setWidth(2)->ajax(route(admin_get_route('ajax.kontak-supplier')));
         $invoice = $form->select('id_pembelian', 'No. Transaksi')->setWidth(2);
         $url = route(admin_get_route('ajax.pembelian'));
         $selectAjaxInvoice = <<<SCRIPT
@@ -688,6 +688,7 @@ class PurchaseReturnController extends AdminController
             admin_toastr($e->getPrevious()->getMessage(), 'warning');
             return redirect()->back();
         } catch (\Exception $e) {
+            throw $e;
             admin_toastr('Internal Server Error', 'error');
             return redirect()->back();
         }

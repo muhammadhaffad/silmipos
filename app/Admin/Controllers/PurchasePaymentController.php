@@ -29,7 +29,7 @@ class PurchasePaymentController extends AdminController
         $form = new Form($model);
         $form->setAction(route(admin_get_route('purchase.payment.store')));
         $form->column(12, function (Form $form) {
-            $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak')))->setWidth(3);
+            $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak-supplier')))->setWidth(3);
         });
         $form->column(12, function (Form $form) {
             $form->text('transaksi_no', 'No. Transaksi')->placeholder('[AUTO]')->setLabelClass(['text-nowrap'])->withoutIcon()->width('100%')->setWidth(2, 8);
@@ -152,8 +152,8 @@ class PurchasePaymentController extends AdminController
             $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
-            $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak')))->attribute([
-                'data-url' => route(admin_get_route('ajax.kontak')),
+            $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak-supplier')))->attribute([
+                'data-url' => route(admin_get_route('ajax.kontak-supplier')),
                 'select2' => null
             ])->disable()->value($data->id_kontak)->setWidth(3);
         });

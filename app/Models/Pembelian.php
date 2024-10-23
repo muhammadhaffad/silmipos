@@ -20,7 +20,13 @@ class Pembelian extends Model
     public function kontak() {
         return $this->hasOne(Kontak::class, 'id_kontak', 'id_kontak');
     }
+    public function gudang() {
+        return $this->hasOne(Gudang::class, 'id_gudang', 'id_gudang');
+    }
     public function pembelianInvoice() {
         return $this->hasMany(Pembelian::class, 'pembelian_parent', 'id_pembelian')->where('jenis', 'invoice');
+    }
+    public function pembelianOrder() {
+        return $this->belongsTo(Pembelian::class, 'pembelian_parent', 'id_pembelian')->where('jenis', 'order');
     }
 }

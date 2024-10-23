@@ -2,10 +2,12 @@
 
 namespace App\Admin\Controllers;
 
-use App\Exceptions\PurchaseOrderException;
+use App\Exceptions\SalesOrderException;
 use App\Models\Dynamic;
-use App\Models\Pembelian;
-use App\Services\Core\Purchase\PurchaseOrderService;
+use App\Models\Penjualan;
+use App\Models\ProdukPersediaan;
+use App\Models\ProdukPersediaanDetail;
+use App\Services\Core\Sales\SalesOrderService;
 use Encore\Admin\Controllers\AdminController;
 use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
@@ -22,19 +24,19 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
-class PurchaseOrderController extends AdminController
+class SalesOrderController extends AdminController
 {
-    protected $purchaseOrderService;
-    public function __construct(PurchaseOrderService $purchaseOrderService)
+    protected $salesOrderService;
+    public function __construct(SalesOrderService $salesOrderService)
     {
-        $this->purchaseOrderService = $purchaseOrderService;
+        $this->salesOrderService = $salesOrderService;
     }
-    public function listPurchaseOrderGrid() {
-        $grid = new Grid(new Pembelian);
-        $grid->model()->with(['kontak', 'gudang', 'pembelianOrder'])->orderByRaw('id_pembelian desc');
+    public function listSalesOrderGrid() {
+        $grid = new Grid(new Penjualan);
+        $grid->model()->with(['kontak', 'gudang', 'penjualanOrder'])->orderByRaw('id_penjualan desc');
         $grid->column('transaksi_no', 'No. Transaksi')->sortable();
-        $grid->column('pembelianOrder.transaksi_no', 'Reff');
-        $grid->column('kontak.nama', 'Supplier')->sortable();
+        $grid->column('penjualanOrder.transaksi_no', 'Reff');
+        $grid->column('kontak.nama', 'Customer')->sortable();
         $grid->column(('jenis'))->label([
             'invoice' => 'success',
             'order' => 'primary'
@@ -55,12 +57,12 @@ class PurchaseOrderController extends AdminController
         });
         return $grid;
     }
-    public function createPurchaseOrderForm($model) {
+    public function createSalesOrderForm($model) {
         $form = new Form($model);
-        $form->setAction(route(admin_get_route('purchase.order.store')));
+        $form->setAction(route(admin_get_route('sales.order.store')));
         $data = $form->model();
         $form->column(12, function (Form $form) {
-            $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak-supplier')))->setWidth(3);
+            $form->select('id_kontak', 'Customer')->required()->ajax(route(admin_get_route('ajax.kontak-customer')))->setWidth(3);
         });
         $form->column(12, function (Form $form) {
             $form->text('transaksi_no', 'No. Transaksi')->placeholder('[AUTO]')->setLabelClass(['text-nowrap'])->withoutIcon()->width('100%')->setWidth(2,8);
@@ -68,9 +70,9 @@ class PurchaseOrderController extends AdminController
             $form->select('id_gudang', 'Gudang')->required()->width('100%')->setWidth(2, 8)->options(DB::table('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang'))->default(1);
         });
         $form->column(12, function (Form $form) {
-            $form->tablehasmany('pembelianDetail', function (NestedForm $form) {
+            $form->tablehasmany('penjualanDetail', function (NestedForm $form) {
                 $form->select('kode_produkvarian', 'Produk')->required()->ajax(route(admin_get_route('ajax.produk')), 'kode_produkvarian')->setGroupClass('w-200px');
-                $form->currency('qty', 'Qty')->required()->symbol('QTY');
+                $form->currency('qty', 'Qty')->help('Sisa stok: <span class="sisa_stok">?</span>')->required()->symbol('QTY');
                 $form->currency('harga', 'Harga')->required()->symbol('Rp');
                 $form->currency('diskon', 'Diskon')->symbol('%');
                 $form->currency('Total', 'total')->symbol('Rp')->readonly();
@@ -84,24 +86,24 @@ class PurchaseOrderController extends AdminController
         });
         return $form;
     }
-    public function detailPurchaseOrderForm($model, $idPembelian) {
+    public function detailSalesOrderForm($model, $idPenjualan) {
         $form = new Form($model);
-        $form->setAction(route(admin_get_route('purchase.order.to-invoice'), ['idPembelian' => $idPembelian]));
-        $data = $form->model()->with(['kontak','pembelianDetail' => function ($rel) {
-            $rel->leftJoin(DB::raw("(select id_pembeliandetailparent, sum(qty) as jumlah_diinvoice from toko_griyanaura.tr_pembeliandetail where id_pembeliandetailparent is not null group by id_pembeliandetailparent) as x"), 'x.id_pembeliandetailparent', 'toko_griyanaura.tr_pembeliandetail.id_pembeliandetail');
-            $rel->with('produkVarian');
-        } ])->where('id_pembelian', $idPembelian)->join(DB::raw("(select id_gudang, nama as nama_gudang from toko_griyanaura.lv_gudang) as gdg"), 'gdg.id_gudang', 'toko_griyanaura.tr_pembelian.id_gudang')->first();
-        $form->tools(function (Tools $tools) use ($idPembelian, $data) {
+        $form->setAction(route(admin_get_route('sales.order.to-invoice'), ['idPenjualan' => $idPenjualan]));
+        $data = $form->model()->with(['kontak','penjualanDetail' => function ($rel) {
+            $rel->leftJoin(DB::raw("(select id_penjualandetailparent, sum(qty) as jumlah_diinvoice from toko_griyanaura.tr_penjualandetail where id_penjualandetailparent is not null group by id_penjualandetailparent) as x"), 'x.id_penjualandetailparent', 'toko_griyanaura.tr_penjualandetail.id_penjualandetail');
+            $rel->with(['produkVarian', 'produkPersediaan']);
+        } ])->where('id_penjualan', $idPenjualan)->join(DB::raw("(select id_gudang, nama as nama_gudang from toko_griyanaura.lv_gudang) as gdg"), 'gdg.id_gudang', 'toko_griyanaura.tr_penjualan.id_gudang')->first();
+        $form->tools(function (Tools $tools) use ($idPenjualan, $data) {
             $tools->disableList();
             $tools->disableView();
             $tools->disableDelete();
-            $tools->append($tools->renderDelete(route(admin_get_route('purchase.order.delete'), ['idPembelian' => $idPembelian]), listPath: route(admin_get_route('purchase.order.create'))));
-            $tools->append($tools->renderEdit(route(admin_get_route('purchase.order.edit'), ['idPembelian' => $idPembelian])));
-            $tools->append($tools->renderEdit(route(admin_get_route('purchase.order.to-invoice'), ['idPembelian' => $idPembelian]), text: 'Buat ke invoice', icon: 'fa-file-text'));
+            $tools->append($tools->renderDelete(route(admin_get_route('sales.order.delete'), ['idPenjualan' => $idPenjualan]), listPath: route(admin_get_route('sales.order.create'))));
+            $tools->append($tools->renderEdit(route(admin_get_route('sales.order.edit'), ['idPenjualan' => $idPenjualan])));
+            $tools->append($tools->renderEdit(route(admin_get_route('sales.order.to-invoice'), ['idPenjualan' => $idPenjualan]), text: 'Buat ke invoice', icon: 'fa-file-text'));
             $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
-            $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Supplier')->setWidth(3);
+            $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Customer')->setWidth(3);
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->html("<div style='padding-top: 7px;'>#{$data->transaksi_no}</div>", 'No. Transaksi')->setWidth(2, 8);
@@ -109,16 +111,16 @@ class PurchaseOrderController extends AdminController
             $form->html("<div style='padding-top: 7px;'>{$data->nama_gudang}</div>", 'Gudang')->setWidth(2, 8);
         });
         $form->column(12, function (Form $form) use ($data) {
-            $form->tablehasmany('pembelianDetail', function (NestedForm $form) {
+            $form->tablehasmany('penjualanDetail', function (NestedForm $form) {
                 $data = $form->model();
                 $form->html($data?->produkVarian?->varian, 'Produk')->required();
-                $form->text('qty', 'Qty')->customFormat(function ($val) {
+                $form->text('qty', 'Qty')->help('Sisa stok: ' . $data?->produkPersediaan?->stok)->customFormat(function ($val) {
                     return number($val);
                 })->disable()->attribute('type', 'number')->withoutIcon()->required()->setGroupClass('w-100px');
                 $form->currency('harga', 'Harga')->disable()->required()->symbol('Rp');
                 $form->currency('diskon', 'Diskon')->disable()->symbol('%');
                 $form->currency('total', 'Total')->disable()->symbol('Rp')->readonly();
-            })->value($data->pembelianDetail->toArray())->useTable()->disableCreate()->disableDelete();
+            })->value($data->penjualanDetail->toArray())->useTable()->disableCreate()->disableDelete();
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->currency('totalraw', 'Sub total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->totalraw);
@@ -134,23 +136,23 @@ class PurchaseOrderController extends AdminController
 
         return $form;
     }
-    public function toInvoicePurchaseOrderForm($model, $idPembelian) {
+    public function toInvoiceSalesOrderForm($model, $idPenjualan) {
         $form = new Form($model);
-        $form->setAction(route(admin_get_route('purchase.order.to-invoice.store'), ['idPembelian' => $idPembelian]));
-        $data = $form->model()->with(['kontak','pembelianDetail' => function ($rel) {
-            $rel->leftJoin(DB::raw("(select id_pembeliandetailparent, sum(qty) as jumlah_diinvoice from toko_griyanaura.tr_pembeliandetail where id_pembeliandetailparent is not null group by id_pembeliandetailparent) as x"), 'x.id_pembeliandetailparent', 'toko_griyanaura.tr_pembeliandetail.id_pembeliandetail');
-            $rel->with('produkVarian');
-        } ])->where('id_pembelian', $idPembelian)->join(DB::raw("(select id_gudang, nama as nama_gudang from toko_griyanaura.lv_gudang) as gdg"), 'gdg.id_gudang', 'toko_griyanaura.tr_pembelian.id_gudang')->first();
-        $form->tools(function (Tools $tools) use ($idPembelian, $data) {
+        $form->setAction(route(admin_get_route('sales.order.to-invoice.store'), ['idPenjualan' => $idPenjualan]));
+        $data = $form->model()->with(['kontak','penjualanDetail' => function ($rel) {
+            $rel->leftJoin(DB::raw("(select id_penjualandetailparent, sum(qty) as jumlah_diinvoice from toko_griyanaura.tr_penjualandetail where id_penjualandetailparent is not null group by id_penjualandetailparent) as x"), 'x.id_penjualandetailparent', 'toko_griyanaura.tr_penjualandetail.id_penjualandetail');
+            $rel->with(['produkVarian', 'produkPersediaan']);
+        } ])->where('id_penjualan', $idPenjualan)->join(DB::raw("(select id_gudang, nama as nama_gudang from toko_griyanaura.lv_gudang) as gdg"), 'gdg.id_gudang', 'toko_griyanaura.tr_penjualan.id_gudang')->first();
+        $form->tools(function (Tools $tools) use ($idPenjualan, $data) {
             $tools->disableList();
             $tools->disableView();
             $tools->disableDelete();
-            $tools->append($tools->renderDelete(route(admin_get_route('purchase.order.delete'), ['idPembelian' => $idPembelian]), listPath: route(admin_get_route('purchase.order.create'))));
-            $tools->append($tools->renderView(route(admin_get_route('purchase.order.detail'), ['idPembelian' => $idPembelian])));
+            $tools->append($tools->renderDelete(route(admin_get_route('sales.order.delete'), ['idPenjualan' => $idPenjualan]), listPath: route(admin_get_route('sales.order.create'))));
+            $tools->append($tools->renderView(route(admin_get_route('sales.order.detail'), ['idPenjualan' => $idPenjualan])));
             $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
-            $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Supplier')->setWidth(3);
+            $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Customer')->setWidth(3);
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->html("<div style='padding-top: 7px;'>#{$data->transaksi_no}</div>", 'No. Transaksi')->setWidth(2, 8);
@@ -159,27 +161,27 @@ class PurchaseOrderController extends AdminController
             $form->html("<div style='padding-top: 7px;'>{$data->nama_gudang}</div>", 'Gudang')->setWidth(2, 8);
         });
         $form->column(12, function (Form $form) use ($data) {
-            $form->tablehasmany('pembelianDetail', function (NestedForm $form) {
+            $form->tablehasmany('penjualanDetail', function (NestedForm $form) {
                 $data = $form->model();
                 $checkDisable = $data?->jumlah_diinvoice == $data?->qty;
                 if (!$checkDisable) {
-                    $form->html("<input type='checkbox' name='pembelianDetail[{$data?->id_pembeliandetail}][check]' value='{$data?->id_pembeliandetail}'>", '<input id="checkAll" type="checkbox">');
+                    $form->html("<input type='checkbox' name='penjualanDetail[{$data?->id_penjualandetail}][check]' value='{$data?->id_penjualandetail}'>", '<input id="checkAll" type="checkbox">');
                 } else {
                     $form->html("<input type='checkbox' disabled>", '<input id="checkAll" type="checkbox">');
                 }
                 $form->html($data?->produkVarian?->varian, 'Produk')->required();
-                $form->html(number($data?->jumlah_diinvoice ?: 0) . ' / ' . number($data?->qty), 'Qty')->setGroupClass('w-100px');
+                $form->html(number($data?->jumlah_diinvoice ?: 0) . ' / ' . number($data?->qty), 'Qty');
                 if ($data?->jumlah_diinvoice >= $data?->qty and $data != null) {
                     $form->html('-', '');
                 } else {
-                    $form->text('qty', '')->customFormat(function ($val) use ($data) {
+                    $form->text('qty', '')->help('Sisa stok: ' . $data?->produkPersediaan?->stok)->customFormat(function ($val) use ($data) {
                         return number($val - $data?->jumlah_diinvoice);
                     })->attribute('type', 'number')->withoutIcon()->required()->setGroupClass('w-100px');
                 }
                 $form->currency('harga', 'Harga')->disable()->required()->symbol('Rp');
                 $form->currency('diskon', 'Diskon')->disable()->symbol('%');
                 $form->currency('total', 'Total')->disable()->symbol('Rp')->readonly();
-            })->value($data->pembelianDetail->toArray())->useTable()->disableCreate()->disableDelete();
+            })->value($data->penjualanDetail->toArray())->useTable()->disableCreate()->disableDelete();
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->currency('totalraw', 'Sub total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->totalraw);
@@ -196,22 +198,22 @@ class PurchaseOrderController extends AdminController
 
         return $form;
     }
-    public function editPurchaseOrderForm($model, $idPembelian) {
+    public function editSalesOrderForm($model, $idPenjualan) {
         $form = new Form($model);
         $form->builder()->setMode('edit');
-        $form->setAction(route(admin_get_route('purchase.order.update'), ['idPembelian' => $idPembelian]));
-        $data = $form->model()->with('pembelianDetail')->where('id_pembelian', $idPembelian)->first();
-        $form->tools(function (Tools $tools) use ($idPembelian, $data) {
+        $form->setAction(route(admin_get_route('sales.order.update'), ['idPenjualan' => $idPenjualan]));
+        $data = $form->model()->with('penjualanDetail')->where('id_penjualan', $idPenjualan)->first();
+        $form->tools(function (Tools $tools) use ($idPenjualan, $data) {
             $tools->disableList();
             $tools->disableView();
             $tools->disableDelete();
-            $tools->append($tools->renderDelete(route(admin_get_route('purchase.order.delete'), ['idPembelian' => $idPembelian]), listPath: route(admin_get_route('purchase.order.create'))));
-            $tools->append($tools->renderView(route(admin_get_route('purchase.order.detail'), ['idPembelian' => $idPembelian])));
+            $tools->append($tools->renderDelete(route(admin_get_route('sales.order.delete'), ['idPenjualan' => $idPenjualan]), listPath: route(admin_get_route('sales.order.create'))));
+            $tools->append($tools->renderView(route(admin_get_route('sales.order.detail'), ['idPenjualan' => $idPenjualan])));
             $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
-            $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak-supplier')))->attribute([
-                'data-url' => route(admin_get_route('ajax.kontak-supplier')),
+            $form->select('id_kontak', 'Customer')->required()->ajax(route(admin_get_route('ajax.kontak-customer')))->attribute([
+                'data-url' => route(admin_get_route('ajax.kontak-customer')),
                 'select2' => null
             ])->setWidth(3)->value($data->id_kontak);
         });
@@ -221,16 +223,16 @@ class PurchaseOrderController extends AdminController
             $form->select('id_gudang', 'Gudang')->required()->width('100%')->setWidth(3, 7)->options(DB::table('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang'))->value($data->id_gudang);
         });
         $form->column(12, function (Form $form) use ($data) {
-            $form->tablehasmany('pembelianDetail', function (NestedForm $form) {
+            $form->tablehasmany('penjualanDetail', function (NestedForm $form) {
                 $form->select('kode_produkvarian', 'Produk')->required()->ajax(route(admin_get_route('ajax.produk')), 'kode_produkvarian')->attribute([
                     'data-url' => route(admin_get_route('ajax.produk')),
                     'select2' => null
                 ])->setGroupClass('w-200px');
-                $form->currency('qty', 'Qty')->required()->symbol('QTY');
+                $form->currency('qty', 'Qty')->help('Sisa stok: <span class="sisa_stok">?</span>')->required()->symbol('QTY');
                 $form->currency('harga', 'Harga')->required()->symbol('Rp');
                 $form->currency('diskon', 'Diskon')->symbol('%');
                 $form->currency('total', 'Total')->symbol('Rp')->readonly();
-            })->value($data->pembelianDetail->toArray())->useTable();
+            })->value($data->penjualanDetail->toArray())->useTable();
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->currency('totalraw', 'Sub total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly()->value($data->totalraw);
@@ -241,17 +243,17 @@ class PurchaseOrderController extends AdminController
         return $form;
     }
 
-    public function listPurchaseOrder(Content $content) {
+    public function listSalesOrder(Content $content) {
         return $content
-            ->title('Pembelian Order')
+            ->title('Penjualan Order')
             ->description('Daftar')
             ->row(function (LayoutRow $row) {
                 $row->column(12, function (Column $column) {
-                    $column->row($this->listPurchaseOrderGrid());
+                    $column->row($this->listSalesOrderGrid());
                 });
             });
     }
-    public function createPurchaseOrder(Content $content) {
+    public function createSalesOrder(Content $content) {
         $style = <<<STYLE
             .input-group {
                 width: 100% !important;   
@@ -296,15 +298,15 @@ class PurchaseOrderController extends AdminController
         $scriptDereferred = <<<SCRIPT
             function hitungProdukTotal(e) {
                 const row = $(e.target).closest('tr');
-                const harga = parseInt(row.find('.pembelianDetail[name*="harga"]').first().inputmask('unmaskedvalue')) || 0;
-                const qty = parseFloat(row.find('.pembelianDetail[name*="qty"]').first().inputmask('unmaskedvalue')) || 0;
-                const diskon = parseFloat(row.find('.pembelianDetail[name*="diskon"]').first().inputmask('unmaskedvalue')) || 0;
+                const harga = parseInt(row.find('.penjualanDetail[name*="harga"]').first().inputmask('unmaskedvalue')) || 0;
+                const qty = parseFloat(row.find('.penjualanDetail[name*="qty"]').first().inputmask('unmaskedvalue')) || 0;
+                const diskon = parseFloat(row.find('.penjualanDetail[name*="diskon"]').first().inputmask('unmaskedvalue')) || 0;
                 const total = parseInt(harga*qty*(1-diskon/100));
-                row.find('.pembelianDetail[name*="Total"]').first().val(total).change();
+                row.find('.penjualanDetail[name*="Total"]').first().val(total).change();
             }
             function hitungTotal() {
                 let total = 0;
-                $('.pembelianDetail[name*="Total"]:visible').each(function (e, item) {
+                $('.penjualanDetail[name*="Total"]:visible').each(function (e, item) {
                     total += parseInt($(item).inputmask('unmaskedvalue')) || 0;
                 });
                 $('[name="totalraw"]').val(total).change();
@@ -314,11 +316,11 @@ class PurchaseOrderController extends AdminController
                 const total = parseInt($('[name="totalraw"]').inputmask('unmaskedvalue')) || 0;
                 $('[name="total"]').val(total*(1-diskon/100));
             }
-            $("#has-many-pembelianDetail").on('click', '.remove', function () {
+            $("#has-many-penjualanDetail").on('click', '.remove', function () {
                 hitungTotal();
             });
-            $("#has-many-pembelianDetail").on('click', '.add', function () {
-                $(".pembelianDetail.kode_produkvarian").on('select2:select', function (e) {
+            $("#has-many-penjualanDetail").on('click', '.add', function () {
+                $(".penjualanDetail.kode_produkvarian").on('select2:select', function (e) {
                     const kode = e.params.data.id;
                     const idGudang = $('select[name="id_gudang"]').val();
                     $.ajax({
@@ -331,10 +333,13 @@ class PurchaseOrderController extends AdminController
                         success: function(data) {
                             // Jika permintaan berhasil
                             console.log('Data berhasil diterima:', data);
+                            $(e.target).closest('tr').find('span.sisa_stok').html('0.00');
                             if (data?.produk_persediaan) {
-                                $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_persediaan[0].produk_varian_harga.hargabeli);
+                                $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_persediaan[0].produk_varian_harga.hargajual);
+                                $(e.target).closest('tr').find('span.sisa_stok').html(data.produk_persediaan[0].stok);
                             } else {
-                                $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_varian_harga[0].hargabeli);
+                                $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_varian_harga[0].hargajual);
+                                $(e.target).closest('tr').find('span.sisa_stok').html('0.00');
                             }
                             $(e.target).closest('tr').find('[name*="qty"]').val(1);
                             hitungProdukTotal(e);
@@ -356,10 +361,10 @@ class PurchaseOrderController extends AdminController
                         }
                     });
                 });
-                $('.pembelianDetail[name*="harga"],.pembelianDetail[name*="qty"],.pembelianDetail[name*="diskon"]').on('change', function (e) {
+                $('.penjualanDetail[name*="harga"],.penjualanDetail[name*="qty"],.penjualanDetail[name*="diskon"]').on('change', function (e) {
                     hitungProdukTotal(e);
                 });
-                $('.pembelianDetail[name*="Total"]').on('change', function (e) {
+                $('.penjualanDetail[name*="Total"]').on('change', function (e) {
                     hitungTotal();
                 });
             });
@@ -368,13 +373,13 @@ class PurchaseOrderController extends AdminController
             });
         SCRIPT;
         Admin::script($scriptDereferred, true);
-        $pembelian = new Pembelian();
+        $penjualan = new Penjualan();
         return $content
-            ->title('Order Pembelian')
+            ->title('Order Penjualan')
             ->description('Buat')
-            ->body($this->createPurchaseOrderForm($pembelian));
+            ->body($this->createSalesOrderForm($penjualan));
     }
-    public function detailPurchaseOrder(Content $content, $idPembelian) {
+    public function detailSalesOrder(Content $content, $idPenjualan) {
         $style = <<<STYLE
             .input-group {
                 width: 100% !important;   
@@ -441,16 +446,16 @@ class PurchaseOrderController extends AdminController
             });
         SCRIPT;
         Admin::script($script);
-        $pembelian = new Pembelian();
-        if (!$pembelian->where('id_pembelian', $idPembelian)->where('jenis', 'order')->first()) {
+        $penjualan = new Penjualan();
+        if (!$penjualan->where('id_penjualan', $idPenjualan)->where('jenis', 'order')->first()) {
             abort(404);
         }
         return $content
-            ->title('Order Pembelian')
+            ->title('Order Penjualan')
             ->description('Detail')
-            ->body($this->detailPurchaseOrderForm($pembelian, $idPembelian));
+            ->body($this->detailSalesOrderForm($penjualan, $idPenjualan));
     }
-    public function toInvoicePurchaseOrder(Content $content, $idPembelian) {
+    public function toInvoiceSalesOrder(Content $content, $idPenjualan) {
         $style = <<<STYLE
             .input-group {
                 width: 100% !important;   
@@ -504,7 +509,7 @@ class PurchaseOrderController extends AdminController
         Admin::style($style);
         $script = <<<SCRIPT
             const checkAll = document.querySelector("#checkAll");
-            const products = document.querySelectorAll('[name^="pembelianDetail"]');
+            const products = document.querySelectorAll('[name^="penjualanDetail"]');
             checkAll.addEventListener("change", function () {
                 products.forEach(product => {
                     product.checked = this.checked;
@@ -556,16 +561,16 @@ class PurchaseOrderController extends AdminController
             $('#checkAll').trigger('click');
         SCRIPT;
         Admin::script($script);
-        $pembelian = new Pembelian();
-        if (!$pembelian->where('id_pembelian', $idPembelian)->where('jenis', 'order')->first()) {
+        $penjualan = new Penjualan();
+        if (!$penjualan->where('id_penjualan', $idPenjualan)->where('jenis', 'order')->first()) {
             abort(404);
         }
         return $content
-            ->title('Order Pembelian')
+            ->title('Order Penjualan')
             ->description('Ke invoice')
-            ->body($this->toInvoicePurchaseOrderForm($pembelian, $idPembelian));
+            ->body($this->toInvoiceSalesOrderForm($penjualan, $idPenjualan));
     }
-    public function editPurchaseOrder(Content $content, $idPembelian) {
+    public function editSalesOrder(Content $content, $idPenjualan) {
         $style = <<<STYLE
             .input-group {
                 width: 100% !important;   
@@ -608,7 +613,7 @@ class PurchaseOrderController extends AdminController
         Admin::style($style);
         $urlGetDetailProduk = route(admin_get_route('ajax.produk-detail'));
         $scriptDereferred = <<<SCRIPT
-            $(".pembelianDetail.kode_produkvarian").on('select2:select', function (e) {
+            $(".penjualanDetail.kode_produkvarian").on('select2:select', function (e) {
                 const kode = e.params.data.kode_produkvarian;
                 const idGudang = $('select[name="id_gudang"]').val();
                 $.ajax({
@@ -621,10 +626,13 @@ class PurchaseOrderController extends AdminController
                     success: function(data) {
                         // Jika permintaan berhasil
                         console.log('Data berhasil diterima:', data);
+                        $(e.target).closest('tr').find('span.sisa_stok').html('0.00');
                         if (data?.produk_persediaan) {
-                            $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_persediaan[0].produk_varian_harga.hargabeli);
+                            $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_persediaan[0].produk_varian_harga.hargajual);
+                            $(e.target).closest('tr').find('span.sisa_stok').html(data.produk_persediaan[0].stok);
                         } else {
-                            $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_varian_harga[0].hargabeli);
+                            $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_varian_harga[0].hargajual);
+                            $(e.target).closest('tr').find('span.sisa_stok').html('0.00');
                         }
                         if (!$(e.target).closest('tr').find('[name*="qty"]').val()) {
                             $(e.target).closest('tr').find('[name*="qty"]').val(1);
@@ -670,15 +678,15 @@ class PurchaseOrderController extends AdminController
             });
             function hitungProdukTotal(e) {
                 const row = $(e.target).closest('tr');
-                const harga = parseInt(row.find('.pembelianDetail[name*="harga"]').first().inputmask('unmaskedvalue')) || 0;
-                const qty = parseFloat(row.find('.pembelianDetail[name*="qty"]').first().inputmask('unmaskedvalue')) || 0;
-                const diskon = parseFloat(row.find('.pembelianDetail[name*="diskon"]').first().inputmask('unmaskedvalue')) || 0;
+                const harga = parseInt(row.find('.penjualanDetail[name*="harga"]').first().inputmask('unmaskedvalue')) || 0;
+                const qty = parseFloat(row.find('.penjualanDetail[name*="qty"]').first().inputmask('unmaskedvalue')) || 0;
+                const diskon = parseFloat(row.find('.penjualanDetail[name*="diskon"]').first().inputmask('unmaskedvalue')) || 0;
                 const total = parseInt(harga*qty*(1-diskon/100));
-                row.find('.pembelianDetail[name*="total"]').first().val(total).change();
+                row.find('.penjualanDetail[name*="total"]').first().val(total).change();
             }
             function hitungTotal() {
                 let total = 0;
-                $('.pembelianDetail[name*="total"]:visible').each(function (e, item) {
+                $('.penjualanDetail[name*="total"]:visible').each(function (e, item) {
                     total += parseInt($(item).inputmask('unmaskedvalue')) || 0;
                 });
                 $('[name="totalraw"]').val(total).change();
@@ -688,18 +696,18 @@ class PurchaseOrderController extends AdminController
                 const total = parseInt($('[name="totalraw"]').inputmask('unmaskedvalue')) || 0;
                 $('[name="total"]').val(total*(1-diskon/100));
             }
-            $("#has-many-pembelianDetail").on('click', '.remove', function () {
+            $("#has-many-penjualanDetail").on('click', '.remove', function () {
                 console.info('hit');
                 hitungTotal();
             });
-            $('.pembelianDetail[name*="harga"],.pembelianDetail[name*="qty"],.pembelianDetail[name*="diskon"]').on('change', function (e) {
+            $('.penjualanDetail[name*="harga"],.penjualanDetail[name*="qty"],.penjualanDetail[name*="diskon"]').on('change', function (e) {
                 hitungProdukTotal(e);
             });
-            $('.pembelianDetail[name*="total"]').on('change', function (e) {
+            $('.penjualanDetail[name*="total"]').on('change', function (e) {
                 hitungTotal();
             });
-            $("#has-many-pembelianDetail").on('click', '.add', function () {
-                $(".pembelianDetail.kode_produkvarian").on('select2:select', function (e) {
+            $("#has-many-penjualanDetail").on('click', '.add', function () {
+                $(".penjualanDetail.kode_produkvarian").on('select2:select', function (e) {
                     const kode = e.params.data.id;
                     const idGudang = $('select[name="id_gudang"]').val();
                     $.ajax({
@@ -713,9 +721,9 @@ class PurchaseOrderController extends AdminController
                             // Jika permintaan berhasil
                             console.log('Data berhasil diterima:', data);
                             if (data?.produk_persediaan) {
-                                $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_persediaan[0].produk_varian_harga.hargabeli);
+                                $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_persediaan[0].produk_varian_harga.hargajual);
                             } else {
-                                $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_varian_harga[0].hargabeli);
+                                $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_varian_harga[0].hargajual);
                             }
                             if (!$(e.target).closest('tr').find('[name*="qty"]').val()) {
                                 $(e.target).closest('tr').find('[name*="qty"]').val(1);
@@ -739,10 +747,10 @@ class PurchaseOrderController extends AdminController
                         }
                     });
                 });
-                $('.pembelianDetail[name*="harga"],.pembelianDetail[name*="qty"],.pembelianDetail[name*="diskon"]').on('change', function (e) {
+                $('.penjualanDetail[name*="harga"],.penjualanDetail[name*="qty"],.penjualanDetail[name*="diskon"]').on('change', function (e) {
                     hitungProdukTotal(e);
                 });
-                $('.pembelianDetail[name*="total"]').on('change', function (e) {
+                $('.penjualanDetail[name*="total"]').on('change', function (e) {
                     hitungTotal();
                 });
             });
@@ -751,63 +759,63 @@ class PurchaseOrderController extends AdminController
             });
         SCRIPT;
         Admin::script($scriptDereferred, true);
-        $pembelian = new Pembelian();
-        if (!$pembelian->where('id_pembelian', $idPembelian)->where('jenis', 'order')->first()) {
+        $penjualan = new Penjualan();
+        if (!$penjualan->where('id_penjualan', $idPenjualan)->where('jenis', 'order')->first()) {
             abort(404);
         }
-        if ($pembelian->has('pembelianInvoice')->where('id_pembelian', $idPembelian)->first()) {
-            admin_toastr('Pembelian sudah di-invoice, perubahan tidak diizinkan', 'warning');
-            return redirect()->route(admin_get_route('purchase.order.detail'), ['idPembelian' => $idPembelian]);
+        if ($penjualan->has('penjualanInvoice')->where('id_penjualan', $idPenjualan)->first()) {
+            admin_toastr('Penjualan sudah di-invoice, perubahan tidak diizinkan', 'warning');
+            return redirect()->route(admin_get_route('sales.order.detail'), ['idPenjualan' => $idPenjualan]);
         }
         return $content
-            ->title('Order Pembelian')
+            ->title('Order Penjualan')
             ->description('Ubah')
-            ->body($this->editPurchaseOrderForm($pembelian, $idPembelian));
+            ->body($this->editSalesOrderForm($penjualan, $idPenjualan));
     }
 
-    public function storePurchaseOrder(Request $request) {
+    public function storeSalesOrder(Request $request) {
         try {
-            $result = $this->purchaseOrderService->storePurchaseOrder($request->all());
-            admin_toastr('Sukses buat transaksi pembelian');
-            return redirect()->route(admin_get_route('purchase.order.detail'), ['idPembelian' => $result->id_pembelian]);
+            $result = $this->salesOrderService->storeSalesOrder($request->all());
+            admin_toastr('Sukses buat transaksi penjualan');
+            return redirect()->route(admin_get_route('sales.order.detail'), ['idPenjualan' => $result->id_penjualan]);
         } catch (ValidationException $e) {
             return $e->validator->getMessageBag();
         } catch (\Exception $e) {
             throw $e;
         }
     }
-    public function updatePurchaseOrder(Request $request, $idPembelian) {
+    public function updateSalesOrder(Request $request, $idPenjualan) {
         try {
-            $this->purchaseOrderService->updatePurchaseOrder($idPembelian, $request->all());
-            admin_toastr('Sukses memperbarui transaksi pembelian');
-            return redirect()->route(admin_get_route('purchase.order.detail'), ['idPembelian' => $idPembelian]);
+            $this->salesOrderService->updateSalesOrder($idPenjualan, $request->all());
+            admin_toastr('Sukses memperbarui transaksi penjualan');
+            return redirect()->route(admin_get_route('sales.order.detail'), ['idPenjualan' => $idPenjualan]);
         } catch (ValidationException $e) {
             return $e->validator->getMessageBag();
         } catch (\Exception $e) {
             throw $e;
         }
     }
-    public function storeToInvoicePurchaseOrder(Request $request, $idPembelian) {
+    public function storeToInvoiceSalesOrder(Request $request, $idPenjualan) {
         try {
-            $result = $this->purchaseOrderService->storeToInvoicePurchaseOrder($idPembelian, $request->all());
-            admin_toastr('Sukses buat invoice pembelian');
-            return redirect()->route(admin_get_route('purchase.invoice.detail'), ['idPembelian' => $result->id_pembelian]);
+            $result = $this->salesOrderService->storeToInvoiceSalesOrder($idPenjualan, $request->all());
+            admin_toastr('Sukses buat invoice penjualan');
+            return redirect()->route(admin_get_route('sales.invoice.detail'), ['idPenjualan' => $result->id_penjualan]);
         } catch (ValidationException $e) {
             return $e->validator->getMessageBag();
         } catch (\Exception $e) {
             throw $e;
         }
     }
-    public function deletePurchaseOrder(Request $request, $idPembelian) {
+    public function deleteSalesOrder(Request $request, $idPenjualan) {
         try {
-            $this->purchaseOrderService->deletePurchaseOrder($idPembelian);
-            admin_toastr('Sukses hapus order pembelian');
+            $this->salesOrderService->deleteSalesOrder($idPenjualan);
+            admin_toastr('Sukses hapus order Penjualan');
             return [
                 'status' => true,
                 'then' => ['action' => 'refresh', 'value' => true],
-                'message' => 'Sukses hapus order pembelian'
+                'message' => 'Sukses hapus order Penjualan'
             ];
-        } catch (PurchaseOrderException $e) {
+        } catch (SalesOrderException $e) {
             admin_toastr($e->getMessage(), 'warning');
             return [
                 'status' => false,

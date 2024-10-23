@@ -7,13 +7,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
-class PembelianReturDetail extends Model
+class PenjualanDetail extends Model
 {
     use HasFactory;
     const CREATED_AT = 'inserted_at';
     const UPDATED_AT = 'updated_at';
-    protected $table = 'toko_griyanaura.tr_pembelianreturdetail';
-    protected $primaryKey = 'id_pembelianreturdetail';
+    protected $table = 'toko_griyanaura.tr_penjualandetail';
+    protected $primaryKey = 'id_penjualandetail';
     protected $guarded = [];
 
     use Compoships;

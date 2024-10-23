@@ -114,6 +114,8 @@ class PurchaseRefundPaymentService
                 throw new PurchasePaymentException('Total pembayaran tidak sama');
             }
             $refund->total = (int)$request['total'];
+            $refund->tanggal = $request['tanggal'];
+            $refund->catatan = $request['catatan'];
             $refund->save();
             $oldItem = $refund->pembelianRefundDetail->keyBy('id_pembelianrefunddetail');
             foreach ($request['pembelianRefundDetail'] as $item) {
@@ -164,6 +166,25 @@ class PurchaseRefundPaymentService
                 ];
             }
             $this->entryJurnal($refund->id_transaksi, $detailTransaksi);
+            DB::commit();
+            return $refund;
+        } catch (\Exception $th) {
+            DB::rollBack();
+            throw $th;
+        }
+    }
+    public function deleteRefundDP($idRefund)
+    {
+        DB::beginTransaction();
+        try {
+            $refund = PembelianRefund::with('pembelianRefundDetail.pembelianPembayaranDP')->find($idRefund);
+            $oldItem = $refund->pembelianRefundDetail->keyBy('id_pembelianrefunddetail');
+            foreach ($refund->pembelianRefundDetail as $item) {
+                /* Jika dihapus */
+                $this->deleteRefundDetailDP($item->id_pembelianrefunddetail, $oldItem);
+            }
+            $refund->delete();
+            $this->deleteJurnal($refund->id_transaksi);
             DB::commit();
             return $refund;
         } catch (\Exception $th) {

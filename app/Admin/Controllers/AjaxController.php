@@ -7,6 +7,8 @@ use App\Models\Akun;
 use App\Models\Dynamic;
 use App\Models\Pembelian;
 use App\Models\PembelianPembayaran;
+use App\Models\Penjualan;
+use App\Models\PenjualanPembayaran;
 use App\Models\Produk;
 use App\Models\ProdukPersediaan;
 use App\Models\ProdukVarian;
@@ -40,6 +42,20 @@ class AjaxController extends Controller
         }
         return (new Dynamic())->setTable('toko_griyanaura.lv_attributvalue as attval')->join('toko_griyanaura.lv_attribut as att', 'att.id_attribut', 'attval.id_attribut')->where(DB::raw('attval.nama'), 'ilike', "%$q%")->paginate(null, ['id_attributvalue as id', DB::raw("'<b>' || att.nama || '</b> : ' || attval.nama as text")]);
     }
+    public function getKontakSupplier(Request $request) {
+        $q = $request->get('q');
+        if ($request->get('id')) {
+            return (new Dynamic())->setTable('toko_griyanaura.ms_kontak')->where('jenis_kontak', 'supplier')->where('id_kontak', $request->get('id'))->first(['id_kontak as id', DB::raw("nama || ' - ' || alamat as text")]);
+        }
+        return (new Dynamic())->setTable('toko_griyanaura.ms_kontak')->where('jenis_kontak', 'supplier')->where('nama', 'ilike', "%$q%")->paginate(null, ['id_kontak as id', DB::raw("nama || ' - ' || alamat as text")]);
+    }
+    public function getKontakCustomer(Request $request) {
+        $q = $request->get('q');
+        if ($request->get('id')) {
+            return (new Dynamic())->setTable('toko_griyanaura.ms_kontak')->where('jenis_kontak', 'customer')->where('id_kontak', $request->get('id'))->first(['id_kontak as id', DB::raw("nama || ' - ' || alamat as text")]);
+        }
+        return (new Dynamic())->setTable('toko_griyanaura.ms_kontak')->where('jenis_kontak', 'customer')->where('nama', 'ilike', "%$q%")->paginate(null, ['id_kontak as id', DB::raw("nama || ' - ' || alamat as text")]);
+    }
     public function getProduk(Request $request) {
         $q = $request->get('q');
         $subQuery = ProdukVarian::select(['toko_griyanaura.ms_produkvarian.kode_produkvarian as kode_produkvarian', DB::raw("toko_griyanaura.ms_produkvarian.kode_produkvarian || ' - ' || p.nama || ' ' || string_agg(coalesce(av.nama, ''), ' ' order by pav.id_produkattributvalue) as text")])
@@ -55,13 +71,6 @@ class AjaxController extends Controller
             return $query->where('kode_produkvarian', $request->get('id'))->first();
         } 
         return $query->where(DB::raw("x.kode_produkvarian || ' ' || x.text"), 'ilike', "%$q%")->paginate();
-    }
-    public function getKontak(Request $request) {
-        $q = $request->get('q');
-        if ($request->get('id')) {
-            return (new Dynamic())->setTable('toko_griyanaura.ms_kontak')->where('id_kontak', $request->get('id'))->first(['id_kontak as id', DB::raw("nama || ' - ' || alamat as text")]);
-        }
-        return (new Dynamic())->setTable('toko_griyanaura.ms_kontak')->where('nama', 'ilike', "%$q%")->paginate(null, ['id_kontak as id', DB::raw("nama || ' - ' || alamat as text")]);
     }
     public function getProdukDetail(Request $request) {
         $kode = $request->get('kode_produkvarian');
@@ -100,5 +109,33 @@ class AjaxController extends Controller
         $id = $request->get('id_pembelianpembayaran');
         $idSupplier = $request->get('id_supplier');
         return PembelianPembayaran::select('id_pembelianpembayaran', 'transaksi_no', 'nominal', DB::raw('toko_griyanaura.f_getsisapembayaran(transaksi_no) as sisapembayaran'))->where('id_kontak', $idSupplier)->where('jenisbayar', 'DP')->where('id_pembelianpembayaran', $id)->first()?->toArray() ?: [];
+    }
+    public function getPenjualan(Request $request)
+    {
+        $q = $request->get('q');
+        $idCustomer = $request->get('id_customer');
+        if ($request->get('id')) {
+            return Penjualan::select('id_penjualan as id', 'transaksi_no as text')->where('jenis', 'invoice')->where('id_kontak', $idCustomer)->where('id_penjualan', $request->get('id'))->first(['id_penjualan as id', DB::raw("transaksi_no as text")]);
+        }
+        return Penjualan::select('id_penjualan as id', 'transaksi_no as text')->where('id_kontak', $idCustomer)->where('jenis', 'invoice')->where('transaksi_no', 'ilike', "%$q%")->paginate(null, ['id_penjualan as id', DB::raw("transaksi_no as text")]);
+    }
+    public function getPenjualanDetail(Request $request) {
+        $id = $request->get('id_penjualan');
+        $idCustomer = $request->get('id_customer');
+        return Penjualan::select('id_penjualan', 'transaksi_no', DB::raw("TO_CHAR(tanggaltempo, 'YYYY-MM-DD') as tanggaltempo"), 'grandtotal', DB::raw('toko_griyanaura.f_getsisatagihan(transaksi_no) as sisatagihan'))->where('id_kontak', $idCustomer)->where('id_penjualan', $id)->first()?->toArray() ?: [];
+    }
+    public function getPenjualanPembayaran(Request $request)
+    {
+        $q = $request->get('q');
+        $idCustomer = $request->get('id_customer');
+        if ($request->get('id')) {
+            return PenjualanPembayaran::select('id_penjualanpembayaran as id', 'transaksi_no as text')->where('jenisbayar', 'DP')->where('id_kontak', $idCustomer)->where('id_penjualanpembayaran', $request->get('id'))->first(['id_penjualanpembayaran as id', DB::raw("transaksi_no as text")]);
+        }
+        return PenjualanPembayaran::select('id_penjualanpembayaran as id', 'transaksi_no as text')->where('id_kontak', $idCustomer)->where('jenisbayar', 'DP')->where('transaksi_no', 'ilike', "%$q%")->paginate(null, ['id_penjualanpembayaran as id', DB::raw("transaksi_no as text")]);
+    }
+    public function getPenjualanPembayaranDetail(Request $request) {
+        $id = $request->get('id_penjualanpembayaran');
+        $idSupplier = $request->get('id_supplier');
+        return PenjualanPembayaran::select('id_penjualanpembayaran', 'transaksi_no', 'nominal', DB::raw('toko_griyanaura.f_getsisapembayaran(transaksi_no) as sisapembayaran'))->where('id_kontak', $idSupplier)->where('jenisbayar', 'DP')->where('id_penjualanpembayaran', $id)->first()?->toArray() ?: [];
     }
 }

@@ -114,7 +114,7 @@ class PindahGudangService
     //             } else {
     //                 $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $request['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', 1 /* Reguler */)->first()->id_produkvarianharga;
     //             }
-    //             $dataDariPersediaan = ProdukPersediaan::craete([
+    //             $dataDariPersediaan = ProdukPersediaan::create([
     //                 'id_gudang' => $dataPindahGudang->from_gudang,
     //                 'kode_produkvarian' => $request['kode_produkvarian'],
     //                 'stok' => 0 - $request['jumlah'],
@@ -242,7 +242,9 @@ class PindahGudangService
             abort(403);
         }
         try {
-            $dataDariPersediaan = ProdukPersediaan::where('kode_produkvarian', $request['kode_produkvarian'])->where('id_gudang', $dataPindahGudang->from_gudang)?->first();
+            $dataDariPersediaan = ProdukPersediaan::addSelect(['hargabeli_avg' => ProdukPersediaanDetail::select(DB::raw('(sum(hargabeli*coalesce(stok_in,0) - hargabeli*coalesce(stok_out,0))/nullif(sum(coalesce(stok_in,0))-sum(coalesce(stok_out,0)),0))::int'))
+                ->whereColumn('toko_griyanaura.ms_produkpersediaandetail.id_persediaan', 'toko_griyanaura.ms_produkpersediaan.id_persediaan')
+            ])->where('kode_produkvarian', $request['kode_produkvarian'])->where('id_gudang', $dataPindahGudang->from_gudang)?->first();
             if ($dataDariPersediaan) {
                 if (!$dataDariPersediaan->default_varianharga) {
                     if (ProdukVarianHarga::where('kode_produkvarian', $request['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $dataPindahGudang->varianharga_fromgudang)->first()) {
@@ -260,7 +262,7 @@ class PindahGudangService
                 } else {
                     $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $request['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', 1 /* Reguler */)->first()->id_produkvarianharga;
                 }
-                $dataDariPersediaan = ProdukPersediaan::craete([
+                $dataDariPersediaan = ProdukPersediaan::create([
                     'id_gudang' => $dataPindahGudang->from_gudang,
                     'kode_produkvarian' => $request['kode_produkvarian'],
                     'stok' => 0,
@@ -296,10 +298,15 @@ class PindahGudangService
             $pindahGudangDetail = null;
             if ($request['id_pindahgudangdetail'] != null) {
                 if ($request['jumlah'] != null) {
+                    if ($dataDariPersediaan->hargabeli_avg) {
+                        $hargaModalDariGudang = $dataDariPersediaan->hargabeli_avg;
+                    } else {
+                        $hargaModalDariGudang = $request['harga_modal_dari_gudang'];
+                    }
                     $pindahGudangDetail = PindahGudangDetail::where('id_pindahgudangdetail', $request['id_pindahgudangdetail'])->first();
                     $pindahGudangDetail->update([
                         'jumlah' => $request['jumlah'],
-                        'harga_modal_dari_gudang' => $request['harga_modal_dari_gudang'],
+                        'harga_modal_dari_gudang' => $hargaModalDariGudang,
                         'harga_modal_ke_gudang' => $request['harga_modal_ke_gudang']
                     ]);
                     $pindahGudangDetail->refresh();
@@ -308,11 +315,16 @@ class PindahGudangService
                 }
             } else {
                 if ($request['jumlah'] != null) {
+                    if ($dataDariPersediaan->hargabeli_avg) {
+                        $hargaModalDariGudang = $dataDariPersediaan->hargabeli_avg;
+                    } else {
+                        $hargaModalDariGudang = $request['harga_modal_dari_gudang'];
+                    }
                     $pindahGudangDetail = PindahGudangDetail::create([
                         'kode_produkvarian' => $request['kode_produkvarian'],
                         'id_pindahgudang' => $dataPindahGudang->id_pindahgudang,
                         'jumlah' => $request['jumlah'],
-                        'harga_modal_dari_gudang' => $request['harga_modal_dari_gudang'],
+                        'harga_modal_dari_gudang' => $hargaModalDariGudang,
                         'harga_modal_ke_gudang' => $request['harga_modal_ke_gudang'],
                         'inserted_by' => Admin::user()->username,
                         'updated_by' => Admin::user()->username
