@@ -329,30 +329,25 @@ class PurchaseReturnService
             $oldData[$idItem]->total = $pembelianDetail['harga'] * $newData['qty_diretur'] * (1 - $pembelianDetail['diskon'] / 100.0);
             $oldData[$idItem]->totalraw = $pembelianDetail['harga'] * $newData['qty_diretur'];
             $oldData[$idItem]->save();
-            $persediaanProduk = ProdukPersediaan::addSelect(['hargabeli_avg' => ProdukPersediaanDetail::select(DB::raw('(sum(hargabeli*coalesce(stok_in,0) - hargabeli*coalesce(stok_out,0))/nullif(sum(coalesce(stok_in,0))-sum(coalesce(stok_out,0)),0))::int'))
-                ->whereColumn('toko_griyanaura.ms_produkpersediaandetail.id_persediaan', 'toko_griyanaura.ms_produkpersediaan.id_persediaan')
-            ])->where('kode_produkvarian', $pembelianDetail['kode_produkvarian'])->where('id_gudang', $pembelianDetail['id_gudang'])->first();
-            $persediaanProduk->update([
+            $oldData[$idItem]->produkPersediaan->update([
                 'stok' => DB::raw('stok + ' . number($oldQty) . ' - ' . number($newData['qty_diretur']))
             ]);
             $hargaBeliTerakhir = ProdukPersediaanDetail::where('keterangan', 'ilike', '#' . $return->transaksi_no . '%')->where('ref_id', $oldData[$idItem]->id_pembelianreturdetail)->latest('id_persediaandetail')->first()->hargabeli;
             ProdukPersediaanDetail::create([
-                'id_persediaan' => $persediaanProduk->id_persediaan,
+                'id_persediaan' => $oldData[$idItem]->produkPersediaan->id_persediaan,
                 'tanggal' => $return->tanggal,
                 'keterangan' => "#{$return->transaksi_no} Update item diretur",
                 'stok_in' => $oldQty,
                 'hargabeli' => (int)($hargaBeliTerakhir),
                 'ref_id' => $oldData[$idItem]->id_pembelianreturdetail
             ]);
-            $persediaanProduk = ProdukPersediaan::addSelect(['hargabeli_avg' => ProdukPersediaanDetail::select(DB::raw('(sum(hargabeli*coalesce(stok_in,0) - hargabeli*coalesce(stok_out,0))/nullif(sum(coalesce(stok_in,0))-sum(coalesce(stok_out,0)),0))::int'))
-                ->whereColumn('toko_griyanaura.ms_produkpersediaandetail.id_persediaan', 'toko_griyanaura.ms_produkpersediaan.id_persediaan')
-            ])->where('kode_produkvarian', $pembelianDetail['kode_produkvarian'])->where('id_gudang', $pembelianDetail['id_gudang'])->first();
+            $oldData[$idItem]->refresh();
             ProdukPersediaanDetail::create([
-                'id_persediaan' => $persediaanProduk->id_persediaan,
+                'id_persediaan' => $oldData[$idItem]->produkPersediaan->id_persediaan,
                 'tanggal' => $return->tanggal,
                 'keterangan' => "#{$return->transaksi_no} Update item diretur",
                 'stok_out' => $newData['qty_diretur'],
-                'hargabeli' => (int)($persediaanProduk->hargabeli_avg),
+                'hargabeli' => (int)($oldData[$idItem]->produkPersediaan->hargabeli_avg),
                 'ref_id' => $oldData[$idItem]->id_pembelianreturdetail
             ]);
             DB::commit();

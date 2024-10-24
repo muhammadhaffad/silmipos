@@ -256,6 +256,8 @@ class SalesOrderService
             ];
             foreach ($penjualanInvoice->penjualanDetail as $item) {
                 if ($item->produkVarian->produk->in_stok == true) {
+                    $item->hargabeli = $item->produkPersediaan->hargabeli_avg;
+                    $item->save();
                     $persediaanProduk = ProdukPersediaan::where('kode_produkvarian', $item['kode_produkvarian'])->where('id_gudang', $item['id_gudang'])->first();
                     if (!$persediaanProduk) {
                         throw new SalesOrderException('Produk belum tersedia');

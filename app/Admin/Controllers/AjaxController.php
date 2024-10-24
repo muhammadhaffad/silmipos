@@ -52,9 +52,9 @@ class AjaxController extends Controller
     public function getKontakCustomer(Request $request) {
         $q = $request->get('q');
         if ($request->get('id')) {
-            return (new Dynamic())->setTable('toko_griyanaura.ms_kontak')->where('jenis_kontak', 'customer')->where('id_kontak', $request->get('id'))->first(['id_kontak as id', DB::raw("nama || ' - ' || alamat as text")]);
+            return (new Dynamic())->setTable('toko_griyanaura.ms_kontak')->where('jenis_kontak', 'customer')->where('id_kontak', $request->get('id'))->first(['id_kontak as id', DB::raw("nama || ' - ' || coalesce(alamat,'') as text")]);
         }
-        return (new Dynamic())->setTable('toko_griyanaura.ms_kontak')->where('jenis_kontak', 'customer')->where('nama', 'ilike', "%$q%")->paginate(null, ['id_kontak as id', DB::raw("nama || ' - ' || alamat as text")]);
+        return (new Dynamic())->setTable('toko_griyanaura.ms_kontak')->where('jenis_kontak', 'customer')->where('nama', 'ilike', "%$q%")->paginate(null, ['id_kontak as id', DB::raw("nama || ' - ' || coalesce(alamat,'') as text")]);
     }
     public function getProduk(Request $request) {
         $q = $request->get('q');
