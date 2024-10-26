@@ -75,23 +75,39 @@ class SalesInvoiceService
                 'grandtotal' => $grandTotal,
                 'id_gudang' => $request['id_gudang']
             ]);
-            $penjualanInvoice = Penjualan::with('penjualanDetail.produkVarian.produk')->find($penjualanInvoice->id_penjualan);
+            $penjualanInvoice = Penjualan::with(['penjualanDetail.produkVarian.produk', 'penjualanDetail.produkPersediaan.produkVarianHarga'])->find($penjualanInvoice->id_penjualan);
             $detailTransaksi = [];
+            $detailTransaksi[] = [
+                'kode_akun' => '1201',
+                'keterangan' => null,
+                'nominaldebit' => $penjualanInvoice->grandtotal,
+                'nominalkredit' => 0
+            ];
             foreach ($penjualanInvoice->penjualanDetail as $item) {
                 $detailTransaksi[] = [
-                    'kode_akun' => $item->produkVarian->produk->default_akunpersediaan,
+                    'kode_akun' => $item->produkVarian->produk->default_akunpemasukan,
                     'keterangan' => $item->produkVarian->varian,
-                    'nominaldebit' => (int)($item->qty * $item->harga * (1 - $item->diskon / 100) * (1 - $penjualanInvoice->diskon / 100)),
-                    'nominalkredit' => 0,
+                    'nominaldebit' => 0,
+                    'nominalkredit' => (int)($item->qty * $item->harga * (1 - $item->diskon / 100) * (1 - $penjualanInvoice->diskon / 100)),
                     'ref_id' => $item->id_penjualandetail
                 ];
             }
-            $detailTransaksi[] = [
-                'kode_akun' => '2001',
-                'keterangan' => null,
-                'nominaldebit' => 0,
-                'nominalkredit' => $penjualanInvoice->grandtotal
-            ];
+            foreach ($penjualanInvoice->penjualanDetail as $item) {
+                $detailTransaksi[] = [
+                    'kode_akun' => $item->produkVarian->produk->default_akunbiaya,
+                    'keterangan' => $item->produkVarian->varian,
+                    'nominaldebit' => (int)($item->qty * $item->hargabeli),
+                    'nominalkredit' => 0,
+                    'ref_id' => $item->id_penjualandetail
+                ];
+                $detailTransaksi[] = [
+                    'kode_akun' => '1301',
+                    'keterangan' => $item->produkVarian->varian,
+                    'nominaldebit' => 0,
+                    'nominalkredit' => (int)($item->qty * $item->hargabeli),
+                    'ref_id' => $item->id_penjualandetail
+                ];
+            }
             if (isset($detailTransaksi)) {
                 $this->entryJurnal($penjualanInvoice->id_transaksi, $detailTransaksi);
             }
@@ -179,16 +195,22 @@ class SalesInvoiceService
             /* Delete pencatatan jurnal */
             $this->deleteJurnal($penjualan->id_transaksi);
             /* Pencatatan ulang jurnal */
-            $penjualan = Penjualan::with('penjualanDetail.produkVarian.produk')->find($penjualan->id_penjualan);
+            $penjualan = Penjualan::with(['penjualanDetail.produkVarian.produk', 'penjualanDetail.produkPersediaan.produkVarianHarga'])->find($penjualan->id_penjualan);
             $detailTransaksi = [];
+            $detailTransaksi[] = [
+                'kode_akun' => '1201',
+                'keterangan' => null,
+                'nominaldebit' => 0,
+                'nominalkredit' => 0
+            ];
             $total = 0;
             foreach ($penjualan->penjualanDetail as $item) {
                 $total += (int)($item->qty * $item->harga * (1 - $item->diskon / 100) * (1 - $penjualan->diskon / 100));
                 $detailTransaksi[] = [
                     'kode_akun' => $item->produkVarian->produk->default_akunpersediaan,
                     'keterangan' => $item->produkVarian->varian,
-                    'nominaldebit' => (int)($item->qty * $item->harga * (1 - $item->diskon / 100) * (1 - $penjualan->diskon / 100)),
-                    'nominalkredit' => 0,
+                    'nominaldebit' => 0,
+                    'nominalkredit' => (int)($item->qty * $item->harga * (1 - $item->diskon / 100) * (1 - $penjualan->diskon / 100)),
                     'ref_id' => $item->id_penjualandetail
                 ];
             }
@@ -200,13 +222,24 @@ class SalesInvoiceService
                     'nominalkredit' => 0
                 ];
             }
-            $detailTransaksi[] = [
-                'kode_akun' => '2001',
-                'keterangan' => null,
-                'nominaldebit' => 0,
-                'nominalkredit' => $penjualan->grandtotal
-            ];
+            foreach ($penjualan->penjualanDetail as $item) {
+                $detailTransaksi[] = [
+                    'kode_akun' => $item->produkVarian->produk->default_akunbiaya,
+                    'keterangan' => $item->produkVarian->varian,
+                    'nominaldebit' => (int)($item->qty * $item->hargabeli),
+                    'nominalkredit' => 0,
+                    'ref_id' => $item->id_penjualandetail
+                ];
+                $detailTransaksi[] = [
+                    'kode_akun' => '1301',
+                    'keterangan' => $item->produkVarian->varian,
+                    'nominaldebit' => 0,
+                    'nominalkredit' => (int)($item->qty * $item->hargabeli),
+                    'ref_id' => $item->id_penjualandetail
+                ];
+            }
             if (isset($detailTransaksi)) {
+                $detailTransaksi[0]['nominaldebit'] = $total;
                 $this->entryJurnal($penjualan->id_transaksi, $detailTransaksi);
             }
             DB::commit();
@@ -228,7 +261,7 @@ class SalesInvoiceService
             $this->deleteJurnal($penjualan->id_transaksi);
             $penjualan->delete();
             Transaksi::where('id_transaksi', $penjualan->id_transaksi)->delete();
-            DB::commit();   
+            DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
@@ -250,31 +283,23 @@ class SalesInvoiceService
                 'totalraw' => (int)$newData['harga'] * $newData['qty'],
                 'id_gudang' => $newData['id_gudang']
             ]);
-            $produkVarian = ProdukVarian::with('produk')->where('kode_produkvarian', $newData['kode_produkvarian'])->first();
-            if ($produkVarian->produk->in_stok == true) {
-                $persediaanProduk = ProdukPersediaan::where('kode_produkvarian', $newData['kode_produkvarian'])->where('id_gudang', $newData['id_gudang'])->first();
-                if (!$persediaanProduk) {
-                    if (ProdukVarianHarga::where('kode_produkvarian', $newData['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $newData['id_gudang'])->first()) {
-                        $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $newData['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', $newData['id_gudang'])->first()->id_produkvarianharga;
-                    } else {
-                        $defaultVarianHarga = ProdukVarianHarga::where('kode_produkvarian', $newData['kode_produkvarian'])->join('toko_griyanaura.ms_produkharga as ph', 'ph.id_produkharga', 'toko_griyanaura.ms_produkvarianharga.id_produkharga')->where('ph.id_varianharga', 1 /* Reguler */)->first()->id_produkvarianharga;
-                    }
-                    $persediaanProduk = ProdukPersediaan::create([
-                        'id_gudang' => $newData['id_gudang'],
-                        'kode_produkvarian' => $newData['kode_produkvarian'],
-                        'stok' => 0,
-                        'default_varianharga' => $defaultVarianHarga
-                    ]);
+            $penjualanDetail->load(['produkVarian.produk', 'produkPersediaan']);
+            if ($penjualanDetail->produkVarian->produk->in_stok == true) {
+                if (!$penjualanDetail->produkPersediaan) {
+                    throw new SalesInvoiceException('Produk belum tersedia');
                 }
-                $persediaanProduk->update([
-                    'stok' => DB::raw('stok +' . number($newData['qty']))
+                $penjualanDetail->produkPersediaan->update([
+                    'stok' => DB::raw('stok -' . number($newData['qty']))
                 ]);
+                $penjualanDetail->hargabeli = $penjualanDetail->produkPersediaan->hargabeli_avg;
+                $penjualanDetail->save();
                 $dataPersediaanDetail = ProdukPersediaanDetail::create([
-                    'id_persediaan' => $persediaanProduk->id_persediaan,
+                    'id_persediaan' => $penjualanDetail->produkPersediaan->id_persediaan,
                     'tanggal' => $invoice->tanggal,
                     'keterangan' => "#{$invoice->transaksi_no} Store item penjualan invoice",
-                    'stok_in' => $newData['qty'],
-                    'hargabeli' => (int)($newData['harga'] * (1 - $newData['diskon'] / 100) * (1 - $invoice['diskon'] / 100)),
+                    'stok_out' => $penjualanDetail->qty,
+                    'hargabeli' => (int)($penjualanDetail->produkPersediaan->hargabeli_avg),
+                    'hargajual' => (int)($penjualanDetail->harga * (1-$penjualanDetail->diskon/100) * (1-$invoice->diskon/100)),
                     'ref_id' => $penjualanDetail->id_penjualandetail
                 ]);
             }
@@ -300,19 +325,19 @@ class SalesInvoiceService
                 }
                 /* $diBayar = DB::select('select coalesce(sum(nominal),0) as jumlah from toko_griyanaura.tr_penjualanalokasipembayaran where id_penjualaninvoice = ?', [$invoice->id_penjualan])[0]->jumlah;
                 $diRetur = DB::select('select coalesce(sum(grandtotal),0) as jumlah from toko_griyanaura.tr_penjualanretur where id_penjualan = ?', [$invoice->id_penjualan])[0]->jumlah; */
-                if (DB::select('select toko_griyanaura.f_getsisatagihan(?) as sisatagihan', [$invoice->transaksi_no])[0]->sisatagihan < ($oldData[$idItem]->total - $newData['total']) * (1 - $invoice->diskon/100)) {
+                if (DB::select('select toko_griyanaura.f_getsisatagihanpenjualan(?) as sisatagihan', [$invoice->transaksi_no])[0]->sisatagihan < ($oldData[$idItem]->total - $newData['total']) * (1 - $invoice->diskon / 100)) {
                     throw new SalesInvoiceException('Sisa tagihan tidak boleh minus');
                 }
                 PenjualanDetail::where('id_penjualandetail', $idItem)->update($newData);
-            } 
+            }
             if ($oldData[$idItem]->produkVarian->produk->in_stok == true) {
                 /* Kurangi / Tambah Persediaan */
                 if (!empty($newData)) {
                     $selisih = $newData['qty'] - $oldData[$idItem]['qty'];
                     if ($selisih > 0) {
-                        $oldData[$idItem]->produkPersediaan->increment('stok', $selisih);
-                    } else if ($selisih < 0) {
                         $oldData[$idItem]->produkPersediaan->decrement('stok', $selisih);
+                    } else if ($selisih < 0) {
+                        $oldData[$idItem]->produkPersediaan->increment('stok', $selisih);
                     }
                 }
                 /* Tambah persediaan detail (untuk riwayat persediaan) */
@@ -321,16 +346,19 @@ class SalesInvoiceService
                         'id_persediaan' => $oldData[$idItem]->produkPersediaan->id_persediaan,
                         'tanggal' => $invoice->tanggal,
                         'keterangan' => "#{$invoice->transaksi_no} Update item penjualan invoice",
-                        'stok_out' => $oldData[$idItem]->qty,
-                        'hargabeli' => (int)($oldData[$idItem]->harga * (1 - $oldData[$idItem]->diskon / 100) * (1 - $oldInvoice->diskon / 100)),
+                        'stok_in' => $oldData[$idItem]->qty,
+                        'hargabeli' => (int)($oldData[$idItem]->hargabeli),
+                        'hargajual' => (int)($oldData[$idItem]->harga * (1 - $oldData[$idItem]->diskon / 100) * (1 - $oldInvoice->diskon / 100)),
                         'ref_id' => $oldData[$idItem]->id_penjualandetail
                     ]);
+                    $oldData[$idItem]->refresh();
                     ProdukPersediaanDetail::create([
                         'id_persediaan' => $oldData[$idItem]->produkPersediaan->id_persediaan,
                         'tanggal' => $invoice->tanggal,
                         'keterangan' => "#{$invoice->transaksi_no} Update item penjualan invoice",
-                        'stok_in' => $newData['qty'] ?? $oldData[$idItem]->qty,
-                        'hargabeli' => (int)(($newData['harga'] ?? $oldData[$idItem]->harga) * (1 - ($newData['diskon'] ?? $oldData[$idItem]->diskon) / 100) * (1 - $invoice->diskon / 100)),
+                        'stok_out' => $newData['qty'] ?? $oldData[$idItem]->qty,
+                        'hargabeli' => (int)($oldData[$idItem]->hargabeli_avg),
+                        'hargajual' => (int)(($newData['harga'] ?? $oldData[$idItem]->harga) * (1 - ($newData['diskon'] ?? $oldData[$idItem]->diskon) / 100) * (1 - $invoice->diskon / 100)),
                         'ref_id' => $oldData[$idItem]->id_penjualandetail
                     ]);
                 }
@@ -352,19 +380,20 @@ class SalesInvoiceService
             /* Check apakah ketika di kurangi, total tagihan akan minus (alias yang dibayar lebih) */
             /* $diBayar = DB::select('select coalesce(sum(nominal),0) as jumlah from toko_griyanaura.tr_penjualanalokasipembayaran where id_penjualaninvoice = ?', [$invoice->id_penjualan])[0]->jumlah;
             $diRetur = DB::select('select coalesce(sum(grandtotal),0) as jumlah from toko_griyanaura.tr_penjualanretur where id_penjualan = ?', [$invoice->id_penjualan])[0]->jumlah; */
-            if (DB::select('select toko_griyanaura.f_getsisatagihan(?) as sisatagihan', [$invoice->transaksi_no])[0]->sisatagihan < $oldData[$idItem]->total* (1 - $invoice->diskon/100)) {
+            if (DB::select('select toko_griyanaura.f_getsisatagihanpenjualan(?) as sisatagihan', [$invoice->transaksi_no])[0]->sisatagihan < $oldData[$idItem]->total * (1 - $invoice->diskon / 100)) {
                 throw new SalesInvoiceException('Sisa tagihan tidak boleh minus');
             }
             if ($oldData[$idItem]->produkVarian->produk->in_stok == true) {
                 /* Kurangi persediaan */
-                $oldData[$idItem]->produkPersediaan->decrement('stok', $oldData[$idItem]->qty);
+                $oldData[$idItem]->produkPersediaan->increment('stok', $oldData[$idItem]->qty);
                 /* tambah persediaan detail (untuk riwayat keluar masuk stok) */
                 ProdukPersediaanDetail::create([
                     'id_persediaan' => $oldData[$idItem]->produkPersediaan->id_persediaan,
                     'tanggal' => $invoice->tanggal,
                     'keterangan' => "#{$invoice->transaksi_no} Delete item penjualan invoice",
-                    'stok_out' => $oldData[$idItem]->qty,
-                    'hargabeli' => (int)($oldData[$idItem]->harga * (1 - $oldData[$idItem]->diskon / 100) * (1 - $invoice->diskon / 100)),
+                    'stok_in' => $oldData[$idItem]->qty,
+                    'hargabeli' => (int)($oldData[$idItem]->hargabeli),
+                    'hargajual' => (int)($oldData[$idItem]->harga * (1 - $oldData[$idItem]->diskon / 100) * (1 - $invoice->diskon / 100)),
                     'ref_id' => $oldData[$idItem]->id_penjualandetail
                 ]);
             }

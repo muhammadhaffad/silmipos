@@ -287,7 +287,7 @@ class SalesOrderService
             }
             foreach ($penjualanInvoice->penjualanDetail as $item) {
                 $detailTransaksi[] = [
-                    'kode_akun' => $item->produkVarian->produk->default_akunpemasukan,
+                    'kode_akun' => $item->produkVarian->produk->default_akunbiaya,
                     'keterangan' => $item->produkVarian->varian,
                     'nominaldebit' => (int)($item->qty * $item->produkPersediaan->hargabeli_avg),
                     'nominalkredit' => 0,

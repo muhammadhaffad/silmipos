@@ -41,7 +41,7 @@ class SalesInvoiceController extends AdminController
         $form->column(12, function (Form $form) {
             $form->tablehasmany('penjualanDetail', function (NestedForm $form) {
                 $form->select('kode_produkvarian', 'Produk')->required()->ajax(route(admin_get_route('ajax.produk')), 'kode_produkvarian')->setGroupClass('w-200px');
-                $form->currency('qty', 'Qty')->required()->symbol('QTY');
+                $form->currency('qty', 'Qty')->help('Sisa stok: <span class="sisa_stok">?</span>')->required()->symbol('QTY');
                 $form->currency('harga', 'Harga')->required()->symbol('Rp');
                 $form->currency('diskon', 'Diskon')->symbol('%');
                 $form->currency('Total', 'total')->symbol('Rp')->readonly();
@@ -103,7 +103,7 @@ class SalesInvoiceController extends AdminController
                         'select2' => null
                     ])->setGroupClass('w-200px');
                 }
-                $form->currency('qty', 'Qty')->required()->symbol('QTY');
+                $form->currency('qty', 'Qty')->help('Sisa stok: <span class="sisa_stok">' . $form->model()?->produkPersediaan?->stok ?: '?' . '</span>')->required()->symbol('QTY');
                 $form->currency('harga', 'Harga')->required()->symbol('Rp');
                 $form->currency('diskon', 'Diskon')->symbol('%');
                 $form->currency('total', 'Total')->symbol('Rp')->readonly();
@@ -124,7 +124,7 @@ class SalesInvoiceController extends AdminController
         $data = $form->model()->with(['kontak','penjualanDetail' => function ($rel) {
             $rel->orderBy('id_penjualandetail');
             $rel->leftJoin(DB::raw("(select id_penjualandetailparent, sum(qty) as jumlah_diinvoice from toko_griyanaura.tr_penjualandetail where id_penjualandetailparent is not null group by id_penjualandetailparent) as x"), 'x.id_penjualandetailparent', 'toko_griyanaura.tr_penjualandetail.id_penjualandetail');
-            $rel->with('produkVarian');
+            $rel->with(['produkVarian', 'produkPersediaan']);
         } ])->where('id_penjualan', $idPenjualan)->join(DB::raw("(select id_gudang, nama as nama_gudang from toko_griyanaura.lv_gudang) as gdg"), 'gdg.id_gudang', 'toko_griyanaura.tr_penjualan.id_gudang')->first();
         $form->tools(function (Tools $tools) use ($idPenjualan, $data) {
             $tools->disableList();
@@ -149,7 +149,7 @@ class SalesInvoiceController extends AdminController
             $form->tablehasmany('penjualanDetail', function (NestedForm $form) {
                 $data = $form->model();
                 $form->html($data?->produkVarian?->varian, 'Produk')->required();
-                $form->text('qty', 'Qty')->customFormat(function ($val) {
+                $form->text('qty', 'Qty')->help('Sisa stok: ' . $data?->produkPersediaan?->stok)->customFormat(function ($val) {
                     return number($val);
                 })->disable()->attribute('type', 'number')->withoutIcon()->required()->setGroupClass('w-100px');
                 $form->currency('harga', 'Harga')->disable()->required()->symbol('Rp');
@@ -253,10 +253,13 @@ class SalesInvoiceController extends AdminController
                         success: function(data) {
                             // Jika permintaan berhasil
                             console.log('Data berhasil diterima:', data);
+                            $(e.target).closest('tr').find('span.sisa_stok').html('0.00');
                             if (data?.produk_persediaan) {
                                 $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_persediaan[0].produk_varian_harga.hargajual);
+                                $(e.target).closest('tr').find('span.sisa_stok').html(data.produk_persediaan[0].stok);
                             } else {
                                 $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_varian_harga[0].hargajual);
+                                $(e.target).closest('tr').find('span.sisa_stok').html('0.00');
                             }
                             $(e.target).closest('tr').find('[name*="qty"]').val(1);
                             hitungProdukTotal(e);
@@ -353,10 +356,13 @@ class SalesInvoiceController extends AdminController
                     success: function(data) {
                         // Jika permintaan berhasil
                         console.log('Data berhasil diterima:', data);
+                        $(e.target).closest('tr').find('span.sisa_stok').html('0.00');
                         if (data?.produk_persediaan) {
                             $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_persediaan[0].produk_varian_harga.hargajual);
+                            $(e.target).closest('tr').find('span.sisa_stok').html(data.produk_persediaan[0].stok);
                         } else {
                             $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_varian_harga[0].hargajual);
+                            $(e.target).closest('tr').find('span.sisa_stok').html('0.00');
                         }
                         if (!$(e.target).closest('tr').find('[name*="qty"]').val()) {
                             $(e.target).closest('tr').find('[name*="qty"]').val(1);
@@ -444,10 +450,13 @@ class SalesInvoiceController extends AdminController
                         success: function(data) {
                             // Jika permintaan berhasil
                             console.log('Data berhasil diterima:', data);
+                            $(e.target).closest('tr').find('span.sisa_stok').html('0.00');
                             if (data?.produk_persediaan) {
                                 $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_persediaan[0].produk_varian_harga.hargajual);
+                                $(e.target).closest('tr').find('span.sisa_stok').html(data.produk_persediaan[0].stok);
                             } else {
                                 $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_varian_harga[0].hargajual);
+                                $(e.target).closest('tr').find('span.sisa_stok').html('0.00');
                             }
                             if (!$(e.target).closest('tr').find('[name*="qty"]').val()) {
                                 $(e.target).closest('tr').find('[name*="qty"]').val(1);
