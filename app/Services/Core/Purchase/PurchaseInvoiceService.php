@@ -312,7 +312,7 @@ class PurchaseInvoiceService
                     if ($selisih > 0) {
                         $oldData[$idItem]->produkPersediaan->increment('stok', $selisih);
                     } else if ($selisih < 0) {
-                        $oldData[$idItem]->produkPersediaan->decrement('stok', $selisih);
+                        $oldData[$idItem]->produkPersediaan->decrement('stok', abs($selisih));
                     }
                 }
                 /* Tambah persediaan detail (untuk riwayat persediaan) */
@@ -357,7 +357,7 @@ class PurchaseInvoiceService
             }
             if ($oldData[$idItem]->produkVarian->produk->in_stok == true) {
                 /* Kurangi persediaan */
-                $oldData[$idItem]->produkPersediaan->decrement('stok', $oldData[$idItem]->qty);
+                $oldData[$idItem]->produkPersediaan->decrement('stok', abs($oldData[$idItem]->qty));
                 /* tambah persediaan detail (untuk riwayat keluar masuk stok) */
                 ProdukPersediaanDetail::create([
                     'id_persediaan' => $oldData[$idItem]->produkPersediaan->id_persediaan,

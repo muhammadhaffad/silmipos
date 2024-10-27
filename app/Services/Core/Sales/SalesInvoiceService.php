@@ -93,20 +93,22 @@ class SalesInvoiceService
                 ];
             }
             foreach ($penjualanInvoice->penjualanDetail as $item) {
-                $detailTransaksi[] = [
-                    'kode_akun' => $item->produkVarian->produk->default_akunbiaya,
-                    'keterangan' => $item->produkVarian->varian,
-                    'nominaldebit' => (int)($item->qty * $item->hargabeli),
-                    'nominalkredit' => 0,
-                    'ref_id' => $item->id_penjualandetail
-                ];
-                $detailTransaksi[] = [
-                    'kode_akun' => '1301',
-                    'keterangan' => $item->produkVarian->varian,
-                    'nominaldebit' => 0,
-                    'nominalkredit' => (int)($item->qty * $item->hargabeli),
-                    'ref_id' => $item->id_penjualandetail
-                ];
+                if ($item->produkVarian->produk->in_stok) {
+                    $detailTransaksi[] = [
+                        'kode_akun' => $item->produkVarian->produk->default_akunbiaya,
+                        'keterangan' => $item->produkVarian->varian,
+                        'nominaldebit' => (int)($item->qty * $item->hargabeli),
+                        'nominalkredit' => 0,
+                        'ref_id' => $item->id_penjualandetail
+                    ];
+                    $detailTransaksi[] = [
+                        'kode_akun' => '1301',
+                        'keterangan' => $item->produkVarian->varian,
+                        'nominaldebit' => 0,
+                        'nominalkredit' => (int)($item->qty * $item->hargabeli),
+                        'ref_id' => $item->id_penjualandetail
+                    ];
+                }
             }
             if (isset($detailTransaksi)) {
                 $this->entryJurnal($penjualanInvoice->id_transaksi, $detailTransaksi);
@@ -223,20 +225,22 @@ class SalesInvoiceService
                 ];
             }
             foreach ($penjualan->penjualanDetail as $item) {
-                $detailTransaksi[] = [
-                    'kode_akun' => $item->produkVarian->produk->default_akunbiaya,
-                    'keterangan' => $item->produkVarian->varian,
-                    'nominaldebit' => (int)($item->qty * $item->hargabeli),
-                    'nominalkredit' => 0,
-                    'ref_id' => $item->id_penjualandetail
-                ];
-                $detailTransaksi[] = [
-                    'kode_akun' => '1301',
-                    'keterangan' => $item->produkVarian->varian,
-                    'nominaldebit' => 0,
-                    'nominalkredit' => (int)($item->qty * $item->hargabeli),
-                    'ref_id' => $item->id_penjualandetail
-                ];
+                if ($item->produkVarian->produk->in_stok) {
+                    $detailTransaksi[] = [
+                        'kode_akun' => $item->produkVarian->produk->default_akunbiaya,
+                        'keterangan' => $item->produkVarian->varian,
+                        'nominaldebit' => (int)($item->qty * $item->hargabeli),
+                        'nominalkredit' => 0,
+                        'ref_id' => $item->id_penjualandetail
+                    ];
+                    $detailTransaksi[] = [
+                        'kode_akun' => '1301',
+                        'keterangan' => $item->produkVarian->varian,
+                        'nominaldebit' => 0,
+                        'nominalkredit' => (int)($item->qty * $item->hargabeli),
+                        'ref_id' => $item->id_penjualandetail
+                    ];
+                }
             }
             if (isset($detailTransaksi)) {
                 $detailTransaksi[0]['nominaldebit'] = $total;
@@ -337,7 +341,7 @@ class SalesInvoiceService
                     if ($selisih > 0) {
                         $oldData[$idItem]->produkPersediaan->decrement('stok', $selisih);
                     } else if ($selisih < 0) {
-                        $oldData[$idItem]->produkPersediaan->increment('stok', $selisih);
+                        $oldData[$idItem]->produkPersediaan->increment('stok', abs($selisih));
                     }
                 }
                 /* Tambah persediaan detail (untuk riwayat persediaan) */
@@ -352,12 +356,14 @@ class SalesInvoiceService
                         'ref_id' => $oldData[$idItem]->id_penjualandetail
                     ]);
                     $oldData[$idItem]->refresh();
+                    $oldData[$idItem]->hargabeli = (int)($oldData[$idItem]->produkPersediaan->hargabeli_avg);
+                    $oldData[$idItem]->save();
                     ProdukPersediaanDetail::create([
                         'id_persediaan' => $oldData[$idItem]->produkPersediaan->id_persediaan,
                         'tanggal' => $invoice->tanggal,
                         'keterangan' => "#{$invoice->transaksi_no} Update item penjualan invoice",
                         'stok_out' => $newData['qty'] ?? $oldData[$idItem]->qty,
-                        'hargabeli' => (int)($oldData[$idItem]->hargabeli_avg),
+                        'hargabeli' => (int)($oldData[$idItem]->produkPersediaan->hargabeli_avg),
                         'hargajual' => (int)(($newData['harga'] ?? $oldData[$idItem]->harga) * (1 - ($newData['diskon'] ?? $oldData[$idItem]->diskon) / 100) * (1 - $invoice->diskon / 100)),
                         'ref_id' => $oldData[$idItem]->id_penjualandetail
                     ]);
