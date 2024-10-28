@@ -15,6 +15,7 @@ use App\Admin\Controllers\PurchaseRefundPaymentController;
 use App\Admin\Controllers\PurchaseReturnController;
 use App\Admin\Controllers\SalesInvoiceController;
 use App\Admin\Controllers\SalesOrderController;
+use App\Admin\Controllers\SalesReturnController;
 use Encore\Admin\Actions\Action;
 use Encore\Admin\Actions\RowAction;
 use Encore\Admin\Facades\Admin;
@@ -141,6 +142,17 @@ Route::group([
             Route::put('/update/{idPenjualan}', [SalesInvoiceController::class, 'updateSalesInvoice'])->name('sales.invoice.update');
             Route::match(['delete', 'post'], '/delete/{idPenjualan}', [SalesInvoiceController::class, 'deleteSalesInvoice'])->name('sales.invoice.delete');
         });
+        Route::prefix('/return')->group(function () {
+            Route::get('/create', [SalesReturnController::class, 'createReturn'])->name('sales.return.create');
+            Route::get('/edit/{idRetur}', [SalesReturnController::class, 'editReturn'])->name('sales.return.edit');
+            Route::get('/detail/{idRetur}', [SalesReturnController::class, 'detailReturn'])->name('sales.return.detail');
+
+            Route::post('/store', [SalesReturnController::class, 'storeReturn'])->name('sales.return.store');
+            Route::put('/update/{idRetur}', [SalesReturnController::class, 'updateReturn'])->name('sales.return.update');
+            Route::match(['post', 'delete'], '/delete/{idRetur}', [SalesReturnController::class, 'deleteReturn'])->name('sales.return.delete');
+
+            Route::put('/update-allocate/{idRetur}', [SalesReturnController::class, 'updateAllocate'])->name('sales.return.update-allocate');
+        });
     });
     Route::prefix('ajax')->group(function () {
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');
@@ -154,5 +166,9 @@ Route::group([
         Route::get('/pembelian-detail', [AjaxController::class, 'getPembelianDetail'])->name('ajax.pembelian-detail');
         Route::get('/pembelian-pembayaran', [AjaxController::class, 'getPembelianPembayaran'])->name('ajax.pembelian-pembayaran');
         Route::get('/pembelian-pembayaran-detail', [AjaxController::class, 'getPembelianPembayaranDetail'])->name('ajax.pembelian-pembayaran-detail');
+        Route::get('/penjualan', [AjaxController::class, 'getPenjualan'])->name('ajax.penjualan');
+        Route::get('/penjualan-detail', [AjaxController::class, 'getPenjualanDetail'])->name('ajax.penjualan-detail');
+        Route::get('/penjualan-pembayaran', [AjaxController::class, 'getPenjualanPembayaran'])->name('ajax.penjualan-pembayaran');
+        Route::get('/penjualan-pembayaran-detail', [AjaxController::class, 'getPenjualanPembayaranDetail'])->name('ajax.penjualan-pembayaran-detail');
     });
 });

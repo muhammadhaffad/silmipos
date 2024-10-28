@@ -38,7 +38,7 @@ class SalesInvoiceService
         $validator->validate();
         DB::beginTransaction();
         try {
-            $noTransaksi = DB::select("select ('PI' || lpad(nextval('toko_griyanaura.tr_penjualan_invoice_seq')::varchar, 6, '0')) as no_transaksi")[0]->no_transaksi;
+            $noTransaksi = DB::select("select ('SI' || lpad(nextval('toko_griyanaura.tr_penjualan_invoice_seq')::varchar, 6, '0')) as no_transaksi")[0]->no_transaksi;
             $transaksi = Transaksi::create([
                 'transaksi_no' => $noTransaksi,
                 'id_transaksijenis' => 'penjualan_invoice',

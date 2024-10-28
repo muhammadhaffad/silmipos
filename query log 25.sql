@@ -1,0 +1,1 @@
+﻿alter table toko_griyanaura.tr_penjualanreturdetail add column hargabeli int;
