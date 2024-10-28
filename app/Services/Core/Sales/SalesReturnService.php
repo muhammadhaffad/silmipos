@@ -223,13 +223,13 @@ class SalesReturnService
                 $this->deleteJurnal($alokasi->id_transaksi);
                 $this->entryJurnal($alokasi->id_transaksi, [
                     [
-                        'kode_akun' => '1410',
+                        'kode_akun' => '2201',
                         'keterangan' => 'Alokasi kembalian dana retur ke pembayaran uang muka',
                         'nominaldebit' => $alokasi->nominal,
                         'nominalkredit' => 0
                     ],
                     [
-                        'kode_akun' => '2001',
+                        'kode_akun' => '1201',
                         'keterangan' => 'Alokasi kembalian dana retur ke pembayaran uang muka',
                         'nominaldebit' => 0,
                         'nominalkredit' => $alokasi->nominal

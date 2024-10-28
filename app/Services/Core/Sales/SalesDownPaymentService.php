@@ -70,14 +70,14 @@ class SalesDownPaymentService
             $payment = PenjualanPembayaran::find($payment->id_penjualanpembayaran)->load('penjualanAlokasiPembayaran');
             $detailTransaksi = [
                 [
-                    'kode_akun' => '1410',
+                    'kode_akun' => '1001',
                     'keterangan' => 'Uang muka penjualan #' . $payment->transaksi_no,
                     'nominaldebit' => $payment->nominal,
                     'nominalkredit' => 0,
                     'ref_id' => null
                 ],
                 [
-                    'kode_akun' => '1001',
+                    'kode_akun' => '2201',
                     'keterangan' => 'Uang muka penjualan #' . $payment->transaksi_no,
                     'nominaldebit' => 0,
                     'nominalkredit' => $payment->nominal,
@@ -88,14 +88,14 @@ class SalesDownPaymentService
             foreach ($payment->penjualanAlokasiPembayaran as $alokasi) {
                 $detailTransaksi = [
                     [
-                        'kode_akun' => '2001',
+                        'kode_akun' => '2201',
                         'keterangan' => 'Pembayaran #' . $alokasi->penjualan->transaksi_no,
                         'nominaldebit' => $alokasi->nominal,
                         'nominalkredit' => 0,
                         'ref_id' => $alokasi->id_penjualanalokasipembayaran
                     ],
                     [
-                        'kode_akun' => '1410',
+                        'kode_akun' => '1201',
                         'keterangan' => 'Pembayaran #' . $alokasi->penjualan->transaksi_no,
                         'nominaldebit' => 0,
                         'nominalkredit' => $alokasi->nominal,
