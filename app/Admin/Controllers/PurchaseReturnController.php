@@ -2,6 +2,9 @@
 
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Grid\Delete;
+use App\Admin\Actions\Grid\Edit;
+use App\Admin\Actions\Grid\Show;
 use App\Exceptions\PurchaseReturnException;
 use App\Models\PembelianRetur;
 use App\Services\Core\Purchase\PurchaseReturnService;
@@ -11,9 +14,10 @@ use Encore\Admin\Form;
 use Encore\Admin\Form\Layout\Column;
 use Encore\Admin\Form\NestedForm;
 use Encore\Admin\Grid;
+use Encore\Admin\Grid\Displayers\DropdownActions;
+use Encore\Admin\Layout\Column as LayoutColumn;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Layout\Row;
-use Encore\Admin\Show;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +30,58 @@ class PurchaseReturnController extends AdminController
     {
         $this->purchaseReturnService = $purchaseReturnService;
     }
+    public function listReturnGrid() {
+        $grid = new Grid(new PembelianRetur);
+        $grid->model()->with(['kontak', 'pembelian']);
+        if (!isset($_GET['_sort']['column']) and empty($_GET['sort']['column'])) {
+            $grid->model()->orderByRaw('id_pembelianretur desc');
+        }
+        $grid->column('transaksi_no', 'No. Transaksi')->link(function () {
+            return url()->route(admin_get_route('purchase.return.detail'), ['idRetur' => $this->id_pembelianretur]);
+        })->sortable();
+        $grid->column('pembelian.transaksi_no', 'Transaksi Diretur')->link(function () {
+            if ($this->pembelian?->id_pembelian) 
+                return url()->route(admin_get_route('purchase.invoice.detail'), ['idPembelian' => $this->pembelian?->id_pembelian]);
+            else 
+                return '';
+        });
+        $grid->column('kontak.nama', 'Supplier')->sortable();
+        $grid->column('tanggal', 'Tanggal')->display(function ($val) {
+            return \date('d F Y', \strtotime($val));
+        })->sortable();
+        // $grid->column('tanggaltempo', 'Tanggal tempo')->display(function ($val) {
+        //     if ($val) 
+        //         return \date('d F Y', \strtotime($val));
+        //     else 
+        //         return null;
+        // });
+        $grid->column('catatan', 'Catatan');
+        $grid->column('grandtotal', 'Grand total')->display(function ($val) {
+            return 'Rp' . number_format($val, 0, ',', '.');
+        });
+        $grid->actions(function (DropdownActions $actions) {
+            $actions->disableDelete();
+            $actions->disableEdit();
+            $actions->disableView();
+            $actions->add(new Show);
+            $actions->add(new Edit);
+            // dump($this);
+            $actions->add(new Delete(route(admin_get_route('purchase.return.delete'), $this->row->id_pembelianretur)));
+        });
+        return $grid;
+    }
+    public function listReturn(Content $content) {
+        return $content
+            ->title('Retur Pembelian')
+            ->description('Daftar')
+            ->row(function (Row $row) {
+                $row->column(12, function (LayoutColumn $column) {
+                    $column->row($this->listReturnGrid());
+                });
+            });
+    }
+
+
     public function createReturnForm($model)
     {
         $form = new Form($model);
@@ -325,7 +381,7 @@ class PurchaseReturnController extends AdminController
 
             $tools->append($tools->renderDelete(route(admin_get_route('purchase.return.delete'), ['idRetur' => $idRetur]), listPath: route(admin_get_route('purchase.return.create'))));
             $tools->append($tools->renderView(route(admin_get_route('purchase.return.detail'), ['idRetur' => $idRetur])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('purchase.return.list'))));
         });
         $data = $form->model()->with(['pembelian', 'pembelianDetail' => function ($q) {
             $q->leftJoin(DB::raw("(select id_pembeliandetail as id_pembeliandetaildiretur, sum(qty) as jumlah_diretur from toko_griyanaura.tr_pembelianreturdetail group by id_pembeliandetail) as x"), 'x.id_pembeliandetaildiretur', 'toko_griyanaura.tr_pembeliandetail.id_pembeliandetail');
@@ -386,7 +442,7 @@ class PurchaseReturnController extends AdminController
 
             $tools->append($tools->renderDelete(route(admin_get_route('purchase.return.delete'), ['idRetur' => $idRetur]), listPath: route(admin_get_route('purchase.return.create'))));
             $tools->append($tools->renderEdit(route(admin_get_route('purchase.return.edit'), ['idRetur' => $idRetur])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('purchase.return.list'))));
         });
         $data = $form->model()->with(['pembelian', 'pembelianDetail' => function ($q) {
             $q->leftJoin(DB::raw("(select id_pembeliandetail as id_pembeliandetaildiretur, sum(qty) as jumlah_diretur from toko_griyanaura.tr_pembelianreturdetail group by id_pembeliandetail) as x"), 'x.id_pembeliandetaildiretur', 'toko_griyanaura.tr_pembeliandetail.id_pembeliandetail');

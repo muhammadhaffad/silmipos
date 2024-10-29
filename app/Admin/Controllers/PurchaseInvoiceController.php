@@ -2,6 +2,9 @@
 
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Grid\Delete;
+use App\Admin\Actions\Grid\Edit;
+use App\Admin\Actions\Grid\Show;
 use App\Exceptions\PurchaseInvoiceException;
 use App\Models\Pembelian;
 use App\Services\Core\Purchase\PurchaseInvoiceService;
@@ -11,8 +14,10 @@ use Encore\Admin\Form;
 use Encore\Admin\Form\NestedForm;
 use Encore\Admin\Form\Tools;
 use Encore\Admin\Grid;
+use Encore\Admin\Grid\Displayers\DropdownActions;
+use Encore\Admin\Layout\Column;
 use Encore\Admin\Layout\Content;
-use Encore\Admin\Show;
+use Encore\Admin\Layout\Row;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -24,6 +29,62 @@ class PurchaseInvoiceController extends AdminController
     {
         $this->purchaseInvoiceService = $purchaseInvoiceService;
     }
+    public function listPurchaseInvoiceGrid() {
+        $grid = new Grid(new Pembelian);
+        $grid->model()->addSelect(['*',DB::raw('toko_griyanaura.f_getsisatagihan(transaksi_no) as sisatagihan')])->where('jenis', 'invoice')->with(['kontak', 'gudang', 'pembelianOrder']);
+        if (!isset($_GET['_sort']['column']) and empty($_GET['sort']['column'])) {
+            $grid->model()->orderByRaw('id_pembelian desc');
+        }
+        $grid->column('transaksi_no', 'No. Transaksi')->link(function () {
+            return url()->route(admin_get_route('purchase.invoice.detail'), ['idPembelian' => $this->id_pembelian]);
+        })->sortable();
+        $grid->column('pembelianOrder.transaksi_no', 'Referensi Order')->link(function () {
+            if ($this->pembelianOrder?->id_pembelian) 
+                return url()->route(admin_get_route('purchase.order.detail'), ['idPembelian' => $this->pembelianOrder?->id_pembelian]);
+            else 
+                return '';
+        });
+        $grid->column('kontak.nama', 'Supplier')->sortable();
+        $grid->column('tanggal', 'Tanggal')->display(function ($val) {
+            return \date('d F Y', \strtotime($val));
+        })->sortable();
+        $grid->column('gudang.nama', 'Gudang');
+        // $grid->column('tanggaltempo', 'Tanggal tempo')->display(function ($val) {
+        //     if ($val) 
+        //         return \date('d F Y', \strtotime($val));
+        //     else 
+        //         return null;
+        // });
+        $grid->column('catatan', 'Catatan');
+        $grid->column('grandtotal', 'Grand total')->display(function ($val) {
+            return 'Rp' . number_format($val, 0, ',', '.');
+        });
+        $grid->column('sisatagihan', 'Sisa tagihan')->display(function ($val) {
+            return 'Rp' . number_format($val, 0, ',', '.');
+        });
+        $grid->actions(function (DropdownActions $actions) {
+            $actions->disableDelete();
+            $actions->disableEdit();
+            $actions->disableView();
+            $actions->add(new Show);
+            $actions->add(new Edit);
+            // dump($this);
+            $actions->add(new Delete(route(admin_get_route('purchase.invoice.delete'), $this->row->id_pembelian)));
+        });
+        return $grid;
+    }
+    public function listPurchaseInvoice(Content $content) {
+        return $content
+            ->title('Pembelian Invoice')
+            ->description('Daftar')
+            ->row(function (Row $row) {
+                $row->column(12, function (Column $column) {
+                    $column->row($this->listPurchaseInvoiceGrid());
+                });
+            });
+    }
+
+
     public function createPurchaseInvoiceForm($model) 
     {
         $form = new Form($model);
@@ -71,7 +132,7 @@ class PurchaseInvoiceController extends AdminController
             
             $tools->append($tools->renderDelete(route(admin_get_route('purchase.invoice.delete'), ['idPembelian' => $idPembelian]), listPath: route(admin_get_route('purchase.invoice.create'))));
             $tools->append($tools->renderView(route(admin_get_route('purchase.invoice.detail'), ['idPembelian' => $idPembelian])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('purchase.invoice.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak-supplier')))->attribute([
@@ -132,7 +193,7 @@ class PurchaseInvoiceController extends AdminController
             $tools->disableDelete();
             $tools->append($tools->renderDelete(route(admin_get_route('purchase.invoice.delete'), ['idPembelian' => $idPembelian]), listPath: route(admin_get_route('purchase.invoice.create'))));
             $tools->append($tools->renderEdit(route(admin_get_route('purchase.invoice.edit'), ['idPembelian' => $idPembelian])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('purchase.invoice.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Supplier')->setWidth(3);

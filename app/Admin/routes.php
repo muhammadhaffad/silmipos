@@ -13,8 +13,11 @@ use App\Admin\Controllers\PurchaseOrderController;
 use App\Admin\Controllers\PurchasePaymentController;
 use App\Admin\Controllers\PurchaseRefundPaymentController;
 use App\Admin\Controllers\PurchaseReturnController;
+use App\Admin\Controllers\SalesDownPaymentController;
 use App\Admin\Controllers\SalesInvoiceController;
 use App\Admin\Controllers\SalesOrderController;
+use App\Admin\Controllers\SalesPaymentController;
+use App\Admin\Controllers\SalesRefundPaymentController;
 use App\Admin\Controllers\SalesReturnController;
 use Encore\Admin\Actions\Action;
 use Encore\Admin\Actions\RowAction;
@@ -63,8 +66,8 @@ Route::group([
         Route::match(['post', 'delete'],'/delete/{idPenyesuaianGudang}', [ProdukPenyesuaianController::class, 'deleteProdukPenyesuaian'])->name('produk-penyesuaian.delete');
     });
     Route::prefix('/purchase')->group(function () {
-        Route::get('/', [PurchaseOrderController::class, 'listPurchaseOrder'])->name('purchase.list');
         Route::prefix('/order')->group(function () {
+            Route::get('/', [PurchaseOrderController::class, 'listPurchaseOrder'])->name('purchase.order.list');
             Route::get('/create', [PurchaseOrderController::class, 'createPurchaseOrder'])->name('purchase.order.create');
             Route::get('/detail/{idPembelian}', [PurchaseOrderController::class, 'detailPurchaseOrder'])->name('purchase.order.detail');
             Route::get('/edit/{idPembelian}', [PurchaseOrderController::class, 'editPurchaseOrder'])->name('purchase.order.edit');
@@ -75,6 +78,7 @@ Route::group([
             Route::match(['delete', 'post'], '/delete/{idPembelian}', [PurchaseOrderController::class, 'deletePurchaseOrder'])->name('purchase.order.delete');
         });
         Route::prefix('/invoice')->group(function () {
+            Route::get('/', [PurchaseInvoiceController::class, 'listPurchaseInvoice'])->name('purchase.invoice.list');
             Route::get('/create', [PurchaseInvoiceController::class, 'createPurchaseInvoice'])->name('purchase.invoice.create');
             Route::get('/edit/{idPembelian}', [PurchaseInvoiceController::class, 'editPurchaseInvoice'])->name('purchase.invoice.edit');
             Route::get('/detail/{idPembelian}', [PurchaseInvoiceController::class, 'detailPurchaseInvoice'])->name('purchase.invoice.detail');
@@ -102,6 +106,7 @@ Route::group([
             Route::match(['delete', 'post'], '/delete/{idPembayaran}', [PurchasePaymentController::class, 'deletePayment'])->name('purchase.payment.delete');
         });
         Route::prefix('/return')->group(function () {
+            Route::get('/', [PurchaseReturnController::class, 'listReturn'])->name('purchase.return.list');
             Route::get('/create', [PurchaseReturnController::class, 'createReturn'])->name('purchase.return.create');
             Route::get('/edit/{idRetur}', [PurchaseReturnController::class, 'editReturn'])->name('purchase.return.edit');
             Route::get('/detail/{idRetur}', [PurchaseReturnController::class, 'detailReturn'])->name('purchase.return.detail');
@@ -152,6 +157,33 @@ Route::group([
             Route::match(['post', 'delete'], '/delete/{idRetur}', [SalesReturnController::class, 'deleteReturn'])->name('sales.return.delete');
 
             Route::put('/update-allocate/{idRetur}', [SalesReturnController::class, 'updateAllocate'])->name('sales.return.update-allocate');
+        });
+        Route::prefix('/payment')->group(function () {
+            Route::get('/create', [SalesPaymentController::class, 'createPayment'])->name('sales.payment.create');
+            Route::get('/detail/{idPembayaran}', [SalesPaymentController::class, 'detailPayment'])->name('sales.payment.detail');
+            Route::get('/edit/{idPembayaran}', [SalesPaymentController::class, 'editPayment'])->name('sales.payment.edit');
+            
+            Route::post('/store', [SalesPaymentController::class, 'storePayment'])->name('sales.payment.store');
+            Route::put('/update/{idPembayaran}', [SalesPaymentController::class, 'updatePayment'])->name('sales.payment.update');
+            Route::match(['delete', 'post'], '/delete/{idPembayaran}', [SalesPaymentController::class, 'deletePayment'])->name('sales.payment.delete');
+        });
+        Route::prefix('/down-payment')->group(function () {
+            Route::get('/create', [SalesDownPaymentController::class, 'createPayment'])->name('sales.down-payment.create');
+            Route::get('/detail/{idPembayaran}', [SalesDownPaymentController::class, 'detailPayment'])->name('sales.down-payment.detail');
+            Route::get('/edit/{idPembayaran}', [SalesDownPaymentController::class, 'editPayment'])->name('sales.down-payment.edit');
+            
+            Route::post('/store', [SalesDownPaymentController::class, 'storePayment'])->name('sales.down-payment.store');
+            Route::put('/update/{idPembayaran}', [SalesDownPaymentController::class, 'updatePayment'])->name('sales.down-payment.update');
+            Route::match(['delete', 'post'], '/delete/{idPembayaran}', [SalesDownPaymentController::class, 'deletePayment'])->name('sales.down-payment.delete');
+        });
+        Route::prefix('/refund')->group(function () {
+            Route::get('/create', [SalesRefundPaymentController::class, 'createRefund'])->name('sales.refund.create');
+            Route::get('/edit/{idRefund}', [SalesRefundPaymentController::class, 'editRefund'])->name('sales.refund.edit');
+            Route::get('/detail/{idRefund}', [SalesRefundPaymentController::class, 'detailRefund'])->name('sales.refund.detail');
+
+            Route::post('/store', [SalesRefundPaymentController::class, 'storeRefund'])->name('sales.refund.store');
+            Route::put('/update/{idRefund}', [SalesRefundPaymentController::class, 'updateRefund'])->name('sales.refund.update');
+            Route::match(['post', 'delete'], '/delete/{idRefund}', [SalesRefundPaymentController::class, 'deleteRefund'])->name('sales.refund.delete');
         });
     });
     Route::prefix('ajax')->group(function () {

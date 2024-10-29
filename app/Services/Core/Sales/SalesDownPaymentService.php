@@ -169,14 +169,14 @@ class SalesDownPaymentService
             $this->deleteJurnal($pembayaran->id_transaksi);
             $detailTransaksi = [
                 [
-                    'kode_akun' => '1410',
+                    'kode_akun' => '1001',
                     'keterangan' => 'Uang muka penjualan #' . $pembayaran->transaksi_no,
                     'nominaldebit' => $pembayaran->nominal,
                     'nominalkredit' => 0,
                     'ref_id' => null
                 ],
                 [
-                    'kode_akun' => '1001',
+                    'kode_akun' => '2201',
                     'keterangan' => 'Uang muka penjualan #' . $pembayaran->transaksi_no,
                     'nominaldebit' => 0,
                     'nominalkredit' => $pembayaran->nominal,
@@ -188,14 +188,14 @@ class SalesDownPaymentService
                 $this->deleteJurnal($alokasi->id_transaksi);
                 $detailTransaksi = [
                     [
-                        'kode_akun' => '2001',
+                        'kode_akun' => '2201',
                         'keterangan' => 'Pembayaran #' . $alokasi->penjualan->transaksi_no,
                         'nominaldebit' => $alokasi->nominal,
                         'nominalkredit' => 0,
                         'ref_id' => $alokasi->id_penjualanalokasipembayaran
                     ],
                     [
-                        'kode_akun' => '1410',
+                        'kode_akun' => '1201',
                         'keterangan' => 'Pembayaran #' . $alokasi->penjualan->transaksi_no,
                         'nominaldebit' => 0,
                         'nominalkredit' => $alokasi->nominal,

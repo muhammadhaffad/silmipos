@@ -122,7 +122,7 @@ class AjaxController extends Controller
     public function getPenjualanDetail(Request $request) {
         $id = $request->get('id_penjualan');
         $idCustomer = $request->get('id_customer');
-        return Penjualan::select('id_penjualan', 'transaksi_no', DB::raw("TO_CHAR(tanggaltempo, 'YYYY-MM-DD') as tanggaltempo"), 'grandtotal', DB::raw('toko_griyanaura.f_getsisatagihan(transaksi_no) as sisatagihan'))->where('id_kontak', $idCustomer)->where('id_penjualan', $id)->first()?->toArray() ?: [];
+        return Penjualan::select('id_penjualan', 'transaksi_no', DB::raw("TO_CHAR(tanggaltempo, 'YYYY-MM-DD') as tanggaltempo"), 'grandtotal', DB::raw('toko_griyanaura.f_getsisatagihanpenjualan(transaksi_no) as sisatagihan'))->where('id_kontak', $idCustomer)->where('id_penjualan', $id)->first()?->toArray() ?: [];
     }
     public function getPenjualanPembayaran(Request $request)
     {
@@ -135,7 +135,7 @@ class AjaxController extends Controller
     }
     public function getPenjualanPembayaranDetail(Request $request) {
         $id = $request->get('id_penjualanpembayaran');
-        $idSupplier = $request->get('id_supplier');
-        return PenjualanPembayaran::select('id_penjualanpembayaran', 'transaksi_no', 'nominal', DB::raw('toko_griyanaura.f_getsisapembayaran(transaksi_no) as sisapembayaran'))->where('id_kontak', $idSupplier)->where('jenisbayar', 'DP')->where('id_penjualanpembayaran', $id)->first()?->toArray() ?: [];
+        $idCustomer = $request->get('id_customer');
+        return PenjualanPembayaran::select('id_penjualanpembayaran', 'transaksi_no', 'nominal', DB::raw('toko_griyanaura.f_getsisapembayaranpenjualan(transaksi_no) as sisapembayaran'))->where('id_kontak', $idCustomer)->where('jenisbayar', 'DP')->where('id_penjualanpembayaran', $id)->first()?->toArray() ?: [];
     }
 }

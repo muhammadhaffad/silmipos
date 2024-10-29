@@ -134,7 +134,7 @@ class SalesPaymentService
                         if ($item['nominalbayar'] != $oldItem[$item['id_penjualanalokasipembayaran']]['nominal']) {
                             $newData['nominal'] = (int)$item['nominalbayar'];
                         }
-                        $this->updateAllocatePaymentToInvoice($item['id_penjualanalokasipembayaran'], $pembayaran, $pembayaranOld, $newData, $oldItem);
+                        if (!empty($newData)) $this->updateAllocatePaymentToInvoice($item['id_penjualanalokasipembayaran'], $pembayaran, $pembayaranOld, $newData, $oldItem);
                     } else {
                         /* Jika ditambah baru */
                         $newData = [
