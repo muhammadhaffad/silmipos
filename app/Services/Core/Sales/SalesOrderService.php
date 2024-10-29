@@ -234,7 +234,7 @@ class SalesOrderService
                             'diskon' => $penjualanDetail[$key]['diskon'] ?: 0,
                             'total' => (int)($penjualanDetail[$key]['harga'] * $item['qty'] * (1 - ($penjualanDetail[$key]['diskon'] ?: 0) / 100)),
                             'totalraw' => (int)$penjualanDetail[$key]['harga'] * $item['qty'],
-                            'id_gudang' => $penjualan->id_gudang,
+                            'id_gudang' => $penjualanDetail[$key]['id_gudang'],
                             'id_penjualandetailparent' => $key
                         ]);
                         $rawTotal += (int)($penjualanDetail[$key]['harga'] * $item['qty'] * (1 - ($penjualanDetail[$key]['diskon'] ?: 0) / 100));
