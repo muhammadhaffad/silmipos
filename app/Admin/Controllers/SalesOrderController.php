@@ -72,6 +72,7 @@ class SalesOrderController extends AdminController
         $form->column(12, function (Form $form) {
             $form->tablehasmany('penjualanDetail', function (NestedForm $form) {
                 $form->select('kode_produkvarian', 'Produk')->required()->ajax(route(admin_get_route('ajax.produk')), 'kode_produkvarian')->setGroupClass('w-200px');
+                $form->select('id_gudang', 'Gudang')->required()->options(DB::table('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang'))->setGroupClass('w-150px');
                 $form->currency('qty', 'Qty')->help('Sisa stok: <span class="sisa_stok">?</span>')->required()->symbol('QTY');
                 $form->currency('harga', 'Harga')->required()->symbol('Rp');
                 $form->currency('diskon', 'Diskon')->symbol('%');
@@ -91,7 +92,7 @@ class SalesOrderController extends AdminController
         $form->setAction(route(admin_get_route('sales.order.to-invoice'), ['idPenjualan' => $idPenjualan]));
         $data = $form->model()->with(['kontak','penjualanDetail' => function ($rel) {
             $rel->leftJoin(DB::raw("(select id_penjualandetailparent, sum(qty) as jumlah_diinvoice from toko_griyanaura.tr_penjualandetail where id_penjualandetailparent is not null group by id_penjualandetailparent) as x"), 'x.id_penjualandetailparent', 'toko_griyanaura.tr_penjualandetail.id_penjualandetail');
-            $rel->with(['produkVarian', 'produkPersediaan']);
+            $rel->with(['produkVarian', 'produkPersediaan', 'gudang']);
         } ])->where('id_penjualan', $idPenjualan)->join(DB::raw("(select id_gudang, nama as nama_gudang from toko_griyanaura.lv_gudang) as gdg"), 'gdg.id_gudang', 'toko_griyanaura.tr_penjualan.id_gudang')->first();
         $form->tools(function (Tools $tools) use ($idPenjualan, $data) {
             $tools->disableList();
@@ -113,8 +114,8 @@ class SalesOrderController extends AdminController
         $form->column(12, function (Form $form) use ($data) {
             $form->tablehasmany('penjualanDetail', function (NestedForm $form) {
                 $data = $form->model();
-                $form->html($data?->produkVarian?->varian, 'Produk')->required();
-                $form->text('qty', 'Qty')->help('Sisa stok: ' . $data?->produkPersediaan?->stok)->customFormat(function ($val) {
+                $form->html(($data?->produk_varian['varian'] ?? null) . " (Gudang " . ($data?->gudang['nama'] ?? null) . ")", 'Produk')->setGroupClass('text-wrap')->required();
+                $form->text('qty', 'Qty')->help('Sisa stok: ' . ($data?->produk_persediaan['stok'] ?? 0))->customFormat(function ($val) {
                     return number($val);
                 })->disable()->attribute('type', 'number')->withoutIcon()->required()->setGroupClass('w-100px');
                 $form->currency('harga', 'Harga')->disable()->required()->symbol('Rp');
@@ -141,7 +142,7 @@ class SalesOrderController extends AdminController
         $form->setAction(route(admin_get_route('sales.order.to-invoice.store'), ['idPenjualan' => $idPenjualan]));
         $data = $form->model()->with(['kontak','penjualanDetail' => function ($rel) {
             $rel->leftJoin(DB::raw("(select id_penjualandetailparent, sum(qty) as jumlah_diinvoice from toko_griyanaura.tr_penjualandetail where id_penjualandetailparent is not null group by id_penjualandetailparent) as x"), 'x.id_penjualandetailparent', 'toko_griyanaura.tr_penjualandetail.id_penjualandetail');
-            $rel->with(['produkVarian', 'produkPersediaan']);
+            $rel->with(['produkVarian', 'produkPersediaan', 'gudang']);
         } ])->where('id_penjualan', $idPenjualan)->join(DB::raw("(select id_gudang, nama as nama_gudang from toko_griyanaura.lv_gudang) as gdg"), 'gdg.id_gudang', 'toko_griyanaura.tr_penjualan.id_gudang')->first();
         $form->tools(function (Tools $tools) use ($idPenjualan, $data) {
             $tools->disableList();
@@ -169,7 +170,7 @@ class SalesOrderController extends AdminController
                 } else {
                     $form->html("<input type='checkbox' disabled>", '<input id="checkAll" type="checkbox">');
                 }
-                $form->html($data?->produkVarian?->varian, 'Produk')->required();
+                $form->html(($data?->produk_varian['varian'] ?? null) . " (Gudang " . ($data?->gudang['nama'] ?? null) . ")", 'Produk')->setGroupClass('text-wrap')->required();
                 $form->html(number($data?->jumlah_diinvoice ?: 0) . ' / ' . number($data?->qty), 'Qty');
                 if ($data?->jumlah_diinvoice >= $data?->qty and $data != null) {
                     $form->html('-', '');
@@ -228,6 +229,7 @@ class SalesOrderController extends AdminController
                     'data-url' => route(admin_get_route('ajax.produk')),
                     'select2' => null
                 ])->setGroupClass('w-200px');
+                $form->select('id_gudang', 'Gudang')->required()->options(DB::table('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang'))->setGroupClass('w-150px');
                 $form->currency('qty', 'Qty')->help('Sisa stok: <span class="sisa_stok">?</span>')->required()->symbol('QTY');
                 $form->currency('harga', 'Harga')->required()->symbol('Rp');
                 $form->currency('diskon', 'Diskon')->symbol('%');
@@ -254,12 +256,15 @@ class SalesOrderController extends AdminController
             });
     }
     public function createSalesOrder(Content $content) {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
             .w-200px {
                 width: 200px;
+            }
+            .w-150px {
+                width: 150px;
             }
             [id^="has-many-"] {
                 position: relative;
@@ -292,10 +297,10 @@ class SalesOrderController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
         $urlGetDetailProduk = route(admin_get_route('ajax.produk-detail'));
-        $scriptDereferred = <<<SCRIPT
+        $scriptDereferred = <<<JS
             function hitungProdukTotal(e) {
                 const row = $(e.target).closest('tr');
                 const harga = parseInt(row.find('.penjualanDetail[name*="harga"]').first().inputmask('unmaskedvalue')) || 0;
@@ -320,9 +325,11 @@ class SalesOrderController extends AdminController
                 hitungTotal();
             });
             $("#has-many-penjualanDetail").on('click', '.add', function () {
-                $(".penjualanDetail.kode_produkvarian").on('select2:select', function (e) {
-                    const kode = e.params.data.id;
-                    const idGudang = $('select[name="id_gudang"]').val();
+                $(".penjualanDetail.id_gudang:last").val($('select[name="id_gudang"]').val() || 1).trigger('change');
+                $(".penjualanDetail.kode_produkvarian, .penjualanDetail.id_gudang").on('select2:select', function (e) {
+                    const row = $(this).closest('tr');
+                    const kode = row.find('.kode_produkvarian').val();
+                    const idGudang = row.find('.id_gudang').val();
                     $.ajax({
                         url: '$urlGetDetailProduk',
                         type: 'GET',
@@ -371,7 +378,7 @@ class SalesOrderController extends AdminController
             $('[name="totalraw"],[name="diskon"]').on('change', function () {
                 hitungGrandTotal();
             });
-        SCRIPT;
+        JS;
         Admin::script($scriptDereferred, true);
         $penjualan = new Penjualan();
         return $content
@@ -380,7 +387,7 @@ class SalesOrderController extends AdminController
             ->body($this->createSalesOrderForm($penjualan));
     }
     public function detailSalesOrder(Content $content, $idPenjualan) {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
@@ -421,9 +428,9 @@ class SalesOrderController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
-        $script = <<<SCRIPT
+        $script = <<<JS
             $('select.form-control').each(function () {
                 const select = this;
                 const defaultValue = select.dataset.value.split(',');
@@ -444,7 +451,7 @@ class SalesOrderController extends AdminController
                     });
                 })
             });
-        SCRIPT;
+        JS;
         Admin::script($script);
         $penjualan = new Penjualan();
         if (!$penjualan->where('id_penjualan', $idPenjualan)->where('jenis', 'order')->first()) {
@@ -571,12 +578,15 @@ class SalesOrderController extends AdminController
             ->body($this->toInvoiceSalesOrderForm($penjualan, $idPenjualan));
     }
     public function editSalesOrder(Content $content, $idPenjualan) {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
             .w-200px {
                 width: 200px;
+            }
+            .w-150px {
+                width: 150px;
             }
             [id^="has-many-"] {
                 position: relative;
@@ -609,13 +619,14 @@ class SalesOrderController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
         $urlGetDetailProduk = route(admin_get_route('ajax.produk-detail'));
-        $scriptDereferred = <<<SCRIPT
-            $(".penjualanDetail.kode_produkvarian").on('select2:select', function (e) {
-                const kode = e.params.data.kode_produkvarian;
-                const idGudang = $('select[name="id_gudang"]').val();
+        $scriptDereferred = <<<JS
+            $(".penjualanDetail.kode_produkvarian, .penjualanDetail.id_gudang").on('select2:select', function (e) {
+                const row = $(this).closest('tr');
+                const kode = row.find('.kode_produkvarian').data('value');
+                const idGudang = row.find('.id_gudang').val();
                 $.ajax({
                     url: '$urlGetDetailProduk',
                     type: 'GET',
@@ -707,9 +718,11 @@ class SalesOrderController extends AdminController
                 hitungTotal();
             });
             $("#has-many-penjualanDetail").on('click', '.add', function () {
-                $(".penjualanDetail.kode_produkvarian").on('select2:select', function (e) {
-                    const kode = e.params.data.id;
-                    const idGudang = $('select[name="id_gudang"]').val();
+                $(".penjualanDetail.id_gudang:last").val($('select[name="id_gudang"]').val() || 1).trigger('change');
+                $(".penjualanDetail.kode_produkvarian,.penjualanDetail.id_gudang").on('select2:select', function (e) {
+                    const row = $(this).closest('tr');
+                    const kode = row.find('.kode_produkvarian').val();
+                    const idGudang = row.find('.id_gudang').val();
                     $.ajax({
                         url: '$urlGetDetailProduk',
                         type: 'GET',
@@ -720,10 +733,13 @@ class SalesOrderController extends AdminController
                         success: function(data) {
                             // Jika permintaan berhasil
                             console.log('Data berhasil diterima:', data);
+                            $(e.target).closest('tr').find('span.sisa_stok').html('0.00');
                             if (data?.produk_persediaan) {
                                 $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_persediaan[0].produk_varian_harga.hargajual);
+                                $(e.target).closest('tr').find('span.sisa_stok').html(data.produk_persediaan[0].stok);
                             } else {
                                 $(e.target).closest('tr').find('[name*="harga"]').val(data.produk_varian_harga[0].hargajual);
+                                $(e.target).closest('tr').find('span.sisa_stok').html('0.00');
                             }
                             if (!$(e.target).closest('tr').find('[name*="qty"]').val()) {
                                 $(e.target).closest('tr').find('[name*="qty"]').val(1);
@@ -757,7 +773,7 @@ class SalesOrderController extends AdminController
             $('[name="totalraw"],[name="diskon"]').on('change', function () {
                 hitungGrandTotal();
             });
-        SCRIPT;
+        JS;
         Admin::script($scriptDereferred, true);
         $penjualan = new Penjualan();
         if (!$penjualan->where('id_penjualan', $idPenjualan)->where('jenis', 'order')->first()) {

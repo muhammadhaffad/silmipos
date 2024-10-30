@@ -2,6 +2,9 @@
 
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Grid\Delete;
+use App\Admin\Actions\Grid\Edit;
+use App\Admin\Actions\Grid\Show;
 use App\Exceptions\PurchasePaymentException;
 use App\Models\PembelianPembayaran;
 use App\Services\Core\Purchase\PurchasePaymentService;
@@ -11,8 +14,10 @@ use Encore\Admin\Form;
 use Encore\Admin\Form\NestedForm;
 use Encore\Admin\Form\Tools;
 use Encore\Admin\Grid;
+use Encore\Admin\Grid\Displayers\DropdownActions;
+use Encore\Admin\Layout\Column;
 use Encore\Admin\Layout\Content;
-use Encore\Admin\Show;
+use Encore\Admin\Layout\Row;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -24,6 +29,46 @@ class PurchasePaymentController extends AdminController
     {
         $this->purchasePaymentService = $purchasePaymentService;
     }
+
+    public function listPaymentGrid() {
+        $grid = new Grid(new PembelianPembayaran);
+        $grid->model()->where('jenisbayar', 'tunai')->with(['kontak']);
+        if (!isset($_GET['_sort']['column']) and empty($_GET['sort']['column'])) {
+            $grid->model()->orderByRaw('id_pembelianpembayaran desc');
+        }
+        $grid->column('transaksi_no', 'No. Transaksi')->link(function () {
+            return url()->route(admin_get_route('purchase.payment.detail'), ['idPembayaran' => $this->id_pembelianpembayaran]);
+        })->sortable();
+        $grid->column('tanggal', 'Tanggal')->display(function ($val) {
+            return \date('d F Y', \strtotime($val));
+        })->sortable();
+        $grid->column('kontak.nama', 'Supplier')->sortable();
+        $grid->column('catatan', 'Catatan');
+        $grid->column('nominal', 'Total')->display(function ($val) {
+            return 'Rp' . number_format($val, 0, ',', '.');
+        });
+        $grid->actions(function (DropdownActions $actions) {
+            $actions->disableDelete();
+            $actions->disableEdit();
+            $actions->disableView();
+            $actions->add(new Show);
+            $actions->add(new Edit);
+            // dump($this);
+            $actions->add(new Delete(route(admin_get_route('purchase.payment.delete'), $this->row->id_pembelianpembayaran)));
+        });
+        return $grid;
+    }
+    public function listPayment(Content $content) {
+        return $content
+            ->title('Pembelian Pembayaran')
+            ->description('Daftar')
+            ->row(function (Row $row) {
+                $row->column(12, function (Column $column) {
+                    $column->row($this->listPaymentGrid());
+                });
+            });
+    }
+
     public function createPaymentForm($model)
     {
         $form = new Form($model);
@@ -149,7 +194,7 @@ class PurchasePaymentController extends AdminController
             
             $tools->append($tools->renderDelete(route(admin_get_route('purchase.payment.delete'), ['idPembayaran' => $idPembayaran]), listPath: route(admin_get_route('purchase.payment.create'))));
             $tools->append($tools->renderView(route(admin_get_route('purchase.payment.detail'), ['idPembayaran' => $idPembayaran])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('purchase.payment.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->select('id_kontak', 'Supplier')->required()->ajax(route(admin_get_route('ajax.kontak-supplier')))->attribute([
@@ -292,7 +337,7 @@ class PurchasePaymentController extends AdminController
             
             $tools->append($tools->renderDelete(route(admin_get_route('purchase.payment.delete'), ['idPembayaran' => $idPembayaran]), listPath: route(admin_get_route('purchase.payment.create'))));
             $tools->append($tools->renderEdit(route(admin_get_route('purchase.payment.edit'), ['idPembayaran' => $idPembayaran])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('purchase.payment.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Supplier')->setWidth(3);

@@ -33,4 +33,7 @@ class PenjualanDetail extends Model
             ->whereColumn('toko_griyanaura.ms_produkpersediaandetail.id_persediaan', 'toko_griyanaura.ms_produkpersediaan.id_persediaan')
         ]);
     }
+    public function gudang() {
+        return $this->hasOne(Gudang::class, 'id_gudang', 'id_gudang');
+    }
 }

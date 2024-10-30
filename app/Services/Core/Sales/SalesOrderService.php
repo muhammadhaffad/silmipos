@@ -29,6 +29,7 @@ class SalesOrderService
             'catatan' => 'nullable|string',
             'penjualanDetail' => 'required|array',
             'penjualanDetail.*.kode_produkvarian' => 'required|string',
+            'penjualanDetail.*.id_gudang' => 'required|numeric',
             'penjualanDetail.*.qty' => 'required|numeric',
             'penjualanDetail.*.harga' => 'required|numeric',
             'penjualanDetail.*.diskon' => 'nullable|numeric'
@@ -57,6 +58,9 @@ class SalesOrderService
             ]);
             $rawTotal = 0;
             foreach ($request['penjualanDetail'] as $key => $item) {
+                if (!ProdukPersediaan::where('kode_produkvarian', $item['kode_produkvarian'])->where('id_gudang', $item['id_gudang'])->first()) {
+                    throw new SalesOrderException('Terdapat produk belum tersedia');
+                }
                 PenjualanDetail::create([
                     'id_penjualan' => $penjualan->id_penjualan,
                     'kode_produkvarian' => $item['kode_produkvarian'],
@@ -66,7 +70,7 @@ class SalesOrderService
                     'diskon' => $item['diskon'] ?: 0,
                     'total' => (int)($item['harga'] * $item['qty'] * (1 - ($item['diskon'] ?: 0) / 100)),
                     'totalraw' => (int)$item['harga'] * $item['qty'],
-                    'id_gudang' => $request['id_gudang']
+                    'id_gudang' => $item['id_gudang']
                 ]);
                 $rawTotal += (int)($item['harga'] * $item['qty'] * (1 - ($item['diskon'] ?: 0) / 100));
             }
@@ -94,6 +98,7 @@ class SalesOrderService
             'catatan' => 'nullable|string',
             'penjualanDetail' => 'required|array',
             'penjualanDetail.*.kode_produkvarian' => 'required|string',
+            'penjualanDetail.*.id_gudang' => 'required|numeric',
             'penjualanDetail.*.qty' => 'required|numeric',
             'penjualanDetail.*.harga' => 'required|numeric',
             'penjualanDetail.*.diskon' => 'nullable|numeric',
@@ -136,14 +141,20 @@ class SalesOrderService
                             $newData['qty'] = $item['qty'];
                             $newData['harga'] = (int)$item['harga'];
                             $newData['diskon'] = $item['diskon'];
-                            $newData['id_gudang'] = $request['id_gudang'];
+                            $newData['id_gudang'] = $item['id_gudang'];
                         }
                         if (!empty($newData)) {
+                            if (!ProdukPersediaan::where('kode_produkvarian', $item['kode_produkvarian'])->where('id_gudang', $newData['id_gudang'])->first()) {
+                                throw new SalesOrderException('Terdapat produk belum tersedia');
+                            }
                             $newData['totalraw'] = $newData['qty'] * $newData['harga'];
                             $newData['total'] = $newData['qty'] * $newData['harga'] * (1 - $newData['diskon'] / 100);
                             PenjualanDetail::where('id_penjualandetail', $key)->update($newData);
                         }
                     } else {
+                        if (!ProdukPersediaan::where('kode_produkvarian', $item['kode_produkvarian'])->where('id_gudang', $request['id_gudang'])->first()) {
+                            throw new SalesOrderException('Terdapat produk belum tersedia');
+                        }
                         PenjualanDetail::create([
                             'id_penjualan' => $penjualan->id_penjualan,
                             'kode_produkvarian' => $item['kode_produkvarian'],
@@ -153,7 +164,7 @@ class SalesOrderService
                             'diskon' => $item['diskon'] ?: 0,
                             'total' => (int)($item['harga'] * $item['qty'] * (1 - ($item['diskon'] ?: 0) / 100)),
                             'totalraw' => (int)$item['harga'] * $item['qty'],
-                            'id_gudang' => $request['id_gudang']
+                            'id_gudang' => $item['id_gudang']
                         ]);
                     }
                 }

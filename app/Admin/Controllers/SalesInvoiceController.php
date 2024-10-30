@@ -41,6 +41,7 @@ class SalesInvoiceController extends AdminController
         $form->column(12, function (Form $form) {
             $form->tablehasmany('penjualanDetail', function (NestedForm $form) {
                 $form->select('kode_produkvarian', 'Produk')->required()->ajax(route(admin_get_route('ajax.produk')), 'kode_produkvarian')->setGroupClass('w-200px');
+                $form->select('id_gudang', 'Gudang')->required()->options(DB::table('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang'))->setGroupClass('w-150px');
                 $form->currency('qty', 'Qty')->help('Sisa stok: <span class="sisa_stok">?</span>')->required()->symbol('QTY');
                 $form->currency('harga', 'Harga')->required()->symbol('Rp');
                 $form->currency('diskon', 'Diskon')->symbol('%');
@@ -62,7 +63,7 @@ class SalesInvoiceController extends AdminController
         $form->setAction(route(admin_get_route('sales.invoice.update'), ['idPenjualan' => $idPenjualan]));
         $data = $form->model()->with(['penjualanDetail' => function ($q) {
             $q->orderBy('id_penjualandetail');
-            $q->with('produkVarian');
+            $q->with('produkVarian','gudang');
         }])->where('id_penjualan', $idPenjualan)->first();
         $form->tools(function (Tools $tools) use ($idPenjualan, $data) {
             $tools->disableList();
@@ -83,16 +84,25 @@ class SalesInvoiceController extends AdminController
             $form->text('transaksi_no', 'No. Transaksi')->disable()->placeholder('[AUTO]')->setLabelClass(['text-nowrap'])->withoutIcon()->width('100%')->setWidth(2,8)->value($data->transaksi_no);
             $form->datetime('tanggal', 'Tanggal')->required()->width('100%')->setWidth(2, 8)->value($data->tanggal);
             $form->datetime('tanggaltempo', 'Tanggal Tempo')->required()->width('100%')->setWidth(2, 8)->value($data->tanggaltempo);
-            $form->select('id_gudang', 'Gudang')->required()->width('100%')->setWidth(2, 8)->options(DB::table('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang'))->value($data->id_gudang);
+            $form->select('id_gudang', 'Gudang')->disable()->width('100%')->setWidth(2, 8)->options(DB::table('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang'))->value($data->id_gudang);
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->tablehasmany('penjualanDetail', function (NestedForm $form) {
                 if ($form->model()) {
                     $text = <<<HTML
-                        <div class="form-group w-200px">
+                        <div class="form-group w-200px text-wrap">
                             <label class="col-sm-0 hidden control-label">Produk</label>
                             <div class="col-sm-12" style="text-wrap: pretty">
                                 {$form->model()['produkVarian']['varian']}
+                            </div>
+                        </div>
+                    HTML;
+                    $form->html($text)->plain();
+                    $text = <<<HTML
+                        <div class="form-group w-150px text-wrap">
+                            <label class="col-sm-0 hidden control-label">Produk</label>
+                            <div class="col-sm-12" style="text-wrap: pretty">
+                                Gudang {$form->model()['gudang']['nama']}
                             </div>
                         </div>
                     HTML;
@@ -102,6 +112,7 @@ class SalesInvoiceController extends AdminController
                         'data-url' => route(admin_get_route('ajax.produk')),
                         'select2' => null
                     ])->setGroupClass('w-200px');
+                    $form->select('id_gudang', 'Gudang')->required()->options(DB::table('toko_griyanaura.lv_gudang')->get()->pluck('nama', 'id_gudang'))->setGroupClass('w-150px');
                 }
                 $form->currency('qty', 'Qty')->help('Sisa stok: <span class="sisa_stok">' . $form->model()?->produkPersediaan?->stok ?: '?' . '</span>')->required()->symbol('QTY');
                 $form->currency('harga', 'Harga')->required()->symbol('Rp');
@@ -124,7 +135,7 @@ class SalesInvoiceController extends AdminController
         $data = $form->model()->with(['kontak','penjualanDetail' => function ($rel) {
             $rel->orderBy('id_penjualandetail');
             $rel->leftJoin(DB::raw("(select id_penjualandetailparent, sum(qty) as jumlah_diinvoice from toko_griyanaura.tr_penjualandetail where id_penjualandetailparent is not null group by id_penjualandetailparent) as x"), 'x.id_penjualandetailparent', 'toko_griyanaura.tr_penjualandetail.id_penjualandetail');
-            $rel->with(['produkVarian', 'produkPersediaan']);
+            $rel->with(['produkVarian', 'produkPersediaan', 'gudang']);
         } ])->where('id_penjualan', $idPenjualan)->join(DB::raw("(select id_gudang, nama as nama_gudang from toko_griyanaura.lv_gudang) as gdg"), 'gdg.id_gudang', 'toko_griyanaura.tr_penjualan.id_gudang')->first();
         $form->tools(function (Tools $tools) use ($idPenjualan, $data) {
             $tools->disableList();
@@ -148,7 +159,7 @@ class SalesInvoiceController extends AdminController
         $form->column(12, function (Form $form) use ($data) {
             $form->tablehasmany('penjualanDetail', function (NestedForm $form) {
                 $data = $form->model();
-                $form->html($data?->produkVarian?->varian, 'Produk')->required();
+                $form->html(($data?->produk_varian['varian'] ?? null) . " (Gudang " . ($data?->gudang['nama'] ?? null) . ")", 'Produk')->setGroupClass('text-wrap')->required();
                 $form->text('qty', 'Qty')->help('Sisa stok: ' . $data?->produkPersediaan?->stok)->customFormat(function ($val) {
                     return number($val);
                 })->disable()->attribute('type', 'number')->withoutIcon()->required()->setGroupClass('w-100px');
@@ -174,12 +185,15 @@ class SalesInvoiceController extends AdminController
 
     public function createSalesInvoice(Content $content) 
     {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
             .w-200px {
                 width: 200px;
+            }
+            .w-150px {
+                width: 150px;
             }
             [id^="has-many-"] {
                 position: relative;
@@ -212,10 +226,10 @@ class SalesInvoiceController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
         $urlGetDetailProduk = route(admin_get_route('ajax.produk-detail'));
-        $scriptDereferred = <<<SCRIPT
+        $scriptDereferred = <<<JS
             function hitungProdukTotal(e) {
                 const row = $(e.target).closest('tr');
                 const harga = parseInt(row.find('.penjualanDetail[name*="harga"]').first().inputmask('unmaskedvalue')) || 0;
@@ -240,9 +254,11 @@ class SalesInvoiceController extends AdminController
                 hitungTotal();
             });
             $("#has-many-penjualanDetail").on('click', '.add', function () {
-                $(".penjualanDetail.kode_produkvarian").on('select2:select', function (e) {
-                    const kode = e.params.data.id;
-                    const idGudang = $('select[name="id_gudang"]').val();
+                $(".penjualanDetail.id_gudang:last").val($('select[name="id_gudang"]').val() || 1).trigger('change');
+                $(".penjualanDetail.kode_produkvarian, .penjualanDetail.id_gudang").on('select2:select', function (e) {
+                    const row = $(this).closest('tr');
+                    const kode = row.find('.kode_produkvarian').val();
+                    const idGudang = row.find('.id_gudang').val();
                     $.ajax({
                         url: '$urlGetDetailProduk',
                         type: 'GET',
@@ -291,7 +307,7 @@ class SalesInvoiceController extends AdminController
             $('[name="totalraw"],[name="diskon"]').on('change', function () {
                 hitungGrandTotal();
             });
-        SCRIPT;
+        JS;
         Admin::script($scriptDereferred, true);
         $penjualan = new Penjualan();
         return $content
@@ -301,12 +317,15 @@ class SalesInvoiceController extends AdminController
     }
     public function editSalesInvoice(Content $content, $idPenjualan) 
     {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
             .w-200px {
                 width: 200px;
+            }
+            .w-150px {
+                width: 150px;
             }
             [id^="has-many-"] {
                 position: relative;
@@ -339,10 +358,10 @@ class SalesInvoiceController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
         $urlGetDetailProduk = route(admin_get_route('ajax.produk-detail'));
-        $scriptDereferred = <<<SCRIPT
+        $scriptDereferred = <<<JS
             $(".penjualanDetail.kode_produkvarian").on('select2:select', function (e) {
                 const kode = e.params.data.kode_produkvarian;
                 const idGudang = $('select[name="id_gudang"]').val();
@@ -437,9 +456,11 @@ class SalesInvoiceController extends AdminController
                 hitungTotal();
             });
             $("#has-many-penjualanDetail").on('click', '.add', function () {
-                $(".penjualanDetail.kode_produkvarian").on('select2:select', function (e) {
-                    const kode = e.params.data.id;
-                    const idGudang = $('select[name="id_gudang"]').val();
+                $(".penjualanDetail.id_gudang:last").val($('select[name="id_gudang"]').val() || 1).trigger('change');
+                $(".penjualanDetail.kode_produkvarian, .penjualanDetail.id_gudang").on('select2:select', function (e) {
+                    const row = $(this).closest('tr');
+                    const kode = row.find('.kode_produkvarian').val();
+                    const idGudang = row.find('.id_gudang').val();
                     $.ajax({
                         url: '$urlGetDetailProduk',
                         type: 'GET',
@@ -490,7 +511,7 @@ class SalesInvoiceController extends AdminController
             $('[name="totalraw"],[name="diskon"]').on('change', function () {
                 hitungGrandTotal();
             });
-        SCRIPT;
+        JS;
         Admin::script($scriptDereferred, true);
         $penjualan = new Penjualan();
         if (!$penjualan->where('id_penjualan', $idPenjualan)->where('jenis', 'invoice')->first()) {
@@ -502,12 +523,15 @@ class SalesInvoiceController extends AdminController
             ->body($this->editSalesInvoiceForm($penjualan, $idPenjualan));
     }
     public function detailSalesInvoice(Content $content, $idPenjualan) {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
             .w-200px {
                 width: 200px;
+            }
+            .w-150px {
+                width: 150px;
             }
             .w-100px {
                 width: 100px;
@@ -543,9 +567,9 @@ class SalesInvoiceController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
-        $script = <<<SCRIPT
+        $script = <<<JS
             $('select.form-control').each(function () {
                 const select = this;
                 const defaultValue = select.dataset.value.split(',');
@@ -566,7 +590,7 @@ class SalesInvoiceController extends AdminController
                     });
                 })
             });
-        SCRIPT;
+        JS;
         Admin::script($script);
         $penjualan = new Penjualan();
         if (!$penjualan->where('id_penjualan', $idPenjualan)->where('jenis', 'invoice')->first()) {

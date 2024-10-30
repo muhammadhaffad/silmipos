@@ -30,6 +30,7 @@ class SalesInvoiceService
             'catatan' => 'nullable|string',
             'penjualanDetail' => 'required|array',
             'penjualanDetail.*.kode_produkvarian' => 'required|string',
+            'penjualanDetail.*.id_gudang' => 'required|numeric',
             'penjualanDetail.*.qty' => 'required|numeric',
             'penjualanDetail.*.harga' => 'required|numeric',
             'penjualanDetail.*.diskon' => 'nullable|numeric'
@@ -64,7 +65,7 @@ class SalesInvoiceService
                     'harga' => (int)$item['harga'],
                     'qty' => $item['qty'],
                     'diskon' => $item['diskon'] ?: 0,
-                    'id_gudang' => $request['id_gudang']
+                    'id_gudang' => $item['id_gudang']
                 ];
                 $this->storeSalesInvoiceItem($penjualanInvoice, $newData);
                 $rawTotal += (int)($item['harga'] * $item['qty'] * (1 - ($item['diskon'] ?: 0) / 100));
@@ -125,7 +126,6 @@ class SalesInvoiceService
         $rules = [
             'id_kontak' => 'required|numeric',
             'tanggal' => 'required|date_format:Y-m-d H:i:s',
-            'id_gudang' => 'required|numeric',
             'diskon' => 'nullable|numeric',
             'catatan' => 'nullable|string',
             'penjualanDetail' => 'required|array',
@@ -144,7 +144,6 @@ class SalesInvoiceService
             $penjualan->update([
                 'id_kontak' => $request['id_kontak'],
                 'tanggal' => $request['tanggal'],
-                'id_gudang' => $request['id_gudang'],
                 'diskon' => $request['diskon'],
                 'catatan' => $request['catatan']
             ]);
@@ -157,11 +156,11 @@ class SalesInvoiceService
                     if (isset($oldItem[$item['id_penjualandetail']])) {
                         /* Jika di-update */
                         $newData = [];
-                        if ($item['qty'] != $oldItem[$item['id_penjualandetail']]['qty'] or $item['harga'] != $oldItem[$item['id_penjualandetail']]['harga'] or $item['diskon'] != $oldItem[$item['id_penjualandetail']]['diskon'] or $penjualan['id_gudang'] != $request['id_gudang']) {
+                        if ($item['qty'] != $oldItem[$item['id_penjualandetail']]['qty'] or $item['harga'] != $oldItem[$item['id_penjualandetail']]['harga'] or $item['diskon'] != $oldItem[$item['id_penjualandetail']]['diskon']/*  or $oldItem['id_gudang'] != $item['id_gudang'] */) {
                             $newData['qty'] = $item['qty'];
                             $newData['harga'] = (int)$item['harga'];
                             $newData['diskon'] = $item['diskon'];
-                            $newData['id_gudang'] = $request['id_gudang'];
+                            /* $newData['id_gudang'] = $item['id_gudang']; */
                             $newData['totalraw'] = $newData['qty'] * $newData['harga'];
                             $newData['total'] = $newData['qty'] * $newData['harga'] * (1 - $newData['diskon'] / 100);
                         }
@@ -173,7 +172,7 @@ class SalesInvoiceService
                             'harga' => (int)$item['harga'],
                             'qty' => $item['qty'],
                             'diskon' => $item['diskon'] ?: 0,
-                            'id_gudang' => $request['id_gudang']
+                            'id_gudang' => $item['id_gudang']
                         ];
                         $this->storeSalesInvoiceItem($penjualan, $newData);
                     }
