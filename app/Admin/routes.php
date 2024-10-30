@@ -120,6 +120,7 @@ Route::group([
             Route::put('/update-allocate/{idRetur}', [PurchaseReturnController::class, 'updateAllocate'])->name('purchase.return.update-allocate');
         });
         Route::prefix('/refund')->group(function () {
+            Route::get('/', [PurchaseRefundPaymentController::class, 'listRefund'])->name('purchase.refund.list');
             Route::get('/create', [PurchaseRefundPaymentController::class, 'createRefund'])->name('purchase.refund.create');
             Route::get('/edit/{idRefund}', [PurchaseRefundPaymentController::class, 'editRefund'])->name('purchase.refund.edit');
             Route::get('/detail/{idRefund}', [PurchaseRefundPaymentController::class, 'detailRefund'])->name('purchase.refund.detail');
