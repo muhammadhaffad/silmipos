@@ -13,4 +13,8 @@ class Transaksi extends Model
     protected $table = 'toko_griyanaura.tr_transaksi';
     protected $primaryKey = 'id_transaksi';
     protected $guarded = [];
+
+    public function transaksiJenis() {
+        return $this->hasOne(TransaksiJenis::class, 'id_transaksijenis', 'id_transaksijenis');
+    }
 }

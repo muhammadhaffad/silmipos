@@ -240,7 +240,7 @@ class ProdukController extends Controller
         })->tab('Akunting', function (Form $form) use ($data) {
             $form->select('default_akunpersediaan', __('Akun persediaan'))
                 ->required()
-                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('data-url', route(admin_get_route('ajax.akun')))
                 ->attribute('select2')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('1301')
@@ -249,7 +249,7 @@ class ProdukController extends Controller
 
             $form->select('default_akunpemasukan', __('Akun pemasukan'))
                 ->required()
-                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('data-url', route(admin_get_route('ajax.akun')))
                 ->attribute('select2')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('4001')
@@ -258,7 +258,7 @@ class ProdukController extends Controller
 
             $form->select('default_akunbiaya', __('Akun Biaya'))
                 ->required()
-                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('data-url', route(admin_get_route('ajax.akun')))
                 ->attribute('select2')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('5002')
@@ -363,7 +363,7 @@ class ProdukController extends Controller
         })->tab('Akunting', function (Form $form) {
             $form->select('default_akunpersediaan', __('Akun persediaan'))
                 ->required()
-                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('data-url', route(admin_get_route('ajax.akun')))
                 ->attribute('select2')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('1301')
@@ -371,7 +371,7 @@ class ProdukController extends Controller
 
             $form->select('default_akunpemasukan', __('Akun pemasukan'))
                 ->required()
-                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('data-url', route(admin_get_route('ajax.akun')))
                 ->attribute('select2')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('4001')
@@ -379,7 +379,7 @@ class ProdukController extends Controller
 
             $form->select('default_akunbiaya', __('Akun Biaya'))
                 ->required()
-                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('data-url', route(admin_get_route('ajax.akun')))
                 ->attribute('select2')
                 ->ajax(route(admin_get_route('ajax.akun')))
                 ->default('5002')
@@ -492,7 +492,7 @@ class ProdukController extends Controller
         })->tab('Akunting', function (Form $form) use ($data) {
             $form->select('default_akunpersediaan', __('Akun persediaan'))
                 ->required()
-                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('data-url', route(admin_get_route('ajax.akun')))
                 ->attribute('select2')
                 ->attribute('akun')
                 ->ajax(route(admin_get_route('ajax.akun')))
@@ -501,7 +501,7 @@ class ProdukController extends Controller
 
             $form->select('default_akunpemasukan', __('Akun pemasukan'))
                 ->required()
-                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('data-url', route(admin_get_route('ajax.akun')))
                 ->attribute('select2')
                 ->attribute('akun')
                 ->ajax(route(admin_get_route('ajax.akun')))
@@ -510,7 +510,7 @@ class ProdukController extends Controller
 
             $form->select('default_akunbiaya', __('Akun Biaya'))
                 ->required()
-                ->attribute('data-url', route('admin.ajax.akun'))
+                ->attribute('data-url', route(admin_get_route('ajax.akun')))
                 ->attribute('select2')
                 ->attribute('akun')
                 ->ajax(route(admin_get_route('ajax.akun')))

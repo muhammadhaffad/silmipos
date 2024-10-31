@@ -2,6 +2,9 @@
 
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Grid\Delete;
+use App\Admin\Actions\Grid\Edit;
+use App\Admin\Actions\Grid\Show;
 use App\Exceptions\SalesReturnException;
 use App\Models\PenjualanRetur;
 use App\Services\Core\Sales\SalesReturnService;
@@ -11,9 +14,10 @@ use Encore\Admin\Form;
 use Encore\Admin\Form\Layout\Column;
 use Encore\Admin\Form\NestedForm;
 use Encore\Admin\Grid;
+use Encore\Admin\Grid\Displayers\DropdownActions;
+use Encore\Admin\Layout\Column as LayoutColumn;
 use Encore\Admin\Layout\Content;
 use Encore\Admin\Layout\Row;
-use Encore\Admin\Show;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +30,58 @@ class SalesReturnController extends AdminController
     {
         $this->salesReturnService = $salesReturnService;
     }
+    public function listReturnGrid() {
+        $grid = new Grid(new PenjualanRetur);
+        $grid->model()->with(['kontak', 'penjualan']);
+        if (!isset($_GET['_sort']['column']) and empty($_GET['sort']['column'])) {
+            $grid->model()->orderByRaw('id_penjualanretur desc');
+        }
+        $grid->column('transaksi_no', 'No. Transaksi')->link(function () {
+            return url()->route(admin_get_route('sales.return.detail'), ['idRetur' => $this->id_penjualanretur]);
+        })->sortable();
+        $grid->column('penjualan.transaksi_no', 'Transaksi Diretur')->link(function () {
+            if ($this->penjualan?->id_penjualan) 
+                return url()->route(admin_get_route('sales.invoice.detail'), ['idPenjualan' => $this->penjualan?->id_penjualan]);
+            else 
+                return '';
+        });
+        $grid->column('kontak.nama', 'Customer')->sortable();
+        $grid->column('tanggal', 'Tanggal')->display(function ($val) {
+            return \date('d F Y', \strtotime($val));
+        })->sortable();
+        // $grid->column('tanggaltempo', 'Tanggal tempo')->display(function ($val) {
+        //     if ($val) 
+        //         return \date('d F Y', \strtotime($val));
+        //     else 
+        //         return null;
+        // });
+        $grid->column('catatan', 'Catatan');
+        $grid->column('grandtotal', 'Grand total')->display(function ($val) {
+            return 'Rp' . number_format($val, 0, ',', '.');
+        });
+        $grid->actions(function (DropdownActions $actions) {
+            $actions->disableDelete();
+            $actions->disableEdit();
+            $actions->disableView();
+            $actions->add(new Show);
+            $actions->add(new Edit());
+            // dump($this);
+            $actions->add(new Delete(route(admin_get_route('sales.return.delete'), $this->row->id_penjualanretur)));
+        });
+        return $grid;
+    }
+    public function listReturn(Content $content) {
+        return $content
+            ->title('Retur Penjualan')
+            ->description('Daftar')
+            ->row(function (Row $row) {
+                $row->column(12, function (LayoutColumn $column) {
+                    $column->row($this->listReturnGrid());
+                });
+            });
+    }
+
+    
     public function createReturnForm($model)
     {
         $form = new Form($model);
@@ -35,7 +91,7 @@ class SalesReturnController extends AdminController
         $form->select('id_kontak', 'Customer')->setWidth(2)->ajax(route(admin_get_route('ajax.kontak-customer')));
         $invoice = $form->select('id_penjualan', 'No. Transaksi')->setWidth(2);
         $url = route(admin_get_route('ajax.penjualan'));
-        $selectAjaxInvoice = <<<SCRIPT
+        $selectAjaxInvoice = <<<JS
             $("{$invoice->getElementClassSelector()}").select2({
                 ajax: {
                     url: "$url",
@@ -68,7 +124,7 @@ class SalesReturnController extends AdminController
                     return markup;
                 }
             });
-        SCRIPT;
+        JS;
         $invoice->setScript($selectAjaxInvoice);
         $form->datetime('tanggal')->default(date('Y-m-d H:i:s'));
         $form->textarea('catatan')->setWidth(4);
@@ -103,7 +159,7 @@ class SalesReturnController extends AdminController
                 ])->default($row['penjualan_pembayaran']['id_penjualanpembayaran'] ?? null);
                 $url = route(admin_get_route('ajax.penjualan-pembayaran'));
                 $urlDetailPayment = route(admin_get_route('ajax.penjualan-pembayaran-detail'));
-                $selectAjaxPayment = <<<SCRIPT
+                $selectAjaxPayment = <<<JS
                     $("{$payment->getElementClassSelector()}").select2({
                         ajax: {
                             url: "$url",
@@ -179,7 +235,7 @@ class SalesReturnController extends AdminController
                         const kembalianDana = $('[name="kembaliandana"]').first().inputmask('unmaskedvalue');
                         $('[name="sisakembaliandana"]').val(kembalianDana - allocated);
                     });
-                SCRIPT;
+                JS;
                 $payment->setScript($selectAjaxPayment);
             }
             $form->currency('nominalpembayaran', 'Pembayaran awal')->disable()->symbol('Rp')->default($row['penjualan_pembayaran']['nominal'] ?? null);
@@ -221,7 +277,7 @@ class SalesReturnController extends AdminController
                 ])->default($row['penjualan_pembayaran']['id_penjualanpembayaran'] ?? null);
                 $url = route(admin_get_route('ajax.penjualan-pembayaran'));
                 $urlDetailPayment = route(admin_get_route('ajax.penjualan-pembayaran-detail'));
-                $selectAjaxPayment = <<<SCRIPT
+                $selectAjaxPayment = <<<JS
                     $("{$payment->getElementClassSelector()}").select2({
                         ajax: {
                             url: "$url",
@@ -297,7 +353,7 @@ class SalesReturnController extends AdminController
                         const kembalianDana = $('[name="kembaliandana"]').first().inputmask('unmaskedvalue');
                         $('[name="sisakembaliandana"]').val(kembalianDana - allocated);
                     });
-                SCRIPT;
+                JS;
                 $payment->setScript($selectAjaxPayment);
             }
             $form->currency('nominalpembayaran', 'Pembayaran awal')->disable()->symbol('Rp')->default($row['penjualan_pembayaran']['nominal'] ?? null);
@@ -325,7 +381,7 @@ class SalesReturnController extends AdminController
 
             $tools->append($tools->renderDelete(route(admin_get_route('sales.return.delete'), ['idRetur' => $idRetur]), listPath: route(admin_get_route('sales.return.create'))));
             $tools->append($tools->renderView(route(admin_get_route('sales.return.detail'), ['idRetur' => $idRetur])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('sales.return.list'))));
         });
         $data = $form->model()->with(['penjualan', 'penjualanDetail' => function ($q) {
             $q->leftJoin(DB::raw("(select id_penjualandetail as id_penjualandetaildiretur, sum(qty) as jumlah_diretur from toko_griyanaura.tr_penjualanreturdetail group by id_penjualandetail) as x"), 'x.id_penjualandetaildiretur', 'toko_griyanaura.tr_penjualandetail.id_penjualandetail');
@@ -386,7 +442,7 @@ class SalesReturnController extends AdminController
 
             $tools->append($tools->renderDelete(route(admin_get_route('sales.return.delete'), ['idRetur' => $idRetur]), listPath: route(admin_get_route('sales.return.create'))));
             $tools->append($tools->renderEdit(route(admin_get_route('sales.return.edit'), ['idRetur' => $idRetur])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('sales.return.list'))));
         });
         $data = $form->model()->with(['penjualan', 'penjualanDetail' => function ($q) {
             $q->leftJoin(DB::raw("(select id_penjualandetail as id_penjualandetaildiretur, sum(qty) as jumlah_diretur from toko_griyanaura.tr_penjualanreturdetail group by id_penjualandetail) as x"), 'x.id_penjualandetaildiretur', 'toko_griyanaura.tr_penjualandetail.id_penjualandetail');

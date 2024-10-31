@@ -2,6 +2,9 @@
 
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Grid\Delete;
+use App\Admin\Actions\Grid\Edit;
+use App\Admin\Actions\Grid\Show;
 use App\Exceptions\SalesPaymentException;
 use App\Models\PenjualanPembayaran;
 use App\Services\Core\Sales\SalesPaymentService;
@@ -11,8 +14,10 @@ use Encore\Admin\Form;
 use Encore\Admin\Form\NestedForm;
 use Encore\Admin\Form\Tools;
 use Encore\Admin\Grid;
+use Encore\Admin\Grid\Displayers\DropdownActions;
+use Encore\Admin\Layout\Column;
 use Encore\Admin\Layout\Content;
-use Encore\Admin\Show;
+use Encore\Admin\Layout\Row;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -24,6 +29,45 @@ class SalesPaymentController extends AdminController
     {
         $this->salesPaymentService = $salesPaymentService;
     }
+    public function listPaymentGrid() {
+        $grid = new Grid(new PenjualanPembayaran);
+        $grid->model()->where('jenisbayar', 'tunai')->with(['kontak']);
+        if (!isset($_GET['_sort']['column']) and empty($_GET['sort']['column'])) {
+            $grid->model()->orderByRaw('id_penjualanpembayaran desc');
+        }
+        $grid->column('transaksi_no', 'No. Transaksi')->link(function () {
+            return url()->route(admin_get_route('sales.payment.detail'), ['idPembayaran' => $this->id_penjualanpembayaran]);
+        })->sortable();
+        $grid->column('tanggal', 'Tanggal')->display(function ($val) {
+            return \date('d F Y', \strtotime($val));
+        })->sortable();
+        $grid->column('kontak.nama', 'Customer')->sortable();
+        $grid->column('catatan', 'Catatan');
+        $grid->column('nominal', 'Total')->display(function ($val) {
+            return 'Rp' . number_format($val, 0, ',', '.');
+        });
+        $grid->actions(function (DropdownActions $actions) {
+            $actions->disableDelete();
+            $actions->disableEdit();
+            $actions->disableView();
+            $actions->add(new Show);
+            $actions->add(new Edit);
+            // dump($this);
+            $actions->add(new Delete(route(admin_get_route('sales.payment.delete'), $this->row->id_penjualanpembayaran)));
+        });
+        return $grid;
+    }
+    public function listPayment(Content $content) {
+        return $content
+            ->title('Penjualan Pembayaran')
+            ->description('Daftar')
+            ->row(function (Row $row) {
+                $row->column(12, function (Column $column) {
+                    $column->row($this->listPaymentGrid());
+                });
+            });
+    }
+
     public function createPaymentForm($model)
     {
         $form = new Form($model);
@@ -40,7 +84,7 @@ class SalesPaymentController extends AdminController
                 $invoice = $form->select('id_penjualan', 'No. Transaksi')->setGroupClass('w-200px');
                 $url = route(admin_get_route('ajax.penjualan'));
                 $urlDetailInvoice = route(admin_get_route('ajax.penjualan-detail'));
-                $selectAjaxInvoice = <<<SCRIPT
+                $selectAjaxInvoice = <<<JS
                     $("{$invoice->getElementClassSelector()}").select2({
                         ajax: {
                             url: "$url",
@@ -116,7 +160,7 @@ class SalesPaymentController extends AdminController
                         console.info(total); 
                         $('input.total').val(total);
                     });
-                SCRIPT;
+                JS;
                 $invoice->setScript($selectAjaxInvoice);
                 $form->date('tanggaltempo', 'Tempo')->disable();
                 $form->currency('grandtotal', 'Grand total')->symbol('Rp')->disable();
@@ -149,7 +193,7 @@ class SalesPaymentController extends AdminController
             
             $tools->append($tools->renderDelete(route(admin_get_route('sales.payment.delete'), ['idPembayaran' => $idPembayaran]), listPath: route(admin_get_route('sales.payment.create'))));
             $tools->append($tools->renderView(route(admin_get_route('sales.payment.detail'), ['idPembayaran' => $idPembayaran])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('sales.payment.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->select('id_kontak', 'Customer')->required()->ajax(route(admin_get_route('ajax.kontak-customer')))->attribute([
@@ -182,7 +226,7 @@ class SalesPaymentController extends AdminController
                     ])->default($data['id_penjualaninvoice'] ?? null);
                     $url = route(admin_get_route('ajax.penjualan'));
                     $urlDetailInvoice = route(admin_get_route('ajax.penjualan-detail'));
-                    $selectAjaxInvoice = <<<SCRIPT
+                    $selectAjaxInvoice = <<<JS
                         $("{$invoice->getElementClassSelector()}").select2({
                             ajax: {
                                 url: "$url",
@@ -258,7 +302,7 @@ class SalesPaymentController extends AdminController
                             console.info(total); 
                             $('input.total').val(total);
                         });
-                    SCRIPT;
+                    JS;
                     $invoice->setScript($selectAjaxInvoice);
                 }
                 $form->date('tanggaltempo', 'Tempo')->disable()->default($data['penjualan']['tanggaltempo'] ?? null);
@@ -292,7 +336,7 @@ class SalesPaymentController extends AdminController
             
             $tools->append($tools->renderDelete(route(admin_get_route('sales.payment.delete'), ['idPembayaran' => $idPembayaran]), listPath: route(admin_get_route('sales.payment.create'))));
             $tools->append($tools->renderEdit(route(admin_get_route('sales.payment.edit'), ['idPembayaran' => $idPembayaran])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('sales.payment.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Customer')->setWidth(3);
@@ -328,7 +372,7 @@ class SalesPaymentController extends AdminController
 
     public function createPayment(Content $content)
     {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
@@ -366,10 +410,10 @@ class SalesPaymentController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
         $urlGetDetailProduk = route(admin_get_route('ajax.produk-detail'));
-        $scriptDereferred = <<<SCRIPT
+        $scriptDereferred = <<<JS
             let idCustomer = null;
             $('select.id_kontak').change(function () {
                 idCustomer = $('select.id_kontak').val();
@@ -382,7 +426,7 @@ class SalesPaymentController extends AdminController
                 console.info(total); 
                 $('input.total').val(total);
             });
-        SCRIPT;
+        JS;
         Admin::script($scriptDereferred, true);
         return $content
             ->title('Penjualan Pembayaran')
@@ -391,7 +435,7 @@ class SalesPaymentController extends AdminController
     }
     public function editPayment(Content $content, $idPembayaran) 
     {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
@@ -429,10 +473,10 @@ class SalesPaymentController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
         $urlGetDetailProduk = route(admin_get_route('ajax.produk-detail'));
-        $scriptDereferred = <<<SCRIPT
+        $scriptDereferred = <<<JS
             let idCustomer = $('select.id_kontak').data('value');
             $('select.id_kontak').change(function () {
                 idCustomer = $('select.id_kontak').val();
@@ -473,7 +517,7 @@ class SalesPaymentController extends AdminController
                 console.info(total); 
                 $('input.total').val(total);
             }
-        SCRIPT;
+        JS;
         Admin::script($scriptDereferred, true);
         return $content
             ->title('Penjualan Pembayaran')
@@ -482,7 +526,7 @@ class SalesPaymentController extends AdminController
     }
     public function detailPayment(Content $content, $idPembayaran) 
     {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
@@ -520,10 +564,10 @@ class SalesPaymentController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
         $urlGetDetailProduk = route(admin_get_route('ajax.produk-detail'));
-        $scriptDereferred = <<<SCRIPT
+        $scriptDereferred = <<<JS
             let idCustomer = $('select.id_kontak').data('value');
             $('select.id_kontak').change(function () {
                 idCustomer = $('select.id_kontak').val();
@@ -564,7 +608,7 @@ class SalesPaymentController extends AdminController
                 console.info(total); 
                 $('input.total').val(total);
             }
-        SCRIPT;
+        JS;
         Admin::script($scriptDereferred, true);
         return $content
             ->title('Penjualan Pembayaran')

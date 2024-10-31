@@ -13,6 +13,7 @@ use App\Admin\Controllers\PurchaseOrderController;
 use App\Admin\Controllers\PurchasePaymentController;
 use App\Admin\Controllers\PurchaseRefundPaymentController;
 use App\Admin\Controllers\PurchaseReturnController;
+use App\Admin\Controllers\ReportController;
 use App\Admin\Controllers\SalesDownPaymentController;
 use App\Admin\Controllers\SalesInvoiceController;
 use App\Admin\Controllers\SalesOrderController;
@@ -132,6 +133,7 @@ Route::group([
     });
     Route::prefix('/sales')->group(function () {
         Route::prefix('/order')->group(function () {
+            Route::get('/', [SalesOrderController::class, 'listSalesOrder'])->name('sales.order.list');
             Route::get('/create', [SalesOrderController::class, 'createSalesOrder'])->name('sales.order.create');
             Route::get('/detail/{idPenjualan}', [SalesOrderController::class, 'detailSalesOrder'])->name('sales.order.detail');
             Route::get('/edit/{idPenjualan}', [SalesOrderController::class, 'editSalesOrder'])->name('sales.order.edit');
@@ -142,6 +144,7 @@ Route::group([
             Route::match(['delete', 'post'], '/delete/{idPenjualan}', [SalesOrderController::class, 'deleteSalesOrder'])->name('sales.order.delete');
         });
         Route::prefix('/invoice')->group(function () {
+            Route::get('/', [SalesInvoiceController::class, 'listSalesInvoice'])->name('sales.invoice.list');
             Route::get('/create', [SalesInvoiceController::class, 'createSalesInvoice'])->name('sales.invoice.create');
             Route::get('/detail/{idPenjualan}', [SalesInvoiceController::class, 'detailSalesInvoice'])->name('sales.invoice.detail');
             Route::get('/edit/{idPenjualan}', [SalesInvoiceController::class, 'editSalesInvoice'])->name('sales.invoice.edit');
@@ -151,6 +154,7 @@ Route::group([
             Route::match(['delete', 'post'], '/delete/{idPenjualan}', [SalesInvoiceController::class, 'deleteSalesInvoice'])->name('sales.invoice.delete');
         });
         Route::prefix('/return')->group(function () {
+            Route::get('/', [SalesReturnController::class, 'listReturn'])->name('sales.return.list');
             Route::get('/create', [SalesReturnController::class, 'createReturn'])->name('sales.return.create');
             Route::get('/edit/{idRetur}', [SalesReturnController::class, 'editReturn'])->name('sales.return.edit');
             Route::get('/detail/{idRetur}', [SalesReturnController::class, 'detailReturn'])->name('sales.return.detail');
@@ -162,6 +166,7 @@ Route::group([
             Route::put('/update-allocate/{idRetur}', [SalesReturnController::class, 'updateAllocate'])->name('sales.return.update-allocate');
         });
         Route::prefix('/payment')->group(function () {
+            Route::get('/', [SalesPaymentController::class, 'listPayment'])->name('sales.payment.list');
             Route::get('/create', [SalesPaymentController::class, 'createPayment'])->name('sales.payment.create');
             Route::get('/detail/{idPembayaran}', [SalesPaymentController::class, 'detailPayment'])->name('sales.payment.detail');
             Route::get('/edit/{idPembayaran}', [SalesPaymentController::class, 'editPayment'])->name('sales.payment.edit');
@@ -171,6 +176,7 @@ Route::group([
             Route::match(['delete', 'post'], '/delete/{idPembayaran}', [SalesPaymentController::class, 'deletePayment'])->name('sales.payment.delete');
         });
         Route::prefix('/down-payment')->group(function () {
+            Route::get('/', [SalesDownPaymentController::class, 'listPayment'])->name('sales.down-payment.list');
             Route::get('/create', [SalesDownPaymentController::class, 'createPayment'])->name('sales.down-payment.create');
             Route::get('/detail/{idPembayaran}', [SalesDownPaymentController::class, 'detailPayment'])->name('sales.down-payment.detail');
             Route::get('/edit/{idPembayaran}', [SalesDownPaymentController::class, 'editPayment'])->name('sales.down-payment.edit');
@@ -188,6 +194,9 @@ Route::group([
             Route::put('/update/{idRefund}', [SalesRefundPaymentController::class, 'updateRefund'])->name('sales.refund.update');
             Route::match(['post', 'delete'], '/delete/{idRefund}', [SalesRefundPaymentController::class, 'deleteRefund'])->name('sales.refund.delete');
         });
+    });
+    Route::prefix('/report')->group(function () {
+        Route::get('/detail-ledger', [ReportController::class, 'listDetailLedger'])->name('report.detail-ledger');
     });
     Route::prefix('ajax')->group(function () {
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');

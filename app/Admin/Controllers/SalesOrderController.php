@@ -2,6 +2,9 @@
 
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Grid\Delete;
+use App\Admin\Actions\Grid\Edit;
+use App\Admin\Actions\Grid\Show;
 use App\Exceptions\SalesOrderException;
 use App\Models\Dynamic;
 use App\Models\Penjualan;
@@ -13,13 +16,12 @@ use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Form\Footer;
 use Encore\Admin\Form\NestedForm;
-use Encore\Admin\Form\Row;
 use Encore\Admin\Form\Tools;
 use Encore\Admin\Grid;
+use Encore\Admin\Grid\Displayers\DropdownActions;
 use Encore\Admin\Layout\Column;
 use Encore\Admin\Layout\Content;
-use Encore\Admin\Layout\Row as LayoutRow;
-use Encore\Admin\Show;
+use Encore\Admin\Layout\Row;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -33,30 +35,50 @@ class SalesOrderController extends AdminController
     }
     public function listSalesOrderGrid() {
         $grid = new Grid(new Penjualan);
-        $grid->model()->with(['kontak', 'gudang', 'penjualanOrder'])->orderByRaw('id_penjualan desc');
-        $grid->column('transaksi_no', 'No. Transaksi')->sortable();
-        $grid->column('penjualanOrder.transaksi_no', 'Reff');
+        $grid->model()->where('jenis', 'order')->with(['kontak', 'gudang', 'penjualanOrder']);
+        if (!isset($_GET['_sort']['column']) and empty($_GET['sort']['column'])) {
+            $grid->model()->orderByRaw('id_penjualan desc');
+        }
+        $grid->column('transaksi_no', 'No. Transaksi')->link(function () {
+            return url()->route(admin_get_route('sales.order.detail'), ['idPenjualan' => $this->id_penjualan]);
+        })->sortable();
         $grid->column('kontak.nama', 'Customer')->sortable();
-        $grid->column(('jenis'))->label([
-            'invoice' => 'success',
-            'order' => 'primary'
-        ]);
-        $grid->column('gudang.nama', 'Gudang');
         $grid->column('tanggal', 'Tanggal')->display(function ($val) {
             return \date('d F Y', \strtotime($val));
-        });
-        $grid->column('tanggaltempo', 'Tanggal tempo')->display(function ($val) {
-            if ($val) 
-                return \date('d F Y', \strtotime($val));
-            else 
-                return null;
-        });
+        })->sortable();
+        $grid->column('gudang.nama', 'Gudang');
+        // $grid->column('tanggaltempo', 'Tanggal tempo')->display(function ($val) {
+        //     if ($val) 
+        //         return \date('d F Y', \strtotime($val));
+        //     else 
+        //         return null;
+        // });
         $grid->column('catatan', 'Catatan');
         $grid->column('grandtotal', 'Grand total')->display(function ($val) {
             return 'Rp' . number_format($val, 0, ',', '.');
         });
+        $grid->actions(function (DropdownActions $actions) {
+            $actions->disableDelete();
+            $actions->disableEdit();
+            $actions->disableView();
+            $actions->add(new Show);
+            $actions->add(new Edit());
+            // dump($this);
+            $actions->add(new Delete(route(admin_get_route('sales.order.delete'), $this->row->id_penjualan)));
+        });
         return $grid;
     }
+    public function listSalesOrder(Content $content) {
+        return $content
+            ->title('Penjualan Order')
+            ->description('Daftar')
+            ->row(function (Row $row) {
+                $row->column(12, function (Column $column) {
+                    $column->row($this->listSalesOrderGrid());
+                });
+            });
+    }
+
     public function createSalesOrderForm($model) {
         $form = new Form($model);
         $form->setAction(route(admin_get_route('sales.order.store')));
@@ -101,7 +123,7 @@ class SalesOrderController extends AdminController
             $tools->append($tools->renderDelete(route(admin_get_route('sales.order.delete'), ['idPenjualan' => $idPenjualan]), listPath: route(admin_get_route('sales.order.create'))));
             $tools->append($tools->renderEdit(route(admin_get_route('sales.order.edit'), ['idPenjualan' => $idPenjualan])));
             $tools->append($tools->renderEdit(route(admin_get_route('sales.order.to-invoice'), ['idPenjualan' => $idPenjualan]), text: 'Buat ke invoice', icon: 'fa-file-text'));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('sales.order.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Customer')->setWidth(3);
@@ -150,7 +172,7 @@ class SalesOrderController extends AdminController
             $tools->disableDelete();
             $tools->append($tools->renderDelete(route(admin_get_route('sales.order.delete'), ['idPenjualan' => $idPenjualan]), listPath: route(admin_get_route('sales.order.create'))));
             $tools->append($tools->renderView(route(admin_get_route('sales.order.detail'), ['idPenjualan' => $idPenjualan])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('sales.order.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->html("<div style='padding-top: 7px'>{$data->kontak->nama} - {$data->kontak->alamat}</div>", 'Customer')->setWidth(3);
@@ -210,7 +232,7 @@ class SalesOrderController extends AdminController
             $tools->disableDelete();
             $tools->append($tools->renderDelete(route(admin_get_route('sales.order.delete'), ['idPenjualan' => $idPenjualan]), listPath: route(admin_get_route('sales.order.create'))));
             $tools->append($tools->renderView(route(admin_get_route('sales.order.detail'), ['idPenjualan' => $idPenjualan])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('sales.order.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->select('id_kontak', 'Customer')->required()->ajax(route(admin_get_route('ajax.kontak-customer')))->attribute([
@@ -245,16 +267,6 @@ class SalesOrderController extends AdminController
         return $form;
     }
 
-    public function listSalesOrder(Content $content) {
-        return $content
-            ->title('Penjualan Order')
-            ->description('Daftar')
-            ->row(function (LayoutRow $row) {
-                $row->column(12, function (Column $column) {
-                    $column->row($this->listSalesOrderGrid());
-                });
-            });
-    }
     public function createSalesOrder(Content $content) {
         $style = <<<CSS
             .input-group {
@@ -463,7 +475,7 @@ class SalesOrderController extends AdminController
             ->body($this->detailSalesOrderForm($penjualan, $idPenjualan));
     }
     public function toInvoiceSalesOrder(Content $content, $idPenjualan) {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
@@ -512,9 +524,9 @@ class SalesOrderController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
-        $script = <<<SCRIPT
+        $script = <<<JS
             const checkAll = document.querySelector("#checkAll");
             const products = document.querySelectorAll('[name^="penjualanDetail"]');
             checkAll.addEventListener("change", function () {
@@ -566,7 +578,7 @@ class SalesOrderController extends AdminController
                 })
             });
             $('#checkAll').trigger('click');
-        SCRIPT;
+        JS;
         Admin::script($script);
         $penjualan = new Penjualan();
         if (!$penjualan->where('id_penjualan', $idPenjualan)->where('jenis', 'order')->first()) {

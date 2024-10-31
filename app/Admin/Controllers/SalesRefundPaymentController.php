@@ -1,6 +1,9 @@
 <?php
 namespace App\Admin\Controllers;
 
+use App\Admin\Actions\Grid\Delete;
+use App\Admin\Actions\Grid\Edit;
+use App\Admin\Actions\Grid\Show;
 use App\Exceptions\SalesPaymentException;
 use App\Models\PenjualanRefund;
 use App\Services\Core\Sales\SalesRefundPaymentService;
@@ -9,7 +12,11 @@ use Encore\Admin\Facades\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Form\NestedForm;
 use Encore\Admin\Form\Tools;
+use Encore\Admin\Grid;
+use Encore\Admin\Grid\Displayers\DropdownActions;
+use Encore\Admin\Layout\Column;
 use Encore\Admin\Layout\Content;
+use Encore\Admin\Layout\Row;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +29,45 @@ class SalesRefundPaymentController extends AdminController
     {
         $this->salesRefundPaymentService = $salesRefundPaymentService;
     }
+    public function listRefundGrid() {
+        $grid = new Grid(new PenjualanRefund);
+        $grid->model()->with(['kontak']);
+        if (!isset($_GET['_sort']['column']) and empty($_GET['sort']['column'])) {
+            $grid->model()->orderByRaw('id_penjualanrefund desc');
+        }
+        $grid->column('transaksi_no', 'No. Transaksi')->link(function () {
+            return url()->route(admin_get_route('sales.refund.detail'), ['idRefund' => $this->id_penjualanrefund]);
+        })->sortable();
+        $grid->column('tanggal', 'Tanggal')->display(function ($val) {
+            return \date('d F Y', \strtotime($val));
+        })->sortable();
+        $grid->column('kontak.nama', 'Customer')->sortable();
+        $grid->column('catatan', 'Catatan');
+        $grid->column('total', 'Total')->display(function ($val) {
+            return 'Rp' . number_format($val, 0, ',', '.');
+        });
+        $grid->actions(function (DropdownActions $actions) {
+            $actions->disableDelete();
+            $actions->disableEdit();
+            $actions->disableView();
+            $actions->add(new Show);
+            $actions->add(new Edit());
+            // dump($this);
+            $actions->add(new Delete(route(admin_get_route('sales.refund.delete'), $this->row->id_penjualanrefund)));
+        });
+        return $grid;
+    }
+    public function listRefund(Content $content) {
+        return $content
+            ->title('Refund Penjualan Pembayaran')
+            ->description('Daftar')
+            ->row(function (Row $row) {
+                $row->column(12, function (Column $column) {
+                    $column->row($this->listRefundGrid());
+                });
+            });
+    }
+
     public function createRefundForm($model)
     {
         $form = new Form($model);
@@ -38,7 +84,7 @@ class SalesRefundPaymentController extends AdminController
                 $payment = $form->select('id_penjualanpembayaran', 'No. Transaksi')->setGroupClass('w-200px');
                 $url = route(admin_get_route('ajax.penjualan-pembayaran'));
                 $urlDetailPayment = route(admin_get_route('ajax.penjualan-pembayaran-detail'));
-                $selectAjaxInvoice = <<<SCRIPT
+                $selectAjaxInvoice = <<<JS
                     $("{$payment->getElementClassSelector()}").select2({
                         ajax: {
                             url: "$url",
@@ -113,7 +159,7 @@ class SalesRefundPaymentController extends AdminController
                         console.info(total); 
                         $('input.total').val(total);
                     });
-                SCRIPT;
+                JS;
                 $payment->setScript($selectAjaxInvoice);
                 $form->currency('nominalpembayaran', 'Nominal DP awal')->symbol('Rp')->disable();
                 $form->currency('sisapembayaran', 'Sisa pembayaran')->symbol('Rp')->disable();
@@ -142,7 +188,7 @@ class SalesRefundPaymentController extends AdminController
             
             $tools->append($tools->renderDelete(route(admin_get_route('sales.refund.delete'), ['idRefund' => $idRefund]), listPath: route(admin_get_route('sales.refund.create'))));
             $tools->append($tools->renderView(route(admin_get_route('sales.refund.detail'), ['idRefund' => $idRefund])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('sales.refund.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->select('id_kontak', 'Customer')->required()->ajax(route(admin_get_route('ajax.kontak-customer')))->attribute([
@@ -163,7 +209,7 @@ class SalesRefundPaymentController extends AdminController
                     $payment = $form->select('id_penjualanpembayaran', 'No. Transaksi')->setGroupClass('w-200px');
                     $url = route(admin_get_route('ajax.penjualan-pembayaran'));
                     $urlDetailPayment = route(admin_get_route('ajax.penjualan-pembayaran-detail'));
-                    $selectAjaxInvoice = <<<SCRIPT
+                    $selectAjaxInvoice = <<<JS
                         $("{$payment->getElementClassSelector()}").select2({
                             ajax: {
                                 url: "$url",
@@ -238,7 +284,7 @@ class SalesRefundPaymentController extends AdminController
                             console.info(total); 
                             $('input.total').val(total);
                         });
-                    SCRIPT;
+                    JS;
                     $payment->setScript($selectAjaxInvoice);
                 }
                 $form->currency('nominalpembayaran', 'Nominal DP awal')->default($row['penjualan_pembayaran_d_p']['nominal'] ?? null)->symbol('Rp')->disable();
@@ -268,7 +314,7 @@ class SalesRefundPaymentController extends AdminController
             
             $tools->append($tools->renderDelete(route(admin_get_route('sales.refund.delete'), ['idRefund' => $idRefund]), listPath: route(admin_get_route('sales.refund.create'))));
             $tools->append($tools->renderEdit(route(admin_get_route('sales.refund.edit'), ['idRefund' => $idRefund])));
-            $tools->append($tools->renderList(route(admin_get_route('produk-penyesuaian.list'))));
+            $tools->append($tools->renderList(route(admin_get_route('sales.refund.list'))));
         });
         $form->column(12, function (Form $form) use ($data) {
             $form->select('id_kontak', 'Customer')->required()->ajax(route(admin_get_route('ajax.kontak-customer')))->attribute([
@@ -289,7 +335,7 @@ class SalesRefundPaymentController extends AdminController
                     $payment = $form->select('id_penjualanpembayaran', 'No. Transaksi')->setGroupClass('w-200px');
                     $url = route(admin_get_route('ajax.penjualan-pembayaran'));
                     $urlDetailPayment = route(admin_get_route('ajax.penjualan-pembayaran-detail'));
-                    $selectAjaxInvoice = <<<SCRIPT
+                    $selectAjaxInvoice = <<<JS
                         $("{$payment->getElementClassSelector()}").select2({
                             ajax: {
                                 url: "$url",
@@ -364,7 +410,7 @@ class SalesRefundPaymentController extends AdminController
                             console.info(total); 
                             $('input.total').val(total);
                         });
-                    SCRIPT;
+                    JS;
                     $payment->setScript($selectAjaxInvoice);
                 }
                 $form->currency('nominalpembayaran', 'Nominal DP awal')->default($row['penjualan_pembayaran_d_p']['nominal'] ?? null)->symbol('Rp')->disable();
@@ -382,7 +428,7 @@ class SalesRefundPaymentController extends AdminController
 
     public function createRefund(Content $content)
     {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
@@ -420,10 +466,10 @@ class SalesRefundPaymentController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
         $urlGetDetailProduk = route(admin_get_route('ajax.produk-detail'));
-        $scriptDereferred = <<<SCRIPT
+        $scriptDereferred = <<<JS
             let idCustomer = null;
             $('select.id_kontak').change(function () {
                 idCustomer = $('select.id_kontak').val();
@@ -436,7 +482,7 @@ class SalesRefundPaymentController extends AdminController
                 console.info(total); 
                 $('input.total').val(total);
             });
-        SCRIPT;
+        JS;
         Admin::script($scriptDereferred, true);
         return $content
             ->title('Refund Penjualan Pembayaran')
@@ -445,7 +491,7 @@ class SalesRefundPaymentController extends AdminController
     }
     public function editRefund(Content $content, $idRefund)
     {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
@@ -483,7 +529,7 @@ class SalesRefundPaymentController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
         $urlGetDetailProduk = route(admin_get_route('ajax.produk-detail'));
         $scriptDereferred = <<<JS
@@ -544,7 +590,7 @@ class SalesRefundPaymentController extends AdminController
     }
     public function detailRefund(Content $content, $idRefund)
     {
-        $style = <<<STYLE
+        $style = <<<CSS
             .input-group {
                 width: 100% !important;   
             }
@@ -582,7 +628,7 @@ class SalesRefundPaymentController extends AdminController
             [class*='col-md-'] {
                 margin-bottom: 2rem;
             }
-        STYLE;
+        CSS;
         Admin::style($style);
         $urlGetDetailProduk = route(admin_get_route('ajax.produk-detail'));
         $scriptDereferred = <<<JS
