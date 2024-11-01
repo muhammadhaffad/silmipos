@@ -12,6 +12,11 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
+    const CREATED_AT = 'inserted_at';
+    const UPDATED_AT = 'updated_at';
+    protected $table = 'toko_griyanaura.admin_users';
+    protected $primaryKey = 'id';
+
     /**
      * The attributes that are mass assignable.
      *

@@ -1,0 +1,13 @@
+﻿alter table admin_menu set schema toko_griyanaura;
+alter table admin_operation_log set schema toko_griyanaura;
+alter table admin_permissions set schema toko_griyanaura;
+alter table admin_role_menu set schema toko_griyanaura;
+alter table admin_role_permissions set schema toko_griyanaura;
+alter table admin_role_users set schema toko_griyanaura;
+alter table admin_roles set schema toko_griyanaura;
+alter table admin_user_permissions set schema toko_griyanaura;
+alter table admin_users set schema toko_griyanaura;
+alter table failed_jobs set schema toko_griyanaura;
+alter table migrations set schema toko_griyanaura;
+alter table password_reset_tokens set schema toko_griyanaura;
+alter table personal_access_tokens set schema toko_griyanaura;

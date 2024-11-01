@@ -2,7 +2,7 @@
 
 namespace App\Providers\Filament;
 
-use Coolsam\Modules\ModulesPlugin;
+use App\Filament\PointOfSale\Auth\Login;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
@@ -19,15 +19,16 @@ use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
-class AdminPanelProvider extends PanelProvider
+class PointOfSalePanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
         return $panel
             ->default()
-            ->id('pointofsale')
-            ->path('pointofsale')
-            ->login()
+            ->brandName('SilmiPOS')
+            ->id('pos')
+            ->path('pos')
+            ->login(Login::class)
             ->colors([
                 'primary' => Color::Amber,
             ])
