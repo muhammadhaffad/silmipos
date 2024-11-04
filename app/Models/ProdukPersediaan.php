@@ -31,4 +31,8 @@ class ProdukPersediaan extends Model
             ->leftJoin('toko_griyanaura.lv_attribut as a', 'a.id_attribut', 'at.id_attribut')
             ->groupBy('toko_griyanaura.ms_produkvarian.kode_produkvarian');
     }
+
+    public function gudang() {
+        return $this->hasOne(Gudang::class, 'id_gudang', 'id_gudang');
+    }
 }
