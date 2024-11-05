@@ -11,6 +11,7 @@ use App\Models\ProdukVarianHarga;
 use App\Models\Transaksi;
 use App\Services\Core\Jurnal\JurnalService;
 use Encore\Admin\Facades\Admin;
+use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
@@ -77,6 +78,11 @@ class PenyesuaianGudangService
             $penyesuaianGudang = PenyesuaianGudang::where('id_penyesuaiangudang', $request['id_penyesuaiangudang'])->first();
             if ($penyesuaianGudang->is_valid) {
                 abort(403);
+            }
+            $produkVarian = ProdukVarian::where('kode_produkvarian', $request['kode_produkvarian'])->first();
+            $produkVarian->load('produk');
+            if (!$produkVarian->produk->in_stok) {
+                throw new Exception('Produk tidak untuk distok');
             }
             $persediaanProduk = ProdukPersediaan::where('kode_produkvarian', $request['kode_produkvarian'])->where('id_gudang', $request['id_gudang'])->addSelect(['hargabeli_avg' => ProdukPersediaanDetail::select(DB::raw('(sum(hargabeli*coalesce(stok_in,0) - hargabeli*coalesce(stok_out,0))/nullif(sum(coalesce(stok_in,0))-sum(coalesce(stok_out,0)),0))::int'))
                 ->whereColumn('toko_griyanaura.ms_produkpersediaandetail.id_persediaan', 'toko_griyanaura.ms_produkpersediaan.id_persediaan')

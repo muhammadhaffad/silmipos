@@ -55,6 +55,10 @@ class PointOfSalePanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
-            ]);
+            ])
+            ->sidebarCollapsibleOnDesktop(function () {
+                return \request()->is('pos/cashier');
+            })
+            ->viteTheme('resources/css/app.css');
     }
 }

@@ -5,8 +5,10 @@ namespace App\Filament\PointOfSale\Pages;
 use App\Filament\PointOfSale\Traits\InteractWithTabsTrait;
 use App\Models\Gudang;
 use App\Models\ProdukPersediaan;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
 use Filament\Pages\Concerns\ExposesTableToWidgets;
 use Filament\Pages\Page;
 use Filament\Resources\Components\Tab;
@@ -51,9 +53,16 @@ class Cashier extends Page implements HasForms, HasTable
         return $tabs;
     } */
 
-    public function getTableRecordKey(Model $record): string
+    /* public function getTableRecordKey(Model $record): string
     {
-        return $record->id_persediaan || '-' || $record->produk;
+        return $record->id_persediaan . '-' . $record->produkVarian->produk->id_produk;
+    } */
+
+    public function form(Form $form): Form
+    {
+        return $form->schema([
+            TextInput::make('test')
+        ]);
     }
 
     public function table(Table $table): Table
@@ -63,6 +72,7 @@ class Cashier extends Page implements HasForms, HasTable
             ->modelLabel('ProdukPersediaan')
             ->modifyQueryUsing($this->modifyQueryWithActiveTab(...))
             ->paginated()
+            ->paginationPageOptions([8, 16, 32, 64, 'all'])
             ->filters([
                 SelectFilter::make('id_gudang')
                     ->label('Gudang')
@@ -74,15 +84,22 @@ class Cashier extends Page implements HasForms, HasTable
             ], layout: FiltersLayout::AboveContent)
             ->columns([
                 Stack::make([
-                    TextColumn::make('')
-                        ->default(1)
-                        ->extraAttributes([
-                            'class' => 'mb-2'
-                        ])
-                        ->alignEnd()
-                        ->badge(),
+                    Split::make([
+                        TextColumn::make('gudang.nama')
+                            ->formatStateUsing(function (ProdukPersediaan $row) {
+                                return $row->gudang?->nama ? ("Gudang {$row->gudang?->nama}") : 'Tidak distok';
+                            })
+                            ->default('Tidak distok')
+                            ->color('success')
+                            ->size('xs')
+                            ->badge(),
+                        TextColumn::make('')
+                            ->default('')
+                            ->icon('heroicon-o-shopping-bag')
+                    ]),
                     TextColumn::make('kode_produkvarian')
                         ->size('xs')
+                        ->hidden()
                         ->searchable(),
                     TextColumn::make('produkVarian.produk.nama')
                         ->searchable(query: function (Builder $query) {
@@ -96,48 +113,37 @@ class Cashier extends Page implements HasForms, HasTable
                                     ->having(DB::raw("prd.nama || ' '|| string_agg(coalesce(av.nama,''), ' ' order by pav.id_produkattributvalue)"), 'ilike', '%' . $this->tableSearch . '%')
                                     ->groupBy('prd.id_produk', 'toko_griyanaura.ms_produkvarian.kode_produkvarian');
                             });
-                        })
-                        ->formatStateUsing(function (ProdukPersediaan $row) {
-                            return $row->produkVarian->produk->nama . ' ' . $row->produkVarian->varian;
                         }),
-                    TextColumn::make('produkVarianHarga.hargajual')
-                        ->money('idr'),
-                    TextColumn::make('stok')->formatStateUsing(function ($state) {
-                        return 'Stok: ' . number($state);
-                    })
-                        ->badge()
-                        ->color(function ($state, ProdukPersediaan $row) {
-                            if (number($state) <= $row->produkVarian?->produk?->minstok) {
-                                return 'danger';
-                            } 
-                            return 'info';
+                    TextColumn::make('produkVarian.varian')
+                        ->size('xs')
+                        ->placeholder(function (ProdukPersediaan $row) {
+                            return $row->produkVarian->produk->nama;
                         })
                         ->extraAttributes([
-                            'class' => 'mt-2'
-                        ])
-                        ->hidden(function (ProdukPersediaan $row) {
-                            return !$row->produkVarian?->produk?->in_stok;
+                            'class' => 'overflow-hidden'
+                        ]),
+                    Split::make([
+
+                        TextColumn::make('stok')->formatStateUsing(function ($state) {
+                            return 'Stok: ' . number($state);
                         })
-                ]),
-                Split::make([
-                    TextColumn::make('produkVarian.produk.in_stok')->formatStateUsing(function (ProdukPersediaan $row) {
-                        if ($row->produkVarian->produk->in_stok) 
-                            return 'Di stok';
-                        else 
-                            return 'Tidak di stok';
-                    })->color(function ($state) {
-                        if ($state) 
-                            return 'success';
-                        else
-                            return 'warning';
-                    })->badge(),
-                    TextColumn::make('gudang.nama')->formatStateUsing(function (ProdukPersediaan $row) {
-                        return 'Gudang ' . $row->gudang->nama;
-                    })->color('success')->badge()
-                ])->extraAttributes([
-                    'class' => 'mt-2',
-                    'style' => 'width: fit-content; gap: .5rem'
-                ])
+                            ->badge()
+                            ->color(function ($state, ProdukPersediaan $row) {
+                                if (number($state) <= $row->produkVarian?->produk?->minstok) {
+                                    return 'danger';
+                                } 
+                                return 'info';
+                            })
+                            ->hidden(function (ProdukPersediaan $row) {
+                                return !$row->produkVarian?->produk?->in_stok;
+                            }),
+                        TextColumn::make('produkVarianHarga.hargajual')
+                            ->formatStateUsing(function ($state) {
+                                return 'Rp' . \number_format($state, 0, ',', '.');
+                            })
+                            ->alignEnd(),
+                    ])
+                ])->space(1)
             ])
             ->contentGrid([
                 'md' => 3,
