@@ -134,6 +134,15 @@ class ProdukService
                         'inserted_by' => Admin::user()->username,
                         'updated_by' => Admin::user()->username
                     ]);
+                } else {
+                    DB::table('toko_griyanaura.ms_produkpersediaan')->insert([
+                        'kode_produkvarian' => $kodeProdukVarian,
+                        'id_gudang' => null, // Gudang Pusat
+                        'stok' => 0,
+                        'default_varianharga' => $idProdukVarianHarga,
+                        'inserted_by' => Admin::user()->username,
+                        'updated_by' => Admin::user()->username
+                    ]);
                 }
                 $key++;
             }
