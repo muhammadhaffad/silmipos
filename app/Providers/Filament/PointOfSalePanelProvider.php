@@ -30,7 +30,7 @@ class PointOfSalePanelProvider extends PanelProvider
             ->path('pos')
             ->login(Login::class)
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => Color::Blue,
             ])
             ->discoverResources(in: app_path('Filament/PointOfSale/Resources'), for: 'App\\Filament\\PointOfSale\\Resources')
             ->discoverPages(in: app_path('Filament/PointOfSale/Pages'), for: 'App\\Filament\\PointOfSale\\Pages')
