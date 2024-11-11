@@ -351,6 +351,8 @@ class Cashier extends Page implements HasForms, HasTable
                     return $items->sum('qty'); // Menjumlahkan qty dalam setiap grup
                 })
                 ->toArray();
+        } else {
+            $this->totalQty = [];
         }
     }
     public function addToCart(ProdukPersediaan $record)
