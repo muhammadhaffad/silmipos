@@ -38,6 +38,7 @@ use Filament\Tables\Table;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
@@ -56,6 +57,7 @@ class Cashier extends Page implements HasForms, HasTable
     protected $listeners = ['refresh-table' => '$refresh', 'calc-total-qty' => 'calcTotalQty'];
     public $counter;
     public $totalQty;
+
     /* public function getTabs(): array
     {
         $tabs = [
@@ -81,19 +83,30 @@ class Cashier extends Page implements HasForms, HasTable
     {
         return '';
     }
+
+    public function create(): void {
+        $this->form->getState();
+    }
+
     public function form(Form $form): Form
     {
         return $form->schema([
-            Section::make('Pesanan Baru')
+            Section::make()
                 ->schema([
                     Repeater::make('detail_pesanan')
                         ->schema([
                             Placeholder::make('produk_deskripsi')
-                                ->content(function (Get $get/* $component */) {
+                                ->content(function (Get $get, Set $set) {
                                     $productName = $get('nama_produk');
                                     $variantName = $get('nama_varian');
                                     $image = $get('image') ?: 'https://www.svgrepo.com/show/508699/landscape-placeholder.svg';
-                                    $subTotal = number_format($get('hargajual') * (float)$get('qty') * (1 - $get('diskon') / 100), 0, ',', '.');
+                                    $subTotal = (int)$get('hargajual') * (float)$get('qty') * (1 - $get('diskon') / 100);
+                                    $set('subtotal', $subTotal);
+                                    $total = Arr::map($get('../'), function ($item) {
+                                        return $item['subtotal'];
+                                    });
+                                    $set('../../subtotal', array_sum($total));
+                                    $subTotal = number_format($subTotal, 0, ',', '.');
                                     return new HtmlString(<<<HTML
                                         <div class="flex gap-3">
                                             <img src="{$image}" class="w-16 h-16 rounded" alt="" />
@@ -130,6 +143,10 @@ class Cashier extends Page implements HasForms, HasTable
                                             <div class="h-[32px] flex flex-col grow justify-center -space-y-1 text-xs">{$price}</div>
                                         HTML);
                                     })
+                                    ->extraAttributes([
+                                        'class' => 'grow'
+                                    ])
+                                    ->grow(false)
                                     ->hiddenLabel(),
                                 FormSplit::make([
                                     Actions::make([
@@ -137,20 +154,15 @@ class Cashier extends Page implements HasForms, HasTable
                                             ->iconButton()
                                             ->icon('heroicon-m-trash')
                                             ->color('danger')
-                                            ->action(function (Get $get, $component): void {
-                                                $uuid = \explode('.', $component->getStatePath());
-                                                $uuid = end($uuid);
-                                                // dump(\get_class_methods($component->getParentRepeater()->getChildComponentContainers()[$uuid]));
-                                                /* $items = $get('../');
-                                                unset($items[$uuid]);
-                                
-                                                $component->state($items);
-                                                
-                                                $component->callAfterStateUpdated(); */
-                                                $this->mountFormComponentAction('data.detail_pesanan', 'delete', ['item' => $uuid]);
+                                            ->action(function (Get $get, Set $set, $component, $action) {
+                                                $livewire = $component->getLivewire();
+                                                data_forget($livewire, $component->getStatePath());
+                                            })
+                                            ->after(function () {
+                                                $this->calcTotalQty();
                                             })
                                     ])->grow(false)->extraAttributes([
-                                        'class' => 'justify-center h-[32px]'
+                                        'class' => 'justify-center !h-[32px]'
                                     ]),
                                     TextInput::make('qty')
                                         ->numeric()
@@ -180,8 +192,8 @@ class Cashier extends Page implements HasForms, HasTable
                                                             ->label('Harga')
                                                             ->numeric()
                                                             ->mask(RawJs::make(<<<'JS'
-                                                        $money($input, ',', '.', 2)
-                                                    JS))
+                                                                $money($input, ',', '.', 2)
+                                                            JS))
                                                             ->stripCharacters('.')
                                                             ->extraAlpineAttributes([
                                                                 'x-ref' => 'input',
@@ -213,74 +225,28 @@ class Cashier extends Page implements HasForms, HasTable
                                             $this->calcTotalQty();
                                         })
                                 ])
+                                    ->grow(false)
                                     ->extraAttributes([
                                         'class' => '!gap-3'
                                     ])
                             ])
+                                ->extraAttributes([
+                                    'class' => '[&>div:nth-child(1)]:md:flex-1 [&>div:nth-child(1)]:md:w-full [&>div:nth-child(1)]:lg:flex-none [&>div:nth-child(1)]:lg:w-auto [&>div:nth-child(1)]:xl:flex-1 [&>div:nth-child(1)]:xl:w-full [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:w-full'
+                                ])
                         ])
+                        ->view('filament.pages.point-of-sale.components.repeater.index')
+                        ->default([])
                         ->addable(false)
                         ->reorderable(false)
                         ->hiddenLabel()
-                        ->extraItemActions([
-                            /* Action::make('detail_item')
-                                ->modalWidth('md')
-                                ->label(function ($component, $arguments, Get $get) {
-                                    $productName = $get("{$component->getStatePath()}.{$arguments['item']}.nama_produk", true);
-                                    $variantName = $get("{$component->getStatePath()}.{$arguments['item']}.nama_varian", true);
-                                    return "{$productName} {$variantName}";
-                                })
-                                ->fillForm(function ($arguments, $component) {
-                                    $data = $component->getState()[$arguments['item']];
-                                    return [
-                                        'diskon' => $data['diskon'],
-                                        'hargajual' => $data['hargajual']
-                                    ];
-                                })
-                                ->form([
-                                    FormSplit::make([
-                                        TextInput::make('hargajual')
-                                            ->label('Harga')
-                                            ->numeric()
-                                            ->mask(RawJs::make(<<<'JS'
-                                                $money($input, ',', '.', 2)
-                                            JS))
-                                            ->stripCharacters('.')
-                                            ->extraAlpineAttributes([
-                                                'x-ref' => 'input',
-                                                'x-on:keyup' => '$refs.input.blur(); $refs.input.focus()'
-                                            ])
-                                            ->prefix('Rp'),
-                                        TextInput::make('diskon')
-                                            ->label('Diskon (%)')
-                                            ->numeric()
-                                            ->maxValue(100)
-                                            ->suffix('%')
-                                    ])
-                                ])
-                                ->tooltip('Atur harga dan diskon')
-                                ->icon('heroicon-m-cog-6-tooth')
-                                ->action(function ($arguments, $component, $data, Set $set) {
-                                    $set("{$component->getStatePath()}.{$arguments['item']}.hargajual", $data['hargajual'], true);
-                                    $set("{$component->getStatePath()}.{$arguments['item']}.diskon", $data['diskon'], true);
-                                }) */])
+                        ->deletable(false)
                         ->extraAttributes([
-                            'class' => '[&>ul>div>li>div:nth-child(2)>div]:gap-3'
+                            'class' => '[&>ul>div>li>div>div]:!gap-3 scrollbar overflow-y-auto p-[1px] max-h-[calc(100vh-200px)]'
                         ])
                         ->registerListeners([
                             'detail_pesanan::add_to_cart' => [
                                 function (Component $component, ?array $data): void {
                                     $statePath = $component->getStatePath();
-
-                                    // if (data_get($livewire, "{$statePath}.{$sku}")) {
-                                    //     $currentItem = data_get($livewire, "{$statePath}.{$sku}");
-                                    //     if ($currentItem['diskon'] != $data['diskon'] or $currentItem['hargajual'] != $data['hargajual']) {
-
-                                    //     } else {
-                                    //         $currentItem['qty'] += $data['qty'];
-                                    //         $data = $currentItem;
-                                    //     }
-                                    // } else {
-                                    // }
                                     $unique = (string) Str::uuid();
                                     $livewire = $component->getLivewire();
                                     data_set($livewire, "{$statePath}.{$unique}", []);
@@ -291,10 +257,38 @@ class Cashier extends Page implements HasForms, HasTable
                         ]),
                     Select::make('customer')
                         ->native(false),
-                    TextInput::make('subtotal')
-                        ->disabled(),
-                    TextInput::make('diskon')
-                        ->live(),
+                    FormSplit::make([
+                        TextInput::make('subtotal')
+                            ->mask(RawJs::make(<<<'JS'
+                                $money($input, ',', '.', 2)
+                            JS))
+                            ->stripCharacters('.')
+                            ->extraAlpineAttributes([
+                                'x-ref' => 'input',
+                                'x-on:keyup' => '$refs.input.blur(); $refs.input.focus()'
+                            ])
+                            ->numeric()
+                            ->live()
+                            ->placeholder(function (Get $get) {
+                                $map = Arr::map($get('detail_pesanan'), function ($item) {
+                                    return $item['subtotal'];
+                                });
+                                return array_sum($map);
+                            })                
+                            ->prefix('Rp')
+                            ->readOnly()
+                            ->grow(false),
+                        TextInput::make('diskon')
+                            ->numeric()
+                            ->default(0)
+                            ->minValue(0)
+                            ->suffix('%')
+                            ->maxValue(100)
+                            ->live()
+                            ->grow(false),
+                    ])->extraAttributes([
+                        'class' => '[&>div:nth-child(1)]:w-2/3 [&>div:nth-child(2)]:w-1/3'
+                    ]),
                     TextInput::make('total')
                         ->disabled(),
                     Actions::make([
@@ -347,7 +341,7 @@ class Cashier extends Page implements HasForms, HasTable
                                 'class' => 'absolute top-0 start-0 end-0 justify-end -translate-y-2 translate-x-2'
                             ])
 
-                            ->badge()
+                            ->badge() 
                             ->color(' !bg-blue-600 !text-white')
                     ]),
                     TextColumn::make('kode_produkvarian')
@@ -390,7 +384,10 @@ class Cashier extends Page implements HasForms, HasTable
                                 return 'Rp' . \number_format($state, 0, ',', '.');
                             })
                             ->alignEnd(),
-                    ]),
+                    ])
+                        ->extraAttributes([
+                            'class' => '!flex-wrap !gap-0 !space-y-0'
+                        ]),
                     TextColumn::make('gudang.nama')
                         ->formatStateUsing(function (ProdukPersediaan $row) {
                             return $row->gudang?->nama ? ("Gudang {$row->gudang?->nama}") : 'Tidak distok';
@@ -404,12 +401,14 @@ class Cashier extends Page implements HasForms, HasTable
                 ])->space(2)
             ])
             ->contentGrid([
-                'md' => 3,
+                'default' => 2,
+                'lg' => 3,
                 'xl' => 4
             ])
             ->recordAction('addToCart')
             ->deferLoading();
     }
+
     public function calcTotalQty()
     {
         if (isset($this->data['detail_pesanan'])) {
@@ -447,8 +446,9 @@ class Cashier extends Page implements HasForms, HasTable
                     'qty' => 1,
                     'hargajual' => $record->produkVarianHarga->hargajual,
                     'diskon' => 0,
-                    'stok' => $record->stok
+                    'stok' => $record->stok,
                 ];
+                $data['subtotal'] = (int) $data['hargajual'] * (float) $data['qty'] * (1 - (float) $data['diskon']/ 100);
                 $this->dispatchFormEvent('detail_pesanan::add_to_cart', $data);
             }
         } else {
@@ -463,5 +463,6 @@ class Cashier extends Page implements HasForms, HasTable
         $this->totalQty = [];
         $this->counter = 1;
         $this->loadDefaultActiveTab();
+        $this->form->fill();
     }
 }

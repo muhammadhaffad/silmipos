@@ -1,6 +1,6 @@
 <x-filament-panels::page>
-    <div class="md:flex gap-4">
-        <div class="w-full md:w-2/3">
+    <div class="sm:flex gap-4">
+        <div class="w-full sm:w-1/2 lg:w-2/3">
             <x-filament-panels::resources.tabs />
             <div wire:loading.class="opacity-50" class="relative"
                 wire:target="tableFilters,applyTableFilters,resetTableFiltersForm, nextPage, gotoPage, previousPage, tableRecordsPerPage, activeTab, addToCart">
@@ -11,7 +11,7 @@
                 </div>
             </div>
         </div>
-        <div class="hidden md:block md:w-1/3">
+        <div class="w-full sm:w-1/2 lg:w-1/3">
             <x-filament-panels::form>
                 {{ $this->form }}
             </x-filament-panels::form>
