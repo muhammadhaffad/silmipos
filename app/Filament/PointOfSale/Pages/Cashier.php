@@ -96,17 +96,12 @@ class Cashier extends Page implements HasForms, HasTable
                     Repeater::make('detail_pesanan')
                         ->schema([
                             Placeholder::make('produk_deskripsi')
+                                ->live()
                                 ->content(function (Get $get, Set $set) {
                                     $productName = $get('nama_produk');
                                     $variantName = $get('nama_varian');
                                     $image = $get('image') ?: 'https://www.svgrepo.com/show/508699/landscape-placeholder.svg';
-                                    $subTotal = (int)$get('hargajual') * (float)$get('qty') * (1 - $get('diskon') / 100);
-                                    $set('subtotal', $subTotal);
-                                    $total = Arr::map($get('../'), function ($item) {
-                                        return $item['subtotal'];
-                                    });
-                                    $set('../../subtotal', array_sum($total));
-                                    $subTotal = number_format($subTotal, 0, ',', '.');
+                                    $subTotal = \number_format((int)$get('hargajual') * (float)$get('qty') * (1 - $get('diskon') / 100), 0, ',', '.');
                                     return new HtmlString(<<<HTML
                                         <div class="flex gap-3">
                                             <img src="{$image}" class="w-16 h-16 rounded" alt="" />
@@ -158,7 +153,7 @@ class Cashier extends Page implements HasForms, HasTable
                                                 $livewire = $component->getLivewire();
                                                 data_forget($livewire, $component->getStatePath());
                                             })
-                                            ->after(function () {
+                                            ->after(function (Get $get, Set $set) {
                                                 $this->calcTotalQty();
                                             })
                                     ])->grow(false)->extraAttributes([
@@ -214,7 +209,7 @@ class Cashier extends Page implements HasForms, HasTable
                                                     $set("diskon", $data['diskon']);
                                                 })
                                         )
-                                        ->live()
+                                        ->live(debounce: 300)
                                         ->minValue(1)
                                         ->maxValue(function (Get $get) {
                                             return $get('produk_distok') ? $get('stok') : 1;
@@ -236,6 +231,7 @@ class Cashier extends Page implements HasForms, HasTable
                         ])
                         ->view('filament.pages.point-of-sale.components.repeater.index')
                         ->default([])
+                        ->live()
                         ->addable(false)
                         ->reorderable(false)
                         ->hiddenLabel()
@@ -258,7 +254,15 @@ class Cashier extends Page implements HasForms, HasTable
                     Select::make('customer')
                         ->native(false),
                     FormSplit::make([
-                        TextInput::make('subtotal')
+                        TextInput::make('total')
+                            ->numeric()
+                            ->placeholder(function (Set $set, Get $get) {
+                                $total = 0;
+                                foreach ($get('detail_pesanan') ?: [] as $key => $item) {
+                                    $total += (int)((int)$item['hargajual'] * (float)$item['qty']*(1 - (float)$item['diskon']/100)); 
+                                }
+                                $set('total', \number_format($total, 0, ',', '.'));
+                            })
                             ->mask(RawJs::make(<<<'JS'
                                 $money($input, ',', '.', 2)
                             JS))
@@ -267,16 +271,9 @@ class Cashier extends Page implements HasForms, HasTable
                                 'x-ref' => 'input',
                                 'x-on:keyup' => '$refs.input.blur(); $refs.input.focus()'
                             ])
-                            ->numeric()
-                            ->live()
-                            ->placeholder(function (Get $get) {
-                                $map = Arr::map($get('detail_pesanan'), function ($item) {
-                                    return $item['subtotal'];
-                                });
-                                return array_sum($map);
-                            })                
-                            ->prefix('Rp')
                             ->readOnly()
+                            ->live()
+                            ->prefix('Rp')
                             ->grow(false),
                         TextInput::make('diskon')
                             ->numeric()
@@ -289,7 +286,8 @@ class Cashier extends Page implements HasForms, HasTable
                     ])->extraAttributes([
                         'class' => '[&>div:nth-child(1)]:w-2/3 [&>div:nth-child(2)]:w-1/3'
                     ]),
-                    TextInput::make('total')
+                    TextInput::make('grandTotal')
+                        ->label('Grand Total')
                         ->disabled(),
                     Actions::make([
                         Action::make('test')
@@ -448,7 +446,6 @@ class Cashier extends Page implements HasForms, HasTable
                     'diskon' => 0,
                     'stok' => $record->stok,
                 ];
-                $data['subtotal'] = (int) $data['hargajual'] * (float) $data['qty'] * (1 - (float) $data['diskon']/ 100);
                 $this->dispatchFormEvent('detail_pesanan::add_to_cart', $data);
             }
         } else {
