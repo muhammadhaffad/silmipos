@@ -1,7 +1,4 @@
 <x-filament-panels::page>
-    @php
-        dump($totalQty);
-    @endphp
     <div class="md:flex gap-4">
         <div class="w-full md:w-2/3">
             <x-filament-panels::resources.tabs />

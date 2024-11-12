@@ -20,6 +20,7 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
+use Filament\Notifications\Notification;
 use Filament\Pages\Concerns\ExposesTableToWidgets;
 use Filament\Pages\Page;
 use Filament\Resources\Components\Tab;
@@ -52,7 +53,7 @@ class Cashier extends Page implements HasForms, HasTable
     protected static ?string $title = null;
     protected static string $view = 'filament.pages.point-of-sale.cashier';
     public ?array $data = [];
-    protected $listeners = ['refresh-table' => '$refresh'];
+    protected $listeners = ['refresh-table' => '$refresh', 'calc-total-qty' => 'calcTotalQty'];
     public $counter;
     public $totalQty;
     /* public function getTabs(): array
@@ -92,14 +93,17 @@ class Cashier extends Page implements HasForms, HasTable
                                     $productName = $get('nama_produk');
                                     $variantName = $get('nama_varian');
                                     $image = $get('image') ?: 'https://www.svgrepo.com/show/508699/landscape-placeholder.svg';
-                                    $subTotal = number_format($get('hargajual') * $get('qty') * (1 - $get('diskon') / 100), 0, ',', '.');
+                                    $subTotal = number_format($get('hargajual') * (float)$get('qty') * (1 - $get('diskon') / 100), 0, ',', '.');
                                     return new HtmlString(<<<HTML
                                         <div class="flex gap-3">
-                                            <img src="{$image}" class="w-20 h-20 rounded" alt="" />
-                                            <div class="space-y-1">
-                                                <span class="block">{$productName}</span>
-                                                <span class="block text-xs">{$variantName}</span>
-                                                <span class="block">Rp{$subTotal}</span>
+                                            <img src="{$image}" class="w-16 h-16 rounded" alt="" />
+                                            <div class="space-y-1 w-full">
+                                                <div class="w-full flex gap-2 justify-between items-center">
+                                                    <span class="block text-sm truncate">{$productName}</span>
+                                                    <span class="block whitespace-nowrap text-xs text-gray-500">Gudang {$get('nama_gudang')}</span>
+                                                </div>
+                                                <span class="block text-xs truncate">{$variantName}</span>
+                                                <span class="block text-xs">Rp{$subTotal}</span>
                                             </div>
                                         </div> 
                                     HTML);
@@ -113,7 +117,7 @@ class Cashier extends Page implements HasForms, HasTable
                                             $price = 'Rp' . number_format($get('hargajual'), 0, ',', '.');
                                         } else {
                                             $oldPrice = 'Rp' . number_format($get('hargajual'), 0, ',', '.');
-                                            $newPrice = 'Rp' . number_format($get('hargajual') * (1-$get('diskon')/100), 0, ',', '.');
+                                            $newPrice = 'Rp' . number_format($get('hargajual') * (1 - $get('diskon') / 100), 0, ',', '.');
                                             $discount = $get('diskon');
                                             $price = <<<HTML
                                                 <span>
@@ -123,34 +127,102 @@ class Cashier extends Page implements HasForms, HasTable
                                             HTML;
                                         }
                                         return new HtmlString(<<<HTML
-                                            <div class="h-9 flex flex-col justify-center -space-y-1">{$price}</div>
+                                            <div class="h-[32px] flex flex-col grow justify-center -space-y-1 text-xs">{$price}</div>
                                         HTML);
                                     })
                                     ->hiddenLabel(),
-                                TextInput::make('qty')
-                                    ->numeric()
-                                    ->hiddenLabel()
-                                    ->extraInputAttributes([
-                                        'class' => 'text-center'
+                                FormSplit::make([
+                                    Actions::make([
+                                        Action::make('delete')
+                                            ->iconButton()
+                                            ->icon('heroicon-m-trash')
+                                            ->color('danger')
+                                            ->action(function (Get $get, $component): void {
+                                                $uuid = \explode('.', $component->getStatePath());
+                                                $uuid = end($uuid);
+                                                // dump(\get_class_methods($component->getParentRepeater()->getChildComponentContainers()[$uuid]));
+                                                /* $items = $get('../');
+                                                unset($items[$uuid]);
+                                
+                                                $component->state($items);
+                                                
+                                                $component->callAfterStateUpdated(); */
+                                                $this->mountFormComponentAction('data.detail_pesanan', 'delete', ['item' => $uuid]);
+                                            })
+                                    ])->grow(false)->extraAttributes([
+                                        'class' => 'justify-center h-[32px]'
+                                    ]),
+                                    TextInput::make('qty')
+                                        ->numeric()
+                                        ->hiddenLabel()
+                                        ->extraInputAttributes([
+                                            'class' => 'text-center text-sm !p-[4px]'
+                                        ])
+                                        ->maxWidth('10')
+                                        ->suffixAction(
+                                            Action::make('detail_item')
+                                                ->modalWidth('md')
+                                                ->label(function (Get $get) {
+                                                    $productName = $get("nama_produk", true);
+                                                    $variantName = $get("nama_varian", true);
+                                                    return "{$productName} {$variantName}";
+                                                })
+                                                ->color('gray')
+                                                ->fillForm(function (Get $get) {
+                                                    return [
+                                                        'diskon' => $get('diskon'),
+                                                        'hargajual' => $get('hargajual')
+                                                    ];
+                                                })
+                                                ->form([
+                                                    FormSplit::make([
+                                                        TextInput::make('hargajual')
+                                                            ->label('Harga')
+                                                            ->numeric()
+                                                            ->mask(RawJs::make(<<<'JS'
+                                                        $money($input, ',', '.', 2)
+                                                    JS))
+                                                            ->stripCharacters('.')
+                                                            ->extraAlpineAttributes([
+                                                                'x-ref' => 'input',
+                                                                'x-on:keyup' => '$refs.input.blur(); $refs.input.focus()'
+                                                            ])
+                                                            ->prefix('Rp'),
+                                                        TextInput::make('diskon')
+                                                            ->label('Diskon (%)')
+                                                            ->numeric()
+                                                            ->maxValue(100)
+                                                            ->suffix('%')
+                                                    ])
+                                                ])
+                                                ->tooltip('Atur harga dan diskon')
+                                                ->icon('heroicon-m-ellipsis-vertical')
+                                                ->action(function ($data, Set $set) {
+                                                    $set("hargajual", $data['hargajual']);
+                                                    $set("diskon", $data['diskon']);
+                                                })
+                                        )
+                                        ->live()
+                                        ->minValue(1)
+                                        ->maxValue(function (Get $get) {
+                                            return $get('produk_distok') ? $get('stok') : 1;
+                                        })
+                                        ->afterStateUpdated(function ($livewire, $state, $component) {
+                                            $livewire->validateOnly($component->getStatePath());
+                                            $livewire->dispatch('refresh-table');
+                                            $this->calcTotalQty();
+                                        })
+                                ])
+                                    ->extraAttributes([
+                                        'class' => '!gap-3'
                                     ])
-                                    ->maxWidth('10')
-                                    ->prefix('Qty')
-                                    ->minValue(1)
-                                    ->maxValue(function ($component) {
-                                        return $component->getContainer()->getRawState()['stok'];
-                                    })
-                                    ->live()
-                                    ->afterStateUpdated(function ($livewire, $state, $component) {
-                                        $livewire->dispatch('refresh-table');
-                                        $this->calcTotalQty();
-                                    })
                             ])
                         ])
                         ->addable(false)
                         ->reorderable(false)
                         ->hiddenLabel()
                         ->extraItemActions([
-                            Action::make('detail_item')
+                            /* Action::make('detail_item')
                                 ->modalWidth('md')
                                 ->label(function ($component, $arguments, Get $get) {
                                     $productName = $get("{$component->getStatePath()}.{$arguments['item']}.nama_produk", true);
@@ -190,15 +262,10 @@ class Cashier extends Page implements HasForms, HasTable
                                 ->action(function ($arguments, $component, $data, Set $set) {
                                     $set("{$component->getStatePath()}.{$arguments['item']}.hargajual", $data['hargajual'], true);
                                     $set("{$component->getStatePath()}.{$arguments['item']}.diskon", $data['diskon'], true);
-                                })
-                        ])
+                                }) */])
                         ->extraAttributes([
                             'class' => '[&>ul>div>li>div:nth-child(2)>div]:gap-3'
                         ])
-                        ->deleteAction(function(Action $action) {
-                            $action->requiresConfirmation();
-                            $this->calcTotalQty();
-                        })
                         ->registerListeners([
                             'detail_pesanan::add_to_cart' => [
                                 function (Component $component, ?array $data): void {
@@ -207,7 +274,7 @@ class Cashier extends Page implements HasForms, HasTable
                                     // if (data_get($livewire, "{$statePath}.{$sku}")) {
                                     //     $currentItem = data_get($livewire, "{$statePath}.{$sku}");
                                     //     if ($currentItem['diskon'] != $data['diskon'] or $currentItem['hargajual'] != $data['hargajual']) {
-                                            
+
                                     //     } else {
                                     //         $currentItem['qty'] += $data['qty'];
                                     //         $data = $currentItem;
@@ -271,8 +338,8 @@ class Cashier extends Page implements HasForms, HasTable
                     Split::make([
                         TextColumn::make('')
                             ->default(function (ProdukPersediaan $row) {
-                                if (isset($this->totalQty[$row['kode_produkvarian']]) ) {
-                                    return $this->totalQty[$row['kode_produkvarian']];
+                                if (isset($this->totalQty["{$row['kode_produkvarian']}_{$row['id_gudang']}"])) {
+                                    return $this->totalQty["{$row['kode_produkvarian']}_{$row['id_gudang']}"];
                                 }
                                 return null;
                             })
@@ -343,12 +410,17 @@ class Cashier extends Page implements HasForms, HasTable
             ->recordAction('addToCart')
             ->deferLoading();
     }
-    public function calcTotalQty() {
+    public function calcTotalQty()
+    {
         if (isset($this->data['detail_pesanan'])) {
             $this->totalQty = collect($this->data['detail_pesanan'])
-                ->groupBy('kode_produkvarian') // Mengelompokkan berdasarkan 'kode'
+                ->groupBy(function ($val) {
+                    return "{$val['kode_produkvarian']}_{$val['id_gudang']}";
+                }) // Mengelompokkan berdasarkan 'kode'
                 ->map(function ($items) {
-                    return $items->sum('qty'); // Menjumlahkan qty dalam setiap grup
+                    return $items->reduce(function ($carry, $item) {
+                        return (float)$carry + (float)$item['qty']; // Menambahkan qty secara manual
+                    }, 0); // Menjumlahkan qty dalam setiap grup
                 })
                 ->toArray();
         } else {
@@ -357,18 +429,34 @@ class Cashier extends Page implements HasForms, HasTable
     }
     public function addToCart(ProdukPersediaan $record)
     {
-        $record->load('produkVarianHarga');
-        $data = [
-            'nama_produk' => $record->produkVarian->produk->nama,
-            'nama_varian' => $record->produkVarian->varian,
-            'kode_produkvarian' => $record->kode_produkvarian,
-            'id_gudang' => $record->id_gudang,
-            'qty' => 1,
-            'hargajual' => $record->produkVarianHarga->hargajual,
-            'diskon' => 0,
-            'stok' => $record->stok
-        ];
-        $this->dispatchFormEvent('detail_pesanan::add_to_cart', $data);
+        $record->load('produkVarianHarga', 'gudang');
+        if ($record->stok > 0 or !$record->produkVarian->produk->in_stok) {
+            if (($this->totalQty["{$record->kode_produkvarian}_{$record->id_gudang}"] ?? 0) >= $record->stok and $record->produkVarian->produk->in_stok) {
+                Notification::make()
+                    ->title('Stok tidak mencukupi')
+                    ->danger()
+                    ->send();
+            } else {
+                $data = [
+                    'nama_produk' => $record->produkVarian->produk->nama,
+                    'nama_varian' => $record->produkVarian->varian,
+                    'produk_distok' => (bool)$record->produkVarian->produk->in_stok,
+                    'kode_produkvarian' => $record->kode_produkvarian,
+                    'id_gudang' => $record->id_gudang,
+                    'nama_gudang' => $record?->gudang?->nama,
+                    'qty' => 1,
+                    'hargajual' => $record->produkVarianHarga->hargajual,
+                    'diskon' => 0,
+                    'stok' => $record->stok
+                ];
+                $this->dispatchFormEvent('detail_pesanan::add_to_cart', $data);
+            }
+        } else {
+            Notification::make()
+                ->title('Stok kosong')
+                ->danger()
+                ->send();
+        }
     }
     public function mount()
     {
