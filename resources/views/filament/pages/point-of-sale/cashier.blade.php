@@ -1,4 +1,7 @@
 <x-filament-panels::page>
+    @php
+        dump($data);
+    @endphp
     <div class="sm:flex gap-4">
         <div class="w-full sm:w-1/2 lg:w-2/3">
             <x-filament-panels::resources.tabs />
@@ -11,8 +14,8 @@
                 </div>
             </div>
         </div>
-        <div class="w-full sm:w-1/2 lg:w-1/3">
-            <x-filament-panels::form>
+        <div class="w-full mt-4 sm:mt-0 sm:w-1/2 lg:w-1/3">
+            <x-filament-panels::form class="md:sticky md:top-[96px]">
                 {{ $this->form }}
             </x-filament-panels::form>
         </div>

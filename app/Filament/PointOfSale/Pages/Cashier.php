@@ -44,6 +44,8 @@ use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Livewire\Attributes\On;
 
+use function Filament\Support\format_money;
+
 class Cashier extends Page implements HasForms, HasTable
 {
     use InteractsWithForms;
@@ -93,6 +95,13 @@ class Cashier extends Page implements HasForms, HasTable
         return $form->schema([
             Section::make()
                 ->schema([
+                    TextInput::make('search')
+                        ->hiddenLabel()
+                        ->live(true)
+                        ->afterStateUpdated(function ($component) {
+                            $items = $component->getContainer()->getComponent('data.detail_pesanan')->getChildComponentContainers();
+                            dump(get_class_methods(end($items)));
+                        }),
                     Repeater::make('detail_pesanan')
                         ->schema([
                             Placeholder::make('produk_deskripsi')
@@ -209,7 +218,7 @@ class Cashier extends Page implements HasForms, HasTable
                                                     $set("diskon", $data['diskon']);
                                                 })
                                         )
-                                        ->live(debounce: 300)
+                                        ->live(debounce: 200)
                                         ->minValue(1)
                                         ->maxValue(function (Get $get) {
                                             return $get('produk_distok') ? $get('stok') : 1;
@@ -237,7 +246,7 @@ class Cashier extends Page implements HasForms, HasTable
                         ->hiddenLabel()
                         ->deletable(false)
                         ->extraAttributes([
-                            'class' => '[&>ul>div>li>div>div]:!gap-3 scrollbar overflow-y-auto p-[1px] max-h-[calc(100vh-200px)]'
+                            'class' => '[&>ul>div>li>div>div]:!gap-3 scrollbar overflow-y-auto p-[1px] max-h-[calc(100vh-468px)]'
                         ])
                         ->registerListeners([
                             'detail_pesanan::add_to_cart' => [
@@ -277,26 +286,34 @@ class Cashier extends Page implements HasForms, HasTable
                             ->grow(false),
                         TextInput::make('diskon')
                             ->numeric()
-                            ->default(0)
                             ->minValue(0)
-                            ->suffix('%')
                             ->maxValue(100)
-                            ->live()
+                            ->suffix('%')
+                            ->live(true, 100)
+                            ->placeholder(0)
                             ->grow(false),
                     ])->extraAttributes([
                         'class' => '[&>div:nth-child(1)]:w-2/3 [&>div:nth-child(2)]:w-1/3'
                     ]),
-                    TextInput::make('grandTotal')
-                        ->label('Grand Total')
-                        ->disabled(),
                     Actions::make([
                         Action::make('test')
-                            ->label('Pembayaran')
+                            ->label(function (Get $get, Set $set) {
+                                $grandTotal = (int)(str_replace(['.', ','], ['', '.'], $get('total')) * (1-(float)$get('diskon')/100));
+                                $set('grandtotal', $grandTotal);
+                                if ($grandTotal) {
+                                    return 'BAYAR - Rp' . number_format($get('grandtotal'), 0, ',', '.');
+                                } else {
+                                    return 'BAYAR';
+                                }
+                            })
                             ->button()
                             ->extraAttributes([
                                 'class' => 'w-full'
                             ])
                     ])
+                ])
+                ->extraAttributes([
+                    'class' => 'md:max-h-[calc(100vh-120px)]'
                 ])
         ])->statePath('data');
     }
