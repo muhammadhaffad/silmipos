@@ -4,7 +4,9 @@ namespace App\Filament\PointOfSale\Pages;
 
 use App\Filament\PointOfSale\Traits\InteractWithTabsTrait;
 use App\Models\Gudang;
+use App\Models\Kontak;
 use App\Models\ProdukPersediaan;
+use App\Services\Core\Sales\SalesInvoiceService;
 use Filament\Forms\Components\Actions;
 use Filament\Forms\Components\Actions\Action;
 use Filament\Forms\Components\Component;
@@ -42,8 +44,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\On;
 
 use function Filament\Support\format_money;
@@ -59,30 +63,14 @@ class Cashier extends Page implements HasForms, HasTable
     protected static string $view = 'filament.pages.point-of-sale.cashier';
     public ?array $data = [];
     protected $listeners = ['refresh-table' => '$refresh', 'calc-total-qty' => 'calcTotalQty'];
+    protected $salesInvoiceService;
     public $counter;
     public $totalQty;
 
-    /* public function getTabs(): array
+    public function __construct()
     {
-        $tabs = [
-            'All' => Tab::make('All')
-        ];
-        $gudang = Gudang::all()
-            ->pluck('nama', 'id_gudang')
-            ->unique();
-        foreach ($gudang as $idGudang => $namaGudang) {
-            $tabs[$namaGudang] = Tab::make($namaGudang)->modifyQueryUsing(function (Builder $query) use ($idGudang) {
-                return $query->where('id_gudang', $idGudang);
-            });
-        }
-        return $tabs;
-    } */
-
-    /* public function getTableRecordKey(Model $record): string
-    {
-        return $record->id_persediaan . '-' . $record->produkVarian->produk->id_produk;
-    } */
-
+        $this->salesInvoiceService = new SalesInvoiceService();
+    }
 
     public function mount()
     {
@@ -92,40 +80,34 @@ class Cashier extends Page implements HasForms, HasTable
         $this->form->fill();
         FilamentView::registerRenderHook(PanelsRenderHook::BODY_END, function () {
             return '<script>' . <<<'JS'
-                    function waitForElm(selector) {
-                        return new Promise(resolve => {
-                            if (document.querySelector(selector)) {
-                                return resolve(document.querySelector(selector));
+                    function waitForElm(selector, callback) {
+                        const observer = new MutationObserver(function (mutations, mutationInstance) {
+                            const elm = document.querySelector(selector);
+                            if (elm) {
+                                callback(elm);
+                                mutationInstance.disconnect();
                             }
-
-                            const observer = new MutationObserver(mutations => {
-                                if (document.querySelector(selector)) {
-                                    observer.disconnect();
-                                    resolve(document.querySelector(selector));
-                                }
-                            });
-
-                            // If you get "parameter 1 is not of type 'Node'" error, see https://stackoverflow.com/a/77855838/492336
-                            observer.observe(document.body, {
-                                childList: true,
-                                subtree: true
-                            });
+                        });
+                        observer.observe(document, {
+                            childList: true,
+                            subtree:   true
                         });
                     }
                     window.addEventListener('searchItems', (e) => {
-                        const items = e.detail[0].repeaterItems;
+                        const items = e.detail[0].items;
+                        const search = document.getElementById('data.search').value;
+                        console.info(search);
                         if (items) {
-                            items.forEach(key => {
-                                waitForElm(`[x-sortable-item="${key}"]`).then((elm) => {
-                                    document.querySelector(`[x-sortable-item="${key}"]`).style.display='none';
+                            Object.entries(items).forEach(entry => {
+                                const [key, value] = entry;
+                                // console.log(key, value);
+                                waitForElm(`[x-sortable-item="${key}"]`, function (elm) {
+                                    if (! `${value.nama_produk} ${value.nama_varian}`.toLowerCase().includes(search.toLowerCase())) {
+                                        elm.classList.add('hidden');
+                                    } else {
+                                        elm.classList.remove('hidden');
+                                    }
                                 });
-                                // document.querySelector(`[x-sortable-item="${key}"]`).addEventListener("load", (event) => {
-                                //     console.log("element loaded");
-                                // });
-                                // setTimeout(() => {
-                                //     item = document.querySelector(`[x-sortable-item="${key}"]`);
-                                //     item.style.display = 'none';
-                                // }, 1000);
                             });
                         }
                     });
@@ -140,7 +122,21 @@ class Cashier extends Page implements HasForms, HasTable
 
     public function create(): void
     {
-        $this->form->getState();
+        $this->form->validate();
+        $record = $this->form->getRawState();
+        $record['id_gudang'] = end($record['penjualanDetail'])['id_gudang'];
+        $record['tanggal'] = \date('Y-m-d H:i:s');
+        $record['catatan'] = null; //sementara null
+        $record['tanggaltempo'] = \date('Y-m-d H:i:s', \strtotime('+ 1 day'));
+        try {
+            // $this->salesInvoiceService->storeSalesInvoice($record);
+            $this->mountAction('testAction');
+        } catch (ValidationException $e) {
+            Notification::make()
+                ->title('422 Unprocessable Entity, please contact developer.')
+                ->danger()
+                ->send();
+        }
     }
 
     public function form(Form $form): Form
@@ -153,43 +149,19 @@ class Cashier extends Page implements HasForms, HasTable
                         ->prefixIcon('heroicon-m-magnifying-glass')
                         ->live(debounce: '500ms')
                         ->placeholder(function (Get $get, $component) {
-                            $items = array_keys($component->getContainer()->getComponent('data.detail_pesanan')->getChildComponentContainers());
-                            $this->dispatch('searchItems', ['repeaterItems' => $items]);
-                            /* $term = preg_replace('/\s+/', ' ', trim($get('search')));
-                            $items = $component->getContainer()->getComponent('data.detail_pesanan')->getChildComponentContainers();
-                            foreach ($items as $item) {
-                                dump($item->getView());
-                            } */
-                            /* $hiddenItems = $get('detail_pesanan_hidden') ?? [];
-                            $showItems = $get('detail_pesanan');
-                            if ($term != '' or $term != null) {
-                                $items = $hiddenItems + $showItems;
-                                $hidden = [];
-                                $show = [];
-                                foreach ($items as $key => $item) {
-                                    if (stripos("{$item['nama_produk']} {$item['nama_varian']}", $term) !== false) {
-                                        $show[$key] = $item;
-                                    } else {
-                                        $hidden[$key] = $item;
-                                    }
-                                }
-                                $set('detail_pesanan_hidden', $hidden);
-                                $set('detail_pesanan', $show);
-                            } else {
-                                $set('detail_pesanan',  $hiddenItems + $showItems);
-                            } */
-                            
-                            return 'Cari item ...';
+                            $items = $get('penjualanDetail');
+                            $this->dispatch('searchItems', ['items' => $items]);
+                            return 'Cari item keranjang ...';
                         }),
-                    Repeater::make('detail_pesanan')
+                    Repeater::make('penjualanDetail')
                         ->schema([
-                            Placeholder::make('produk_deskripsi')
+                            Placeholder::make('')
                                 ->live()
                                 ->content(function (Get $get, Set $set) {
                                     $productName = $get('nama_produk');
                                     $variantName = $get('nama_varian');
                                     $image = $get('image') ?: 'https://www.svgrepo.com/show/508699/landscape-placeholder.svg';
-                                    $subTotal = \number_format((int)$get('hargajual') * (float)$get('qty') * (1 - $get('diskon') / 100), 0, ',', '.');
+                                    $subTotal = \number_format((int)$get('harga') * (float)$get('qty') * (1 - $get('diskon') / 100), 0, ',', '.');
                                     return new HtmlString(<<<HTML
                                         <div class="flex gap-3">
                                             <img src="{$image}" class="w-16 h-16 rounded" alt="" />
@@ -207,13 +179,13 @@ class Cashier extends Page implements HasForms, HasTable
                                 })
                                 ->hiddenLabel(),
                             FormSplit::make([
-                                Placeholder::make('hargajual')
+                                Placeholder::make('harga')
                                     ->content(function (Get $get) {
                                         if (!$get('diskon') or $get('diskon') == 0) {
-                                            $price = 'Rp' . number_format($get('hargajual'), 0, ',', '.');
+                                            $price = 'Rp' . number_format($get('harga'), 0, ',', '.');
                                         } else {
-                                            $oldPrice = 'Rp' . number_format($get('hargajual'), 0, ',', '.');
-                                            $newPrice = 'Rp' . number_format($get('hargajual') * (1 - $get('diskon') / 100), 0, ',', '.');
+                                            $oldPrice = 'Rp' . number_format($get('harga'), 0, ',', '.');
+                                            $newPrice = 'Rp' . number_format($get('harga') * (1 - $get('diskon') / 100), 0, ',', '.');
                                             $discount = $get('diskon');
                                             $price = <<<HTML
                                                 <span>
@@ -266,12 +238,12 @@ class Cashier extends Page implements HasForms, HasTable
                                                 ->fillForm(function (Get $get) {
                                                     return [
                                                         'diskon' => $get('diskon'),
-                                                        'hargajual' => $get('hargajual')
+                                                        'harga' => $get('harga')
                                                     ];
                                                 })
                                                 ->form([
                                                     FormSplit::make([
-                                                        TextInput::make('hargajual')
+                                                        TextInput::make('harga')
                                                             ->label('Harga')
                                                             ->numeric()
                                                             ->mask(RawJs::make(<<<'JS'
@@ -293,7 +265,7 @@ class Cashier extends Page implements HasForms, HasTable
                                                 ->tooltip('Atur harga dan diskon')
                                                 ->icon('heroicon-m-ellipsis-vertical')
                                                 ->action(function ($data, Set $set) {
-                                                    $set("hargajual", $data['hargajual']);
+                                                    $set('harga', $data['harga']);
                                                     $set("diskon", $data['diskon']);
                                                 })
                                         )
@@ -319,17 +291,18 @@ class Cashier extends Page implements HasForms, HasTable
                         ])
                         ->view('filament.pages.point-of-sale.components.repeater.index')
                         ->default([])
+                        ->required()
                         ->addable(false)
                         ->reorderable(false)
                         ->hiddenLabel()
                         ->deletable(false)
                         ->live()
                         ->extraAttributes([
-                            'class' => '[&>ul>div>li>div>div]:!gap-3 scrollbar overflow-y-auto p-[1px] max-h-[calc(100vh-468px)]',
+                            'class' => '[&>ul>div>li>div>div]:!gap-3 scrollbar overflow-y-auto p-[1px] max-h-[calc(100vh-416px)]',
                             'searchable' => true
                         ])
                         ->registerListeners([
-                            'detail_pesanan::add_to_cart' => [
+                            'penjualanDetail::add_to_cart' => [
                                 function (Component $component, ?array $data): void {
                                     $statePath = $component->getStatePath();
                                     $unique = (string) Str::uuid();
@@ -340,15 +313,23 @@ class Cashier extends Page implements HasForms, HasTable
                                 }
                             ]
                         ]),
-                    Select::make('customer')
+                    Select::make('id_kontak')
+                        ->rules('required|numeric')
+                        ->placeholder('Pilih pelanggan')
+                        ->options(
+                            Kontak::where('jenis_kontak', 'customer')
+                                ->get()
+                                ->pluck('nama', 'id_kontak')
+                                ->unique()
+                        )
                         ->native(false),
                     FormSplit::make([
                         TextInput::make('total')
                             ->numeric()
                             ->placeholder(function (Set $set, Get $get) {
                                 $total = 0;
-                                foreach (($get('detail_pesanan') + ($get('detail_pesanan_hidden') ?? [])) ?: [] as $key => $item) {
-                                    $total += (int)((int)$item['hargajual'] * (float)$item['qty'] * (1 - (float)$item['diskon'] / 100));
+                                foreach ($get('penjualanDetail') ?: [] as $key => $item) {
+                                    $total += (int)((int)$item['harga'] * (float)$item['qty'] * (1 - (float)$item['diskon'] / 100));
                                 }
                                 $set('total', \number_format($total, 0, ',', '.'));
                             })
@@ -369,14 +350,14 @@ class Cashier extends Page implements HasForms, HasTable
                             ->minValue(0)
                             ->maxValue(100)
                             ->suffix('%')
-                            ->live(true, 100)
+                            ->live(debounce: '500ms')
                             ->placeholder(0)
                             ->grow(false),
                     ])->extraAttributes([
                         'class' => '[&>div:nth-child(1)]:w-2/3 [&>div:nth-child(2)]:w-1/3'
                     ]),
                     Actions::make([
-                        Action::make('test')
+                        Action::make('save')
                             ->label(function (Get $get, Set $set) {
                                 $grandTotal = (int)(str_replace(['.', ','], ['', '.'], $get('total')) * (1 - (float)$get('diskon') / 100));
                                 $set('grandtotal', $grandTotal);
@@ -390,10 +371,11 @@ class Cashier extends Page implements HasForms, HasTable
                             ->extraAttributes([
                                 'class' => 'w-full'
                             ])
+                            ->submit('data')
                     ])
                 ])
                 ->extraAttributes([
-                    'class' => 'md:max-h-[calc(100vh-120px)]'
+                    'class' => 'md:max-h-[calc(100vh)] [&>div>div>div]:!gap-3'
                 ])
         ])->statePath('data');
     }
@@ -504,10 +486,19 @@ class Cashier extends Page implements HasForms, HasTable
             ->deferLoading();
     }
 
+    public function testAction()
+    {
+        return \Filament\Actions\Action::make('testAction')
+            ->requiresConfirmation()
+            ->action(function (array $arguments) {
+                dd('Test action called', $arguments);
+            });
+    }
+
     public function calcTotalQty()
     {
-        if (isset($this->data['detail_pesanan'])) {
-            $this->totalQty = collect($this->data['detail_pesanan'])
+        if (isset($this->data['penjualanDetail'])) {
+            $this->totalQty = collect($this->data['penjualanDetail'])
                 ->groupBy(function ($val) {
                     return "{$val['kode_produkvarian']}_{$val['id_gudang']}";
                 }) // Mengelompokkan berdasarkan 'kode'
@@ -539,11 +530,11 @@ class Cashier extends Page implements HasForms, HasTable
                     'id_gudang' => $record->id_gudang,
                     'nama_gudang' => $record?->gudang?->nama,
                     'qty' => 1,
-                    'hargajual' => $record->produkVarianHarga->hargajual,
+                    'harga' => $record->produkVarianHarga->hargajual,
                     'diskon' => 0,
                     'stok' => $record->stok,
                 ];
-                $this->dispatchFormEvent('detail_pesanan::add_to_cart', $data);
+                $this->dispatchFormEvent('penjualanDetail::add_to_cart', $data);
             }
         } else {
             Notification::make()
@@ -552,4 +543,26 @@ class Cashier extends Page implements HasForms, HasTable
                 ->send();
         }
     }
+
+    
+    /* public function getTabs(): array
+    {
+        $tabs = [
+            'All' => Tab::make('All')
+        ];
+        $gudang = Gudang::all()
+            ->pluck('nama', 'id_gudang')
+            ->unique();
+        foreach ($gudang as $idGudang => $namaGudang) {
+            $tabs[$namaGudang] = Tab::make($namaGudang)->modifyQueryUsing(function (Builder $query) use ($idGudang) {
+                return $query->where('id_gudang', $idGudang);
+            });
+        }
+        return $tabs;
+    } */
+
+    /* public function getTableRecordKey(Model $record): string
+    {
+        return $record->id_persediaan . '-' . $record->produkVarian->produk->id_produk;
+    } */
 }
