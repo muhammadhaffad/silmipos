@@ -10,6 +10,11 @@ class EditInvoice extends EditRecord
 {
     protected static string $resource = InvoiceResource::class;
 
+    public function mount(int|string $record): void
+    {
+        parent::mount($record);
+    }
+
     protected function getHeaderActions(): array
     {
         return [

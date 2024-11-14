@@ -243,7 +243,7 @@
                     class="h-6 w-6 text-gray-400 dark:text-gray-400"
                 />
                 <span class="text-sm text-gray-400">
-                    Belum ada item yang ditambahkan
+                    Item kosong ...
                 </span>
             </div>
         @endif
