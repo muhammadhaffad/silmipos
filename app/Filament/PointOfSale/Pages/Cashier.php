@@ -14,26 +14,20 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Split as FormSplit;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\ViewField;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Notifications\Notification;
-use Filament\Pages\Concerns\ExposesTableToWidgets;
 use Filament\Pages\Page;
-use Filament\Resources\Components\Tab;
 use Filament\Resources\Concerns\HasTabs;
 use Filament\Support\Facades\FilamentView;
 use Filament\Support\RawJs;
 use Filament\Tables\Columns\ImageColumn;
-use Filament\Tables\Columns\Layout\Split;
 use Filament\Tables\Columns\Layout\Stack;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\SelectFilter;
@@ -41,16 +35,13 @@ use Filament\Tables\Table;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use Livewire\Attributes\On;
+use Masterminds\HTML5;
 
-use function Filament\Support\format_money;
+use function Filament\Support\format_number;
 
 class Cashier extends Page implements HasForms, HasTable
 {
@@ -130,7 +121,7 @@ class Cashier extends Page implements HasForms, HasTable
         $record['tanggaltempo'] = \date('Y-m-d H:i:s', \strtotime('+ 1 day'));
         try {
             // $this->salesInvoiceService->storeSalesInvoice($record);
-            $this->mountAction('testAction');
+            $this->mountAction('paymentModal');
         } catch (ValidationException $e) {
             Notification::make()
                 ->title('422 Unprocessable Entity, please contact developer.')
@@ -178,7 +169,7 @@ class Cashier extends Page implements HasForms, HasTable
                                     // return $component->getContainer()->getRawState()['qty'];
                                 })
                                 ->hiddenLabel(),
-                            FormSplit::make([
+                            \Filament\Forms\Components\Split::make([
                                 Placeholder::make('harga')
                                     ->content(function (Get $get) {
                                         if (!$get('diskon') or $get('diskon') == 0) {
@@ -203,7 +194,7 @@ class Cashier extends Page implements HasForms, HasTable
                                     ])
                                     ->grow(false)
                                     ->hiddenLabel(),
-                                FormSplit::make([
+                                \Filament\Forms\Components\Split::make([
                                     Actions::make([
                                         Action::make('delete')
                                             ->iconButton()
@@ -242,7 +233,7 @@ class Cashier extends Page implements HasForms, HasTable
                                                     ];
                                                 })
                                                 ->form([
-                                                    FormSplit::make([
+                                                    \Filament\Forms\Components\Split::make([
                                                         TextInput::make('harga')
                                                             ->label('Harga')
                                                             ->numeric()
@@ -323,7 +314,7 @@ class Cashier extends Page implements HasForms, HasTable
                                 ->unique()
                         )
                         ->native(false),
-                    FormSplit::make([
+                    \Filament\Forms\Components\Split::make([
                         TextInput::make('total')
                             ->numeric()
                             ->placeholder(function (Set $set, Get $get) {
@@ -396,7 +387,7 @@ class Cashier extends Page implements HasForms, HasTable
                         ->pluck('nama', 'id_gudang')
                         ->unique())
                     ->native(false)
-            ], layout: FiltersLayout::AboveContent)
+            ], layout: FiltersLayout::Dropdown)
             ->columns([
                 Stack::make([
                     ImageColumn::make('gambar')
@@ -406,7 +397,7 @@ class Cashier extends Page implements HasForms, HasTable
                         ])
                         ->height('100%')
                         ->width('100%'),
-                    Split::make([
+                    \Filament\Tables\Columns\Layout\Split::make([
                         TextColumn::make('')
                             ->default(function (ProdukPersediaan $row) {
                                 if (isset($this->totalQty["{$row['kode_produkvarian']}_{$row['id_gudang']}"])) {
@@ -446,7 +437,7 @@ class Cashier extends Page implements HasForms, HasTable
                         ->extraAttributes([
                             'class' => 'overflow-hidden'
                         ]),
-                    Split::make([
+                    \Filament\Tables\Columns\Layout\Split::make([
                         TextColumn::make('stok')->formatStateUsing(function ($state) {
                             return 'Stok: ' . number($state);
                         })
@@ -486,10 +477,121 @@ class Cashier extends Page implements HasForms, HasTable
             ->deferLoading();
     }
 
-    public function testAction()
+    public function paymentModal()
     {
-        return \Filament\Actions\Action::make('testAction')
-            ->requiresConfirmation()
+        return \Filament\Actions\Action::make('paymentModal')
+            ->form([
+                \Filament\Forms\Components\Split::make([
+                    Section::make('')
+                        ->schema([
+                            Placeholder::make('')
+                                ->content(function () {
+                                    return new HtmlString(<<<HTML
+                                        <div class="flex justify-between items-start">
+                                            <div class="flex flex-col gap-1">
+                                                <span class="text-sm">#{SO00000}</span>
+                                                <div class="flex gap-1 items-center text-sm">
+                                                    <span>
+                                                        <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                                                            <path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-5.5-2.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0ZM10 12a5.99 5.99 0 0 0-4.793 2.39A6.483 6.483 0 0 0 10 16.5a6.483 6.483 0 0 0 4.793-2.11A5.99 5.99 0 0 0 10 12Z" clip-rule="evenodd" />
+                                                        </svg>
+                                                    </span>
+                                                    <span class="font-normal">{customer}</span>
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-col">
+                                                <div class="flex gap-1 items-center text-sm">
+                                                    <span>
+                                                        <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                                                            <path fill-rule="evenodd" d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z" clip-rule="evenodd" />
+                                                        </svg>
+                                                    </span>
+                                                    <span class="text-sm font-normal">{tangggal}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    HTML);
+                                }),
+                            Repeater::make('penjualanDetail')
+                                ->schema([
+                                    Placeholder::make('')
+                                        ->content(function (Get $get) {
+                                            $subTotal = number_format((int)((int)$get('harga')*(float)$get('qty')), 0, ',', '.');
+                                            $subTotalAfterDiscount = number_format((int)(str_replace(['.',','],['','.'],$subTotal)*(1-(float)$get('diskon')/100)), 0, ',', '.');
+                                            if ($get('diskon')) {
+                                                $subTotal = <<<HTML
+                                                    <span class="block"><s>Rp{$subTotal}</s> <span class="text-red-600">-{$get('diskon')}%</span></span>
+                                                    <span class="block font-bold">Rp{$subTotalAfterDiscount}</span>
+                                                HTML;
+                                            } else {
+                                                $subTotal = <<<HTML
+                                                    <span class="block font-bold">Rp{$subTotalAfterDiscount}</span>
+                                                HTML;
+                                            }
+                                            return new HtmlString(<<<HTML
+                                                <div class="flex justify-between items-center">
+                                                    <div class="flex items-center gap-2">
+                                                        <div>
+                                                            <span class="bg-[rgb(var(--primary-500))] rounded-full px-2 py-1 text-white">
+                                                                {$get('qty')}×
+                                                            </span>
+                                                        </div>
+                                                        <div class="flex flex-col">
+                                                            <span class="block">{$get('nama_produk')}</span>
+                                                            <span class="block text-xs">{$get('nama_varian')}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="flex flex-col -space-y-2">
+                                                        {$subTotal}
+                                                    </div>
+                                                </div>
+                                            HTML);
+                                        })
+                                ])
+                                ->extraAttributes([
+                                    'class' => '[&>ul>div]:!gap-2 h-[calc(100vh-400px)] overflow-y-auto p-[1px]'
+                                ])
+                                ->hiddenLabel()
+                                ->deletable(false)
+                                ->reorderable(false)
+                                ->addable(false),
+                            Placeholder::make('')
+                                ->content(function ($get) {
+                                    $grandTotal = number_format($get('grandtotal'), 0, ',', '.');
+                                    $diskon = $get('diskon') ?: 0;
+                                    $totalItems = array_sum(array_column($get('penjualanDetail'), 'qty'));
+                                    return new HtmlString(<<<HTML
+                                        <div>
+                                            <div class="flex justify-between">
+                                                <span>Total</span>
+                                                <span>Rp{$get('total')}</span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span>Diskon</span>
+                                                <span>{$diskon}%</span>
+                                            </div>
+                                            <div class="flex justify-between font-bold">
+                                                <span>Grand Total ({$totalItems} items)</span>
+                                                <span>Rp{$grandTotal}</span>
+                                            </div>
+                                        </div>
+                                    HTML);
+                                    return $get('total');
+                                })
+                        ]),
+                    Section::make('Pembayaran')
+                        ->schema([
+                            TextInput::make('acd'),
+                            TextInput::make('asd'),
+                        ])
+                ])
+                    ->columns(2)
+            ])
+            ->modalSubmitAction(false)
+            ->modalCancelAction(false)
+            ->modalCloseButton(false)
+            ->closeModalByClickingAway(false)
+            ->fillForm($this->data)
             ->action(function (array $arguments) {
                 dd('Test action called', $arguments);
             });
