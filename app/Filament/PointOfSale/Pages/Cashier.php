@@ -38,6 +38,7 @@ use Filament\Tables\Table;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
@@ -75,7 +76,7 @@ class Cashier extends Page implements HasForms, HasTable
         $this->loadDefaultActiveTab();
         $this->form->fill();
         FilamentView::registerRenderHook(PanelsRenderHook::BODY_END, function () {
-            return '<script>' . <<<'JS'
+            return '<script type="module">' . <<<'JS'
                     function waitForElm(selector, callback) {
                         const observer = new MutationObserver(function (mutations, mutationInstance) {
                             const elm = document.querySelector(selector);
@@ -116,7 +117,7 @@ class Cashier extends Page implements HasForms, HasTable
         return '';
     }
 
-    public function create(): void
+    public function create($saveAndPay = true): void
     {
         $this->form->validate();
         $record = $this->form->getRawState();
@@ -124,14 +125,24 @@ class Cashier extends Page implements HasForms, HasTable
         $record['tanggal'] = \date('Y-m-d H:i:s');
         $record['catatan'] = null; //sementara null
         $record['tanggaltempo'] = \date('Y-m-d H:i:s', \strtotime('+ 1 day'));
+        if (!isset($record['diskon'])) {
+            $record['diskon'] = 0;
+        }
         try {
-            $invoice = $this->salesInvoiceService->storeSalesInvoice($record);
-            $this->data['transaksi_no'] = $invoice['transaksi_no'];
+            // $invoice = $this->salesInvoiceService->storeSalesInvoice($record);
+            $this->data['transaksi_no'] = '123'; //$invoice['transaksi_no'];
             $this->data['kontak_nama'] = Kontak::find($record['id_kontak'], 'nama')->nama;
-            $this->data['tanggal'] = $invoice['tanggal'];
-            $this->data['id_penjualan'] = $invoice['id_penjualan'];
-
-            $this->mountAction('payment');
+            $this->data['tanggal'] = date('Y-m-d H:i:s');//$invoice['tanggal'];
+            $this->data['id_penjualan'] = 1;//$invoice['id_penjualan'];
+            if ($saveAndPay) {
+                $this->mountAction('payment');
+            } else {
+                Notification::make()
+                    ->title('Sukses menyimpan pesanan')
+                    ->body('Pesanan Anda dapat dilihat di menu Penjualan')
+                    ->success()
+                    ->send();
+            }
             $this->data = [];
             $this->totalQty = [];
         } catch (ValidationException $e) {
@@ -147,18 +158,38 @@ class Cashier extends Page implements HasForms, HasTable
         $data = [
             'id_kontak' => $record['id_kontak'],
             'tanggal' => \date('Y-m-d H:i:s'),
+            'catatan' => null,
             'penjualanAlokasiPembayaran' => [
-                'id_penjualan' => $record['id_penjualan'],
-                'nominalbayar' => $this->cleanFormatNumber($record['bayar']),
+                [
+                    'id_penjualan' => (string)$record['id_penjualan'],
+                    'nominalbayar' => $this->cleanFormatNumber($record['bayar'])
+                ],
             ],
             'total' => $this->cleanFormatNumber($record['bayar'])
         ];
-        dump($data);
         try {
-            $this->salesPaymentService->storePayment($data);
+            // $this->salesPaymentService->storePayment($data);
+            $this->replaceMountedAction('printPayment');
+            Notification::make()
+                ->title('Sukses melakukan pembayaran')
+                ->success()
+                ->send();
         } catch (\Exception $th) {
-            throw $th;
+            Notification::make()
+                ->title('Internal Server Error')
+                ->body($th->getMessage())
+                ->danger()
+                ->send();
         }
+    }
+
+    public function printPaymentAction()
+    {
+        return \Filament\Actions\Action::make('printPayment')
+            ->form([
+                Placeholder::make('')
+                    ->content(new HtmlString(view('filament.pages.point-of-sale.sales-receipt')->render()))
+            ]);
     }
     
     public function cleanFormatNumber($number) {
@@ -340,6 +371,7 @@ class Cashier extends Page implements HasForms, HasTable
                             ]
                         ]),
                     Select::make('id_kontak')
+                        ->label('Pelanggan')
                         ->rules('required|numeric')
                         ->placeholder('Pilih pelanggan')
                         ->options(
@@ -363,10 +395,6 @@ class Cashier extends Page implements HasForms, HasTable
                                 $money($input, ',', '.', 2)
                             JS))
                             ->stripCharacters('.')
-                            ->extraAlpineAttributes([
-                                'x-ref' => 'input',
-                                'x-on:keyup' => '$refs.input.blur(); $refs.input.focus()'
-                            ])
                             ->readOnly()
                             ->live()
                             ->prefix('Rp')
@@ -383,7 +411,7 @@ class Cashier extends Page implements HasForms, HasTable
                         'class' => '[&>div:nth-child(1)]:w-2/3 [&>div:nth-child(2)]:w-1/3'
                     ]),
                     Actions::make([
-                        Action::make('save')
+                        Action::make('pay')
                             ->label(function (Get $get, Set $set) {
                                 $grandTotal = (int)(str_replace(['.', ','], ['', '.'], $get('total')) * (1 - (float)$get('diskon') / 100));
                                 $set('grandtotal', $grandTotal);
@@ -394,10 +422,22 @@ class Cashier extends Page implements HasForms, HasTable
                                 }
                             })
                             ->extraAttributes([
-                                'class' => 'w-full mt-4',
+                                'class' => 'w-full',
                                 'type' => 'submit'
+                            ]),
+                        Action::make('save')
+                            ->label('SIMPAN')
+                            ->extraAttributes([
+                                'class' => 'w-full',
                             ])
+                            ->action(function () {
+                                $this->create(false);
+                            })
+                            ->color('gray')
                     ])
+                        ->extraAttributes([
+                            'class' => 'mt-4'
+                        ])
                 ])
                 ->extraAttributes([
                     'class' => 'md:max-h-[calc(100vh)] [&>div>div>div]:!gap-3'
@@ -513,8 +553,40 @@ class Cashier extends Page implements HasForms, HasTable
 
     public function paymentAction()
     {
+        $pecahanActions = [];
+        $pecahans = [1000, 2000, 5000, 10000, 20000, 50000, 100000];
+        $pecahanActions[] = Action::make('uang_pas')
+            ->label('UANG PAS')
+            ->extraAttributes([
+                'class' => 'text-nowrap !font-normal'
+            ])
+            ->color('success')
+            ->action(function ($set, Get $get) {
+                $set('bayar', number_format($get('grandtotal'),0,',','.'));
+            });
+        foreach ($pecahans as $pecahan) {
+            $pecahanActions[] = Action::make($pecahan)
+                ->action(function ($set, $get) use ($pecahan) {
+                    $set('bayar', number_format((int)$this->cleanFormatNumber($get('bayar')) + $pecahan, 0, ',', '.'));
+                })
+                ->extraAttributes([
+                    'class' => 'text-nowrap !font-normal'
+                ])
+                ->color('gray')
+                ->label('Rp'.number_format($pecahan, 0, ','. '.'));
+        }
+        $pecahanActions[] = Action::make('clear')
+            ->label('CLEAR')
+            ->extraAttributes([
+                'class' => 'text-nowrap !font-normal'
+            ])
+            ->color('danger')
+            ->action(function ($set, Get $get) {
+                $set('bayar', 0);
+            });
+        
         return \Filament\Actions\Action::make('payment')
-            ->label('Pembayaran')
+            ->label('')
             ->form([
                 \Filament\Forms\Components\Split::make([
                     Section::make()
@@ -553,7 +625,7 @@ class Cashier extends Page implements HasForms, HasTable
                                     Placeholder::make('')
                                         ->content(function (Get $get) {
                                             $subTotal = number_format((int)((int)$get('harga')*(float)$get('qty')), 0, ',', '.');
-                                            $subTotalAfterDiscount = number_format((int)(str_replace(['.',','],['','.'],$subTotal)*(1-(float)$get('diskon')/100)), 0, ',', '.');
+                                            $subTotalAfterDiscount = number_format((int)($this->cleanFormatNumber($subTotal)*(1-(float)$get('diskon')/100)), 0, ',', '.');
                                             if ($get('diskon')) {
                                                 $subTotal = <<<HTML
                                                     <span class="block"><s>Rp{$subTotal}</s> <span class="text-red-600">-{$get('diskon')}%</span></span>
@@ -654,107 +726,29 @@ class Cashier extends Page implements HasForms, HasTable
                                 JS))
                                 ->stripCharacters('.')
                                 ->extraAlpineAttributes([
+                                    ':value' => 'inputBayar',
                                     'x-ref' => 'input',
-                                    'x-on:keyup' => '$refs.input.blur(); $refs.input.focus()'
+                                    'x-on:keyup' => '$refs.input.blur(); $refs.input.focus()',
                                 ])
                                 ->prefix('Rp'),
-                            Actions::make([
-                                Action::make('uang_pas')
-                                    ->label('UANG PAS')
-                                    ->extraAttributes([
-                                        'class' => 'text-nowrap !font-normal'
-                                    ])
-                                    ->color('success')
-                                    ->action(function ($set, Get $get) {
-                                        $set('bayar', number_format($get('grandtotal'),0,',','.'));
-                                    }),
-                                Action::make('1000')
-                                    ->action(function ($set, $get) {
-                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 1000, 0, ',', '.'));
-                                    })
-                                    ->extraAttributes([
-                                        'class' => 'text-nowrap !font-normal'
-                                    ])
-                                    ->color('gray')
-                                    ->label('Rp1.000'),
-                                Action::make('2000')
-                                    ->extraAttributes([
-                                        'class' => 'text-nowrap !font-normal'
-                                    ])
-                                    ->action(function ($set, $get) {
-                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 2000, 0, ',', '.'));
-                                    })
-                                    ->color('gray')
-                                    ->label('Rp2.000'),
-                                Action::make('5000')
-                                    ->extraAttributes([
-                                        'class' => 'text-nowrap !font-normal'
-                                    ])
-                                    ->action(function ($set, $get) {
-                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 5000, 0, ',', '.'));
-                                    })
-                                    ->color('gray')
-                                    ->label('Rp5.000'),
-                                Action::make('10000')
-                                    ->extraAttributes([
-                                        'class' => 'text-nowrap !font-normal'
-                                    ])
-                                    ->action(function ($set, $get) {
-                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 10000, 0, ',', '.'));
-                                    })
-                                    ->color('gray')
-                                    ->label('Rp10.000'),
-                                Action::make('20000')
-                                    ->extraAttributes([
-                                        'class' => 'text-nowrap !font-normal'
-                                    ])
-                                    ->action(function ($set, $get) {
-                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 20000, 0, ',', '.'));
-                                    })
-                                    ->color('gray')
-                                    ->label('Rp20.000'),
-                                Action::make('50000')
-                                    ->extraAttributes([
-                                        'class' => 'text-nowrap !font-normal'
-                                    ])
-                                    ->action(function ($set, $get) {
-                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 50000, 0, ',', '.'));
-                                    })
-                                    ->color('gray')
-                                    ->label('Rp50.000'),
-                                Action::make('100000')
-                                    ->extraAttributes([
-                                        'class' => 'text-nowrap !font-normal'
-                                    ])
-                                    ->action(function ($set, $get) {
-                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 100000, 0, ',', '.'));
-                                    })
-                                    ->color('gray')
-                                    ->label('Rp100.000'),
-                                Action::make('clear')
-                                    ->extraAttributes([
-                                        'class' => 'text-nowrap !font-normal'
-                                    ])
-                                    ->action(function ($set, $get) {
-                                        $set('bayar', 0);
-                                    })
-                                    ->color('danger')
-                                    ->label('CLEAR'),
-                            ])
+                            Actions::make($pecahanActions)
                                 ->extraAttributes([
-                                    'class' => '[&>div]:!grid [&>div]:!gap-2 [&>div]:!grid-cols-3'
+                                    'class' => '[&>div]:!grid [&>div]:!gap-3 [&>div]:!grid-cols-3'
                                 ]),
                             Actions::make([
-                                Action::make('pay-later')
-                                    ->label('BAYAR NANTI')
-                                    ->color('gray')
-                                    ->dispatch('close-modal', ['id' => "{$this->getId()}-action"]),
                                 Action::make('pay-now')
                                     ->label('BAYAR')
                                     ->extraAttributes([
                                         'class' => 'grow',
                                         'type' => 'submit'
+                                    ]),
+                                Action::make('pay-later')
+                                    ->label('BAYAR NANTI')
+                                    ->extraAttributes([
+                                        'class' => 'w-full'
                                     ])
+                                    ->color('gray')
+                                    ->dispatch('close-modal', ['id' => "{$this->getId()}-action"])
                             ])->extraAttributes([
                                 'class' => 'flex'
                             ])
