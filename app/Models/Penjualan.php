@@ -29,4 +29,7 @@ class Penjualan extends Model
     public function penjualanOrder() {
         return $this->belongsTo(Penjualan::class, 'penjualan_parent', 'id_penjualan')->where('jenis', 'order');
     }
+    public function penjualanBayar() {
+        return $this->hasMany(PenjualanAlokasiPembayaran::class, 'id_penjualaninvoice', 'id_penjualan');
+    }
 }

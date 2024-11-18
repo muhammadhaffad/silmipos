@@ -75,8 +75,20 @@ class Cashier extends Page implements HasForms, HasTable
         $this->counter = 1;
         $this->loadDefaultActiveTab();
         $this->form->fill();
+        // FilamentView::registerRenderHook(PanelsRenderHook::STYLES_AFTER, function () {
+        //     return '<style>' . <<<'CSS'
+        //         @media print {
+        //             body > * {
+        //                 display: none !important;
+        //             }
+        //             .print-only > * {
+        //                 display: block !important;
+        //             }
+        //         }
+        //     CSS . '</style>';
+        // });
         FilamentView::registerRenderHook(PanelsRenderHook::BODY_END, function () {
-            return '<script type="module">' . <<<'JS'
+            return '<script>' . <<<'JS'
                     function waitForElm(selector, callback) {
                         const observer = new MutationObserver(function (mutations, mutationInstance) {
                             const elm = document.querySelector(selector);
@@ -108,6 +120,17 @@ class Cashier extends Page implements HasForms, HasTable
                             });
                         }
                     });
+                    function printDiv(selector) {
+                        const printContent = document.querySelector(selector).innerHTML;
+                        // Buat window baru
+                        const printWindow = window.open("", "_blank", "width=800,height=800");
+                        printWindow.document.open();
+                        printWindow.document.write(`${printContent}`);
+                        printWindow.window.print();
+                        setTimeout(() => {
+                            printWindow.document.close();
+                        }, 10);
+                    }
             JS . '</script>';
         });
     }
@@ -133,7 +156,7 @@ class Cashier extends Page implements HasForms, HasTable
             $this->data['transaksi_no'] = '123'; //$invoice['transaksi_no'];
             $this->data['kontak_nama'] = Kontak::find($record['id_kontak'], 'nama')->nama;
             $this->data['tanggal'] = date('Y-m-d H:i:s');//$invoice['tanggal'];
-            $this->data['id_penjualan'] = 1;//$invoice['id_penjualan'];
+            $this->data['id_penjualan'] = 23;//$invoice['id_penjualan'];
             if ($saveAndPay) {
                 $this->mountAction('payment');
             } else {
@@ -169,7 +192,7 @@ class Cashier extends Page implements HasForms, HasTable
         ];
         try {
             // $this->salesPaymentService->storePayment($data);
-            $this->replaceMountedAction('printPayment');
+            $this->replaceMountedAction('printPayment', ['record' => $record]);
             Notification::make()
                 ->title('Sukses melakukan pembayaran')
                 ->success()
@@ -188,8 +211,30 @@ class Cashier extends Page implements HasForms, HasTable
         return \Filament\Actions\Action::make('printPayment')
             ->form([
                 Placeholder::make('')
-                    ->content(new HtmlString(view('filament.pages.point-of-sale.sales-receipt')->render()))
-            ]);
+                    ->content(function ($get) {
+                        return new HtmlString(view('filament.pages.point-of-sale.sales-receipt', ['data' => $get('')])->render());
+                    })
+                    ->extraAttributes([
+                        'class' => 'overflow-y-auto max-h-[calc(100vh-200px)]'
+                    ]),
+                Actions::make([
+                    Action::make('print')
+                        ->extraAttributes([
+                            'class' => 'w-full'
+                        ])
+                        ->alpineClickHandler("printDiv('.print-only')")
+                ])
+            ])
+            ->mountUsing(function ($arguments, $form) {
+                $penjualan = \App\Models\Penjualan::with('penjualanDetail.produkVarian', 'kontak')->where('id_penjualan', $arguments['record']['id_penjualan'])->withSum('penjualanBayar as nominalbayar', 'nominal')->withSum('penjualanBayar as kembalian', 'kembalian')->first();
+                $form->fill($penjualan->toArray());
+            })
+            ->extraModalWindowAttributes([
+                'class' => 'w-[10cm]'
+            ])
+            ->label('Cetak Nota')
+            ->modalSubmitAction(false)
+            ->modalCancelAction(false);
     }
     
     public function cleanFormatNumber($number) {

@@ -1,1 +1,6 @@
 @import '/vendor/filament/filament/resources/css/theme.css';
+@font-face {
+    font-family: "OCR-B";
+    src: url(https://cdn.jsdelivr.net/gh/raisty/OCR-B/dist/OCR-B.ttf) format("truetype"),
+        url(https://cdn.jsdelivr.net/gh/raisty/OCR-B/dist/OCR-B.otf) format("opentype");
+}

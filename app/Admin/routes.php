@@ -215,4 +215,8 @@ Route::group([
         Route::get('/penjualan-pembayaran', [AjaxController::class, 'getPenjualanPembayaran'])->name('ajax.penjualan-pembayaran');
         Route::get('/penjualan-pembayaran-detail', [AjaxController::class, 'getPenjualanPembayaranDetail'])->name('ajax.penjualan-pembayaran-detail');
     });
+    Route::get('/pos/sales-receipt/{transaksiNo}', function ($transaksiNo) {
+        $salesInvoice = \App\Models\Penjualan::where('transaksi_no', $transaksiNo)->where('jenis', 'invoice')->first();
+        return view('filament.pages.point-of-sale.sales-receipt', ['data' => $salesInvoice]);
+    })->name(admin_get_route('pos.sales-receipt'));
 });
