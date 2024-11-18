@@ -308,8 +308,8 @@ class SalesPaymentController extends AdminController
                 $form->date('tanggaltempo', 'Tempo')->disable()->default($data['penjualan']['tanggaltempo'] ?? null);
                 $form->currency('grandtotal', 'Grand total')->symbol('Rp')->disable()->default($data['penjualan']['grandtotal'] ?? null);
                 $form->currency('sisatagihan', 'Sisa tagihan')->symbol('Rp')->disable()->default($data['penjualan']['sisatagihan'] ?? null);
-                $form->currency('nominalbayar', 'Jumlah bayar')->symbol('Rp')->setGroupClass('w-200px')->default($data['nominal'] ?? null);
-
+                $form->currency('nominalbayar', 'Jumlah bayar')->symbol('Rp')->setGroupClass('w-200px')->default(($data['nominal'] ?? null) + ($data['kembalian'] ?? null));
+                $form->currency('kembalian', 'Kembalian')->symbol('Rp')->disable()->default($data['kembalian'] ?? 0);
             })->value($data->penjualanAlokasiPembayaran->toArray())->useTable();
         });
         $form->column(12, function (Form $form) use ($data) {
@@ -354,7 +354,8 @@ class SalesPaymentController extends AdminController
                 $form->date('tanggaltempo', 'Tempo')->default($data['penjualan']['tanggaltempo'] ?? null)->disable();
                 $form->currency('grandtotal', 'Grand total')->symbol('Rp')->default($data['penjualan']['grandtotal'] ?? null)->disable();
                 $form->currency('sisatagihan', 'Sisa tagihan')->symbol('Rp')->default($data['penjualan']['sisatagihan'] ?? null)->disable();
-                $form->currency('nominalbayar', 'Jumlah bayar')->symbol('Rp')->setGroupClass('w-200px')->default($data['nominal'] ?? null)->disable();
+                $form->currency('nominalbayar', 'Jumlah bayar')->symbol('Rp')->setGroupClass('w-200px')->default(($data['nominal'] ?? null) + ($data['kembalian'] ?? null))->disable();
+                $form->currency('kembalian', 'Kembalian')->symbol('Rp')->disable()->default($data['kembalian'] ?? 0);
 
             })->disableCreate()->disableDelete()->value($data->penjualanAlokasiPembayaran->toArray())->useTable();
         });

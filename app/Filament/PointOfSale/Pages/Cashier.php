@@ -7,14 +7,17 @@ use App\Models\Gudang;
 use App\Models\Kontak;
 use App\Models\ProdukPersediaan;
 use App\Services\Core\Sales\SalesInvoiceService;
+use App\Services\Core\Sales\SalesPaymentService;
 use Filament\Forms\Components\Actions;
 use Filament\Forms\Components\Actions\Action;
 use Filament\Forms\Components\Component;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\ToggleButtons;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
@@ -55,12 +58,14 @@ class Cashier extends Page implements HasForms, HasTable
     public ?array $data = [];
     protected $listeners = ['refresh-table' => '$refresh', 'calc-total-qty' => 'calcTotalQty'];
     protected $salesInvoiceService;
+    protected $salesPaymentService;
     public $counter;
     public $totalQty;
 
     public function __construct()
     {
         $this->salesInvoiceService = new SalesInvoiceService();
+        $this->salesPaymentService = new SalesPaymentService();
     }
 
     public function mount()
@@ -120,14 +125,44 @@ class Cashier extends Page implements HasForms, HasTable
         $record['catatan'] = null; //sementara null
         $record['tanggaltempo'] = \date('Y-m-d H:i:s', \strtotime('+ 1 day'));
         try {
-            // $this->salesInvoiceService->storeSalesInvoice($record);
-            $this->mountAction('paymentModal');
+            $invoice = $this->salesInvoiceService->storeSalesInvoice($record);
+            $this->data['transaksi_no'] = $invoice['transaksi_no'];
+            $this->data['kontak_nama'] = Kontak::find($record['id_kontak'], 'nama')->nama;
+            $this->data['tanggal'] = $invoice['tanggal'];
+            $this->data['id_penjualan'] = $invoice['id_penjualan'];
+
+            $this->mountAction('payment');
+            $this->data = [];
+            $this->totalQty = [];
         } catch (ValidationException $e) {
             Notification::make()
                 ->title('422 Unprocessable Entity, please contact developer.')
                 ->danger()
                 ->send();
         }
+    }
+
+    public function createPayment($record): void 
+    {
+        $data = [
+            'id_kontak' => $record['id_kontak'],
+            'tanggal' => \date('Y-m-d H:i:s'),
+            'penjualanAlokasiPembayaran' => [
+                'id_penjualan' => $record['id_penjualan'],
+                'nominalbayar' => $this->cleanFormatNumber($record['bayar']),
+            ],
+            'total' => $this->cleanFormatNumber($record['bayar'])
+        ];
+        dump($data);
+        try {
+            $this->salesPaymentService->storePayment($data);
+        } catch (\Exception $th) {
+            throw $th;
+        }
+    }
+    
+    public function cleanFormatNumber($number) {
+        return \str_replace(['.',','],['','.'],$number);
     }
 
     public function form(Form $form): Form
@@ -358,11 +393,10 @@ class Cashier extends Page implements HasForms, HasTable
                                     return 'BAYAR';
                                 }
                             })
-                            ->button()
                             ->extraAttributes([
-                                'class' => 'w-full'
+                                'class' => 'w-full mt-4',
+                                'type' => 'submit'
                             ])
-                            ->submit('data')
                     ])
                 ])
                 ->extraAttributes([
@@ -477,26 +511,28 @@ class Cashier extends Page implements HasForms, HasTable
             ->deferLoading();
     }
 
-    public function paymentModal()
+    public function paymentAction()
     {
-        return \Filament\Actions\Action::make('paymentModal')
+        return \Filament\Actions\Action::make('payment')
+            ->label('Pembayaran')
             ->form([
                 \Filament\Forms\Components\Split::make([
-                    Section::make('')
+                    Section::make()
                         ->schema([
                             Placeholder::make('')
-                                ->content(function () {
+                                ->content(function ($get) {
+                                    $tanggal = date('d/M/Y H:i', \strtotime($get('tanggal')));
                                     return new HtmlString(<<<HTML
                                         <div class="flex justify-between items-start">
                                             <div class="flex flex-col gap-1">
-                                                <span class="text-sm">#{SO00000}</span>
+                                                <span class="text-sm">#{$get('transaksi_no')}</span>
                                                 <div class="flex gap-1 items-center text-sm">
                                                     <span>
                                                         <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
                                                             <path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-5.5-2.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0ZM10 12a5.99 5.99 0 0 0-4.793 2.39A6.483 6.483 0 0 0 10 16.5a6.483 6.483 0 0 0 4.793-2.11A5.99 5.99 0 0 0 10 12Z" clip-rule="evenodd" />
                                                         </svg>
                                                     </span>
-                                                    <span class="font-normal">{customer}</span>
+                                                    <span class="font-normal">{$get('kontak_nama')}</span>
                                                 </div>
                                             </div>
                                             <div class="flex flex-col">
@@ -506,7 +542,7 @@ class Cashier extends Page implements HasForms, HasTable
                                                             <path fill-rule="evenodd" d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z" clip-rule="evenodd" />
                                                         </svg>
                                                     </span>
-                                                    <span class="text-sm font-normal">{tangggal}</span>
+                                                    <span class="text-sm font-normal">{$tanggal}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -549,7 +585,7 @@ class Cashier extends Page implements HasForms, HasTable
                                         })
                                 ])
                                 ->extraAttributes([
-                                    'class' => '[&>ul>div]:!gap-2 h-[calc(100vh-400px)] overflow-y-auto p-[1px]'
+                                    'class' => '[&>ul>div]:!gap-2 min-h-[362px] h-[calc(100vh-320px)] overflow-y-auto p-[1px]'
                                 ])
                                 ->hiddenLabel()
                                 ->deletable(false)
@@ -579,22 +615,164 @@ class Cashier extends Page implements HasForms, HasTable
                                     return $get('total');
                                 })
                         ]),
-                    Section::make('Pembayaran')
+                    Section::make()
                         ->schema([
-                            TextInput::make('acd'),
-                            TextInput::make('asd'),
+                            Hidden::make('grandtotal'),
+                            // Hidden::make('bayar'),
+                            Placeholder::make('')
+                                ->content(function ($get) {
+                                    $grandTotal = \number_format($get('grandtotal'), 0, ',', '.');
+                                    $kembalian = \number_format(max((int)str_replace(['.',','],['', '.'],$get('bayar'))-(int)$get('grandtotal'),0),0,',','.');
+                                    return new HtmlString(<<<HTML
+                                        <div class="w-full grid grid-cols-2 gap-3">
+                                            <div class="">
+                                                <span>Tagihan</span>
+                                                <h3 class="font-bold text-xl">Rp{$grandTotal}</h3>
+                                            </div>
+                                            <div class="">
+                                                <span>Kembalian</span>
+                                                <h3 class="font-bold text-xl">Rp{$kembalian}</h3>
+                                            </div>
+                                        </div>
+                                    HTML);
+                                }),
+                            ToggleButtons::make('payment_method')
+                                ->label('Metode Pembayaran')
+                                ->extraAttributes([
+                                    'class' => '[&>div>label]:p-4 [&>div>label]:w-full'
+                                ])
+                                ->required()
+                                ->columns(2)
+                                ->gridDirection('row')
+                                ->options(\App\Filament\PointOfSale\Enums\PaymentMethod::class),
+                            TextInput::make('bayar')
+                                ->label('Bayar')
+                                ->required()
+                                ->live(true)
+                                ->mask(RawJs::make(<<<'JS'
+                                    $money($input, ',', '.', 2)
+                                JS))
+                                ->stripCharacters('.')
+                                ->extraAlpineAttributes([
+                                    'x-ref' => 'input',
+                                    'x-on:keyup' => '$refs.input.blur(); $refs.input.focus()'
+                                ])
+                                ->prefix('Rp'),
+                            Actions::make([
+                                Action::make('uang_pas')
+                                    ->label('UANG PAS')
+                                    ->extraAttributes([
+                                        'class' => 'text-nowrap !font-normal'
+                                    ])
+                                    ->color('success')
+                                    ->action(function ($set, Get $get) {
+                                        $set('bayar', number_format($get('grandtotal'),0,',','.'));
+                                    }),
+                                Action::make('1000')
+                                    ->action(function ($set, $get) {
+                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 1000, 0, ',', '.'));
+                                    })
+                                    ->extraAttributes([
+                                        'class' => 'text-nowrap !font-normal'
+                                    ])
+                                    ->color('gray')
+                                    ->label('Rp1.000'),
+                                Action::make('2000')
+                                    ->extraAttributes([
+                                        'class' => 'text-nowrap !font-normal'
+                                    ])
+                                    ->action(function ($set, $get) {
+                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 2000, 0, ',', '.'));
+                                    })
+                                    ->color('gray')
+                                    ->label('Rp2.000'),
+                                Action::make('5000')
+                                    ->extraAttributes([
+                                        'class' => 'text-nowrap !font-normal'
+                                    ])
+                                    ->action(function ($set, $get) {
+                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 5000, 0, ',', '.'));
+                                    })
+                                    ->color('gray')
+                                    ->label('Rp5.000'),
+                                Action::make('10000')
+                                    ->extraAttributes([
+                                        'class' => 'text-nowrap !font-normal'
+                                    ])
+                                    ->action(function ($set, $get) {
+                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 10000, 0, ',', '.'));
+                                    })
+                                    ->color('gray')
+                                    ->label('Rp10.000'),
+                                Action::make('20000')
+                                    ->extraAttributes([
+                                        'class' => 'text-nowrap !font-normal'
+                                    ])
+                                    ->action(function ($set, $get) {
+                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 20000, 0, ',', '.'));
+                                    })
+                                    ->color('gray')
+                                    ->label('Rp20.000'),
+                                Action::make('50000')
+                                    ->extraAttributes([
+                                        'class' => 'text-nowrap !font-normal'
+                                    ])
+                                    ->action(function ($set, $get) {
+                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 50000, 0, ',', '.'));
+                                    })
+                                    ->color('gray')
+                                    ->label('Rp50.000'),
+                                Action::make('100000')
+                                    ->extraAttributes([
+                                        'class' => 'text-nowrap !font-normal'
+                                    ])
+                                    ->action(function ($set, $get) {
+                                        $set('bayar', number_format((int)str_replace(['.',','],['','.'],$get('bayar')) + 100000, 0, ',', '.'));
+                                    })
+                                    ->color('gray')
+                                    ->label('Rp100.000'),
+                                Action::make('clear')
+                                    ->extraAttributes([
+                                        'class' => 'text-nowrap !font-normal'
+                                    ])
+                                    ->action(function ($set, $get) {
+                                        $set('bayar', 0);
+                                    })
+                                    ->color('danger')
+                                    ->label('CLEAR'),
+                            ])
+                                ->extraAttributes([
+                                    'class' => '[&>div]:!grid [&>div]:!gap-2 [&>div]:!grid-cols-3'
+                                ]),
+                            Actions::make([
+                                Action::make('pay-later')
+                                    ->label('BAYAR NANTI')
+                                    ->color('gray')
+                                    ->dispatch('close-modal', ['id' => "{$this->getId()}-action"]),
+                                Action::make('pay-now')
+                                    ->label('BAYAR')
+                                    ->extraAttributes([
+                                        'class' => 'grow',
+                                        'type' => 'submit'
+                                    ])
+                            ])->extraAttributes([
+                                'class' => 'flex'
+                            ])
                         ])
                 ])
+                    ->from('md')
                     ->columns(2)
             ])
+            ->action(function () {
+                $record = $this->getMountedActionForm($this->getMountedAction())->getRawState();
+                $this->createPayment($record);
+            })
+            ->fillForm($this->data)
             ->modalSubmitAction(false)
             ->modalCancelAction(false)
-            ->modalCloseButton(false)
+            ->closeModalByEscaping(false)
             ->closeModalByClickingAway(false)
-            ->fillForm($this->data)
-            ->action(function (array $arguments) {
-                dd('Test action called', $arguments);
-            });
+            ->modalCloseButton(false);
     }
 
     public function calcTotalQty()

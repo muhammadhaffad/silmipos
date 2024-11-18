@@ -73,7 +73,7 @@ class SalesPaymentService
                     [
                         'kode_akun' => '1001',
                         'keterangan' => 'Pembayaran #' . $alokasi->penjualan->transaksi_no,
-                        'nominaldebit' => $alokasi->nominal,
+                        'nominaldebit' => $alokasi->nominal + $alokasi->kembalian,
                         'nominalkredit' => 0,
                         'ref_id' => $alokasi->id_penjualanalokasipembayaran
                     ],
@@ -85,6 +85,30 @@ class SalesPaymentService
                         'ref_id' => $alokasi->id_penjualanalokasipembayaran
                     ],
                 ];
+                if ($alokasi->kembalian > 0) {
+                    $detailTransaksi[] = [
+                        'kode_akun' => '7010',
+                        'keterangan' => 'Kelebihan bayar #' . $alokasi->penjualan->transaksi_no,
+                        'nominaldebit' => 0,
+                        'nominalkredit' => $alokasi->kembalian,
+                        'ref_id' => $alokasi->id_penjualanalokasipembayaran
+                    ];
+                    /* Pencatatan pengembalian bayar */
+                    $detailTransaksi[] = [
+                        'kode_akun' => '7010',
+                        'keterangan' => 'Kembalian bayar #' . $alokasi->penjualan->transaksi_no,
+                        'nominaldebit' => $alokasi->kembalian,
+                        'nominalkredit' => 0,
+                        'ref_id' => $alokasi->id_penjualanalokasipembayaran
+                    ];
+                    $detailTransaksi[] = [
+                        'kode_akun' => '1001',
+                        'keterangan' => 'Kembalian bayar #' . $alokasi->penjualan->transaksi_no,
+                        'nominaldebit' => 0,
+                        'nominalkredit' => $alokasi->kembalian,
+                        'ref_id' => $alokasi->id_penjualanalokasipembayaran
+                    ];
+                }
                 $this->entryJurnal($alokasi->id_transaksi, $detailTransaksi);
             }
             DB::commit();
@@ -131,8 +155,8 @@ class SalesPaymentService
                     if (isset($oldItem[$item['id_penjualanalokasipembayaran']])) {
                         /* Jika di-update */
                         $newData = [];
-                        if ($item['nominalbayar'] != $oldItem[$item['id_penjualanalokasipembayaran']]['nominal']) {
-                            $newData['nominal'] = (int)$item['nominalbayar'];
+                        if ($item['nominalbayar'] != $oldItem[$item['id_penjualanalokasipembayaran']]['nominal'] + $oldItem[$item['id_penjualanalokasipembayaran']]['kembalian']) {
+                            $newData['nominalbayar'] = (int)$item['nominalbayar'];
                         }
                         if (!empty($newData)) $this->updateAllocatePaymentToInvoice($item['id_penjualanalokasipembayaran'], $pembayaran, $pembayaranOld, $newData, $oldItem);
                     } else {
@@ -157,7 +181,7 @@ class SalesPaymentService
                     [
                         'kode_akun' => '1001',
                         'keterangan' => 'Pembayaran #' . $alokasi->penjualan->transaksi_no,
-                        'nominaldebit' => $alokasi->nominal,
+                        'nominaldebit' => $alokasi->nominal + $alokasi->kembalian,
                         'nominalkredit' => 0,
                         'ref_id' => $alokasi->id_penjualanalokasipembayaran
                     ],
@@ -169,6 +193,30 @@ class SalesPaymentService
                         'ref_id' => $alokasi->id_penjualanalokasipembayaran
                     ],
                 ];
+                if ($alokasi->kembalian > 0) {
+                    $detailTransaksi[] = [
+                        'kode_akun' => '7010',
+                        'keterangan' => 'Kelebihan bayar #' . $alokasi->penjualan->transaksi_no,
+                        'nominaldebit' => 0,
+                        'nominalkredit' => $alokasi->kembalian,
+                        'ref_id' => $alokasi->id_penjualanalokasipembayaran
+                    ];
+                    /* Pencatatan pengembalian bayar */
+                    $detailTransaksi[] = [
+                        'kode_akun' => '7010',
+                        'keterangan' => 'Kembalian bayar #' . $alokasi->penjualan->transaksi_no,
+                        'nominaldebit' => $alokasi->kembalian,
+                        'nominalkredit' => 0,
+                        'ref_id' => $alokasi->id_penjualanalokasipembayaran
+                    ];
+                    $detailTransaksi[] = [
+                        'kode_akun' => '1001',
+                        'keterangan' => 'Kembalian bayar #' . $alokasi->penjualan->transaksi_no,
+                        'nominaldebit' => 0,
+                        'nominalkredit' => $alokasi->kembalian,
+                        'ref_id' => $alokasi->id_penjualanalokasipembayaran
+                    ];
+                }
                 $this->entryJurnal($alokasi->id_transaksi, $detailTransaksi);
             }
             DB::commit();
@@ -216,7 +264,7 @@ class SalesPaymentService
                 throw new SalesPaymentException('Sisa pembayaran tidak mencukupi, sisa pembayaran Anda: ' . $sisaPembayaran);
             }
             if ($sisaTagihan < $newData['nominalbayar']) {
-                throw new SalesPaymentException('Pembayaran melebihi tagihan, sisa tagihan Anda: ' . $sisaTagihan);
+                // throw new SalesPaymentException('Pembayaran melebihi tagihan, sisa tagihan Anda: ' . $sisaTagihan);
             }
             $transaksi = Transaksi::create([
                 'id_transaksijenis' => 'penjualanpembayaran_tunai',
@@ -228,7 +276,8 @@ class SalesPaymentService
                 'id_penjualanpembayaran' => $payment->id_penjualanpembayaran,
                 'id_penjualaninvoice' => $newData['id_penjualan'],
                 'tanggal' => $newData['tanggal'],
-                'nominal' => (int)$newData['nominalbayar'],
+                'nominal' => (int)(min($sisaTagihan, $newData['nominalbayar'])),
+                'kembalian' => (int)(max($newData['nominalbayar'] - $sisaTagihan, 0)),
                 'inserted_by' => Admin::user()->username,
                 'updated_by' => Admin::user()->username,
                 'id_transaksi' => $transaksi->id_transaksi
@@ -262,10 +311,13 @@ class SalesPaymentService
             if (!$penjualanInvoice) {
                 throw new SalesPaymentException('Supplier invoice tidak valid.');
             }
-            $sisaTagihan = DB::select('select toko_griyanaura.f_getsisatagihanpenjualan(?) as sisatagihan', [$penjualanInvoice->transaksi_no])[0]->sisatagihan - ($newData['nominal'] - $oldData[$idItem]->nominal);
+            $sisaTagihan = DB::select('select toko_griyanaura.f_getsisatagihanpenjualan(?) as sisatagihan', [$penjualanInvoice->transaksi_no])[0]->sisatagihan /* - ($newData['nominal'] - $oldData[$idItem]->nominal) */;
             if ($sisaTagihan < 0) {
-                throw new SalesPaymentException('Pembayaran melebihi tagihan, sisa tagihan Anda: ' . $sisaTagihan);
+                // throw new SalesPaymentException('Pembayaran melebihi tagihan, sisa tagihan Anda: ' . $sisaTagihan);
             }
+            $newData['nominal'] = min($newData['nominalbayar'], $sisaTagihan+$oldData[$idItem]->nominal);
+            $newData['kembalian'] = max($newData['nominalbayar'] - ($sisaTagihan+$oldData[$idItem]->nominal), 0);
+            unset($newData['nominalbayar']);
             PenjualanAlokasiPembayaran::where('id_penjualanalokasipembayaran', $idItem)->update($newData);
             DB::commit();
         } catch (\Exception $th) {
