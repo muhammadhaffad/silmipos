@@ -152,11 +152,11 @@ class Cashier extends Page implements HasForms, HasTable
             $record['diskon'] = 0;
         }
         try {
-            // $invoice = $this->salesInvoiceService->storeSalesInvoice($record);
-            $this->data['transaksi_no'] = '123'; //$invoice['transaksi_no'];
+            $invoice = $this->salesInvoiceService->storeSalesInvoice($record);
+            $this->data['transaksi_no'] = /* '123'; */ $invoice['transaksi_no'];
             $this->data['kontak_nama'] = Kontak::find($record['id_kontak'], 'nama')->nama;
-            $this->data['tanggal'] = date('Y-m-d H:i:s');//$invoice['tanggal'];
-            $this->data['id_penjualan'] = 23;//$invoice['id_penjualan'];
+            $this->data['tanggal'] = /* date('Y-m-d H:i:s'); */$invoice['tanggal'];
+            $this->data['id_penjualan'] = /* 23; */$invoice['id_penjualan'];
             if ($saveAndPay) {
                 $this->mountAction('payment');
             } else {
@@ -191,7 +191,7 @@ class Cashier extends Page implements HasForms, HasTable
             'total' => $this->cleanFormatNumber($record['bayar'])
         ];
         try {
-            // $this->salesPaymentService->storePayment($data);
+            $this->salesPaymentService->storePayment($data);
             $this->replaceMountedAction('printPayment', ['record' => $record]);
             Notification::make()
                 ->title('Sukses melakukan pembayaran')
@@ -230,7 +230,7 @@ class Cashier extends Page implements HasForms, HasTable
                 $form->fill($penjualan->toArray());
             })
             ->extraModalWindowAttributes([
-                'class' => 'w-[10cm]'
+                'class' => '!w-[10cm]'
             ])
             ->label('Cetak Nota')
             ->modalSubmitAction(false)
