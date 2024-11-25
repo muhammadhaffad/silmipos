@@ -303,6 +303,8 @@ class PurchaseRefundPaymentController extends AdminController
     public function detailRefundForm($idRefund, $model)
     {
         $form = new Form($model);
+        $form->disableReset();
+        $form->disableSubmit();
         $data = $form->model()->with(['pembelianRefundDetail.pembelianPembayaranDP' => function ($q) {
             $q->addSelect(DB::raw('*,toko_griyanaura.f_getsisapembayaran(transaksi_no) as sisapembayaran'));
         }])->findOrFail($idRefund);

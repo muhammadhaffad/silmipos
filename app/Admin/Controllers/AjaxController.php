@@ -24,7 +24,19 @@ class AjaxController extends Controller
         }
         return Akun::where(DB::raw('kode_akun || nama'), 'ilike', "%$q%")->paginate(null, ['kode_akun as id', DB::raw("kode_akun || ' - ' || nama as text")]);
     }
-
+    public function storeAttributValue(Request $request, $idAttribut = null) {
+        $attrVal = $request->get('attr_val');
+        if ($attrVal != null and $idAttribut != null) {
+            $id = DB::table('toko_griyanaura.lv_attributvalue')->insertGetId([
+                'id_attribut' => $idAttribut,
+                'nama' => $attrVal
+            ], 'id_attributvalue');
+            return [
+                'id' => $id,
+                'text' => $attrVal
+            ];
+        }
+    }
     public function attributValue(Request $request, $idAttribut = null) {
         $q = $request->get('q');
         if (!$idAttribut) {

@@ -154,7 +154,7 @@ class Cashier extends Page implements HasForms, HasTable
         try {
             $invoice = $this->salesInvoiceService->storeSalesInvoice($record);
             $this->data['transaksi_no'] = /* '123'; */ $invoice['transaksi_no'];
-            $this->data['kontak_nama'] = Kontak::find($record['id_kontak'], 'nama')->nama;
+            $this->data['kontak_nama'] = $invoice['nama_customer'] ?: Kontak::find($record['id_kontak'], 'nama')->nama;
             $this->data['tanggal'] = /* date('Y-m-d H:i:s'); */$invoice['tanggal'];
             $this->data['id_penjualan'] = /* 23; */$invoice['id_penjualan'];
             if ($saveAndPay) {
@@ -166,7 +166,10 @@ class Cashier extends Page implements HasForms, HasTable
                     ->success()
                     ->send();
             }
-            $this->data = [];
+            $this->data = [
+                'id_kontak' => Kontak::where('jenis_kontak', 'customer')
+                    ->orderBy('id_kontak')->first()->id_kontak
+            ];
             $this->totalQty = [];
         } catch (ValidationException $e) {
             Notification::make()
@@ -415,17 +418,32 @@ class Cashier extends Page implements HasForms, HasTable
                                 }
                             ]
                         ]),
-                    Select::make('id_kontak')
-                        ->label('Pelanggan')
-                        ->rules('required|numeric')
-                        ->placeholder('Pilih pelanggan')
-                        ->options(
-                            Kontak::where('jenis_kontak', 'customer')
-                                ->get()
-                                ->pluck('nama', 'id_kontak')
-                                ->unique()
-                        )
-                        ->native(false),
+                    \Filament\Forms\Components\Split::make([
+                        Select::make('id_kontak')
+                            ->label('Member')
+                            ->rules('required|numeric')
+                            ->placeholder('Pilih pelanggan')
+                            ->searchable()
+                            ->options(
+                                Kontak::where('jenis_kontak', 'customer')
+                                    ->get()
+                                    ->pluck('nama', 'id_kontak')
+                                    ->unique()
+                            )
+                            ->live()
+                            ->required()
+                            ->default(function () {
+                                $kontak = Kontak::where('jenis_kontak', 'customer')->orderBy('id_kontak')->first();
+                                return $kontak->id_kontak;
+                            })
+                            ->afterStateUpdated(function ($get, $set) {
+                                $namaCustomer = Kontak::find($get('id_kontak'))?->nama;
+                                $set('nama_customer', $namaCustomer);
+                            })
+                            ->native(false),
+                        TextInput::make('nama_customer')
+                            ->label('Nama pelanggan'),
+                    ]),
                     \Filament\Forms\Components\Split::make([
                         TextInput::make('total')
                             ->numeric()

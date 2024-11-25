@@ -423,6 +423,8 @@ class SalesRefundPaymentController extends AdminController
             $form->currency('total', 'Total')->setWidth(2, 8)->width('100%')->symbol('Rp')->readonly();
             $form->textarea('catatan')->disable()->setWidth(4);
         });
+        $form->disableReset();
+        $form->disableSubmit();
         return $form;
     }
 

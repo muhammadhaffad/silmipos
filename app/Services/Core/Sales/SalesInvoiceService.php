@@ -28,6 +28,7 @@ class SalesInvoiceService
             'id_gudang' => 'required|numeric',
             'diskon' => 'nullable|numeric',
             'catatan' => 'nullable|string',
+            'nama_customer' => 'nullable|string',
             'penjualanDetail' => 'required|array',
             'penjualanDetail.*.kode_produkvarian' => 'required|string',
             'penjualanDetail.*.id_gudang' => 'required|numeric',
@@ -56,6 +57,7 @@ class SalesInvoiceService
                 'tanggaltempo' => $request['tanggaltempo'],
                 'catatan' => $request['catatan'],
                 'diskonjenis' => 'persen',
+                'nama_customer' => $request['nama_customer'] ?? null,
                 'diskon' => $request['diskon'] ?: 0,
             ]);
             $rawTotal = 0;

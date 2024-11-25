@@ -249,14 +249,14 @@ class ProdukService
                             foreach ($request['produkAttribut'] as $keyAttr => $attribut) {
                                 if ($attribut['_remove_'] == 0) {
                                     if (isset($oldVarians[$keyAttr])) {
-                                        $newValues = [];
+                                        $newValueAttr = [];
                                         if ($oldVarians[$keyAttr] != $varian[$keyAttr]) {
-                                            $newValues['id_attributvalue'] = $varian[$keyAttr];
+                                            $newValueAttr['id_attributvalue'] = $varian[$keyAttr];
                                         }
-                                        if (!empty($newValues)) {
-                                            $newValues['updated_at'] = date('Y-m-d H:i:s');
-                                            $newValues['updated_by'] = Admin::user()->username;
-                                            DB::table('toko_griyanaura.ms_produkattributvarian')->where('kode_produkvarian', $varian['kode_produkvarian'])->where('id_produkattribut', $keyAttr)->update($newValues);
+                                        if (!empty($newValueAttr)) {
+                                            $newValueAttr['updated_at'] = date('Y-m-d H:i:s');
+                                            $newValueAttr['updated_by'] = Admin::user()->username;
+                                            DB::table('toko_griyanaura.ms_produkattributvarian')->where('kode_produkvarian', $varian['kode_produkvarian'])->where('id_produkattribut', $keyAttr)->update($newValueAttr);
                                         }
                                     } else {
                                         // dump($oldVarians, $request['produkAttribut'], $varian, $attribut);

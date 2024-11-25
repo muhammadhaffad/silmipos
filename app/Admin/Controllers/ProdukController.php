@@ -585,7 +585,7 @@ class ProdukController extends Controller
             }    
         STYLE;
         $script =
-        <<<SCRIPT
+        <<<JS
             $('[select2].form-control').each(function () {
                 const select = this;
                 const defaultValue = select.dataset.value.split(',');
@@ -606,7 +606,7 @@ class ProdukController extends Controller
                     });
                 })
             });
-        SCRIPT;
+        JS;
         Admin::style($style);
         Admin::script($script);
         return $content
@@ -663,7 +663,7 @@ class ProdukController extends Controller
                     }
         STYLE;
         $script =
-        <<<SCRIPT
+        <<<JS
                     $('[varian-filter]').change(function () {
                         let attrValFilter = [];
                         $('[varian-filter]').each(function (k, varian) {
@@ -704,7 +704,7 @@ class ProdukController extends Controller
                             });
                         })
                     });
-        SCRIPT;
+        JS;
         Admin::style($style);
         Admin::script($script);
         return $content
@@ -754,8 +754,9 @@ class ProdukController extends Controller
                     }
         STYLE;
         $routeAttrVal = route(admin_get_route('ajax.attribut-value'));
+        $routeAttrValCreate = route(admin_get_route('ajax.attribut-value.store'));
         $script =
-        <<<SCRIPT
+        <<<JS
                     function generateKombinasiVarian () {
                         let attrVals = [];
                         $('.id_attributvalue').each(function (i, select) {
@@ -892,41 +893,82 @@ class ProdukController extends Controller
                     });
                     $(document).off('change', ".id_attribut");
                     $(document).on('change', ".id_attribut", function () {
+                        const that = this;
                         var target = $(this).closest('tr').find('.id_attributvalue');
                         target.removeClass('produkAttribut'); //hapus class tsb. agar select tidak teroverwrite ketika tambah row
                         target.find("option").remove();
                         $(target).select2({
-                        ajax: {
-                            url: "$routeAttrVal/"+this.value,
-                            dataType: 'json',
-                            delay: 250,
-                            data: function (params) {
-                            return {
-                                q: params.term,
-                                page: params.page
-                            };
-                            },
-                            processResults: function (data, params) {
-                            params.page = params.page || 1;
+                            ajax: {
+                                url: "$routeAttrVal/"+that.value,
+                                dataType: 'json',
+                                delay: 250,
+                                data: function (params) {
+                                    return {
+                                        q: params.term,
+                                        page: params.page
+                                    };
+                                },
+                                processResults: function (data, params) {
+                                    params.page = params.page || 1;
 
-                            return {
-                                results: $.map(data.data, function (d) {
-                                        d.id = d.id;
-                                        d.text = d.text;
-                                        return d;
-                                        }),
-                                pagination: {
-                                more: data.next_page_url
-                                }
-                            };
+                                    return {
+                                        results: $.map(data.data, function (d) {
+                                                d.id = d.id;
+                                                d.text = d.text;
+                                                return d;
+                                                }),
+                                        pagination: {
+                                        more: data.next_page_url
+                                        }
+                                    };
+                                },
+                                cache: true
                             },
-                            cache: true
-                        },
-                        "placeholder":"Nilai Varian",
-                        "minimumInputLength":1,
-                        escapeMarkup: function (markup) {
-                            return markup;
-                        }
+                            tags: true,
+                            createTag: function (params) {
+                                // Don't offset to create a tag if there is no @ symbol
+                                // if (params.term.indexOf('@') === -1) {
+                                    // Return null to disable tag creation
+                                    // return null;
+                                // }
+                                return {
+                                    id: params.term,
+                                    text: params.term,
+                                    newTag: true
+                                }
+                            },
+                            /* "language": {
+                                "noResults": function(){
+                                    const term = target.data('select2').selection.\$search.val();
+                                    return "Data " + term + " tidak ditemukan";
+                                }
+                            }, */
+                            "placeholder":"Nilai Varian",
+                            "minimumInputLength":1,
+                            escapeMarkup: function (markup) {
+                                return markup;
+                            }
+                        }).on('select2:select', function (evt) {
+                            if(evt.params.data.newTag == true) {
+                                var select2Element = $(this);
+    
+                                $.get('$routeAttrValCreate/'+that.value, { attr_val: evt.params.data.text }, function( data ) {
+                                    // Add HTML option to select field
+                                    $('<option value="' + data.id + '">' + data.text + '</option>').appendTo(select2Element);
+    
+                                    // Replace the tag name in the current selection with the new persisted ID
+                                    var selection = select2Element.val();
+                                    var index = selection.indexOf(data.text);            
+    
+                                    if (index !== -1) {
+                                        selection[index] = data.id.toString();
+                                    }
+    
+                                    select2Element.val(selection).trigger('change');
+    
+                                }, 'json');
+                            }
+
                         });
                         if (target.data('value')) {
                             $(target).val(target.data('value'));
@@ -953,7 +995,7 @@ class ProdukController extends Controller
                             });
                         })
                     });
-        SCRIPT;
+        JS;
         Admin::style($style);
         Admin::script($script);
         return $content
@@ -1001,7 +1043,7 @@ class ProdukController extends Controller
                     }
         STYLE;
         $script = 
-        <<<SCRIPT
+        <<<JS
                 $('[select2][akun].form-control').each(function () {
                     const select = this;
                     const defaultValue = select.dataset.value.split(',');
@@ -1037,9 +1079,9 @@ class ProdukController extends Controller
                     let produkVarianTpl = $($('template.produkVarian-tpl')[0].content);
                     produkVarianTpl.find('td').eq(columnIndex).addClass('hidden');
                 });
-        SCRIPT;
+        JS;
         $deferredScript =
-        <<<SCRIPT
+        <<<JS
                 $('#has-many-produkVarian').on('click', '.add', function () {
                     $(".produkVarian[varian]").select2({
                         ajax: {
@@ -1190,7 +1232,7 @@ class ProdukController extends Controller
                     let varianText = this.options[this.selectedIndex].text;
                     $('#has-many-produkVarian thead th.index-varian-' + indexVarian).text(varianText);
                 });
-        SCRIPT;
+        JS;
         
         Admin::style($style);
         Admin::script($script, false);
@@ -1241,7 +1283,7 @@ class ProdukController extends Controller
                     }
         STYLE;
         $script = 
-        <<<SCRIPT
+        <<<JS
             function checkDuplicateHarga() {
                 let valueCount = {};
                 $('#has-many-produkHarga select').filter(':visible').each(function () {
@@ -1305,9 +1347,9 @@ class ProdukController extends Controller
                     $(this).find('td').eq(columnIndex+1).find('input').attr('required', false);
                 });
             });
-        SCRIPT;
+        JS;
         $deferredScript = 
-        <<<SCRIPT
+        <<<JS
             $('#has-many-produkHarga').on('click', '.remove', function () {
                 checkDuplicateHarga();
                 disableButtons();
@@ -1392,7 +1434,7 @@ class ProdukController extends Controller
                 disableButtons();
                 return false;
             });
-        SCRIPT;
+        JS;
         Admin::style($style);
         Admin::script($script);
         Admin::script($deferredScript, true);

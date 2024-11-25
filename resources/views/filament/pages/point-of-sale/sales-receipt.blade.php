@@ -25,7 +25,7 @@
             </tr>
             <tr>
                 <td style="white-space: nowrap; width:50%;">KASIR:<br>ADMIN{{-- TODO: kasih column siapa yang input trx di table pembelian dan penjualan --}}</td>
-                <td style="white-space: nowrap; width:50%;">PELANGGAN:<br>{{$data['kontak']['nama']}}{{-- TODO: kasih field nama di table penjualan dan pembelian --}}</td>
+                <td style="white-space: nowrap; width:50%;">PELANGGAN:<br>{{$data['nama_customer'] ?: $data['kontak']['nama']}}{{-- TODO: kasih field nama di table penjualan dan pembelian --}}</td>
             </tr>
         </table>
         <table style="width: 100%; border-top: dashed; border-bottom: dashed;">

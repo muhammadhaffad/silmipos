@@ -3,6 +3,7 @@
 use App\Admin\Actions\Grid\InlineDelete;
 use App\Admin\Controllers\AjaxController;
 use App\Admin\Controllers\CobaController;
+use App\Admin\Controllers\ContactController;
 use Illuminate\Support\Facades\Route;
 use App\Admin\Controllers\ProdukController;
 use App\Admin\Controllers\ProdukMutasiController;
@@ -45,6 +46,15 @@ Route::group([
         Route::put('/update/{id}', [ProdukController::class, 'updateProduk'])->name('produk.update');
         Route::put('/update/harga/{id}', [ProdukController::class, 'updateProdukHarga'])->name('produk.update.harga');
         Route::match(['delete', 'post'], '/delete/{id}', [ProdukController::class, 'deleteProduk'])->name('produk.delete');
+    });
+    Route::prefix('/contact')->group(function () {
+        Route::get('/', [ContactController::class, 'listKontak'])->name('contact.list');
+        Route::get('/create', [ContactController::class, 'createKontak'])->name('contact.create');
+        Route::get('/edit/{idKontak}', [ContactController::class, 'editKontak'])->name('contact.edit');
+        Route::get('/detail/{idKontak}', [ContactController::class, 'detailKontak'])->name('contact.detail');
+        Route::post('/store', [ContactController::class, 'storeKontak'])->name('contact.store');
+        Route::put('/update/{idKontak}', [ContactController::class, 'updateKontak'])->name('contact.update');
+        Route::match(['delete', 'post'], '/delete/{idKontak}', [ContactController::class, 'deleteKontak'])->name('contact.delete');
     });
     Route::prefix('/warehouse-transfer')->group(function () {
         Route::get('/', [ProdukMutasiController::class, 'listProdukMutasi'])->name('produk-mutasi.list');
@@ -186,6 +196,7 @@ Route::group([
             Route::match(['delete', 'post'], '/delete/{idPembayaran}', [SalesDownPaymentController::class, 'deletePayment'])->name('sales.down-payment.delete');
         });
         Route::prefix('/refund')->group(function () {
+            Route::get('/', [SalesRefundPaymentController::class, 'listRefund'])->name('sales.refund.list');
             Route::get('/create', [SalesRefundPaymentController::class, 'createRefund'])->name('sales.refund.create');
             Route::get('/edit/{idRefund}', [SalesRefundPaymentController::class, 'editRefund'])->name('sales.refund.edit');
             Route::get('/detail/{idRefund}', [SalesRefundPaymentController::class, 'detailRefund'])->name('sales.refund.detail');
@@ -202,6 +213,7 @@ Route::group([
         Route::get('/akun', [AjaxController::class, 'akun'])->name('ajax.akun');
         Route::get('/varians', [AjaxController::class, 'getVarians'])->name('ajax.varians');
         Route::get('/attribut-value/{idAttribut?}', [AjaxController::class, 'attributValue'])->name('ajax.attribut-value');
+        Route::get('/attribut-value/store/{idAttribut?}', [AjaxController::class, 'storeAttributValue'])->name('ajax.attribut-value.store');
         Route::get('/produk', [AjaxController::class, 'getProduk'])->name('ajax.produk');
         Route::get('/kontak/supplier', [AjaxController::class, 'getKontakSupplier'])->name('ajax.kontak-supplier');
         Route::get('/kontak/customer', [AjaxController::class, 'getKontakCustomer'])->name('ajax.kontak-customer');
