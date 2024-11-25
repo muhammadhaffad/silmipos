@@ -12,7 +12,7 @@
             </div>
         </div>
         <div class="w-full mt-4 sm:mt-0 sm:w-1/2 lg:w-1/3">
-            <x-filament-panels::form wire:submit="create" class="md:sticky md:top-[96px]">
+            <x-filament-panels::form wire:submit="storeSalesInvoice" class="md:sticky md:top-[96px]">
                 {{ $this->form }}
             </x-filament-panels::form>
         </div>

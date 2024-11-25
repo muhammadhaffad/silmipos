@@ -44,7 +44,9 @@ class SalesInvoiceController extends AdminController
             else 
                 return '';
         });
-        $grid->column('kontak.nama', 'Customer')->sortable();
+        $grid->column('nama_customer', 'Customer')->display(function ($val) {
+            return $val ?: $this->kontak->nama;
+        })->sortable();
         $grid->column('tanggal', 'Tanggal')->display(function ($val) {
             return \date('d F Y', \strtotime($val));
         })->sortable();

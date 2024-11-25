@@ -6,6 +6,7 @@ use App\Filament\PointOfSale\Traits\InteractWithTabsTrait;
 use App\Models\Gudang;
 use App\Models\Kontak;
 use App\Models\ProdukPersediaan;
+use App\Services\Core\Contact\ContactService;
 use App\Services\Core\Sales\SalesInvoiceService;
 use App\Services\Core\Sales\SalesPaymentService;
 use Filament\Forms\Components\Actions;
@@ -16,6 +17,7 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ToggleButtons;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -60,6 +62,7 @@ class Cashier extends Page implements HasForms, HasTable
     protected $listeners = ['refresh-table' => '$refresh', 'calc-total-qty' => 'calcTotalQty'];
     protected $salesInvoiceService;
     protected $salesPaymentService;
+    protected $contactService;
     public $counter;
     public $totalQty;
 
@@ -67,6 +70,7 @@ class Cashier extends Page implements HasForms, HasTable
     {
         $this->salesInvoiceService = new SalesInvoiceService();
         $this->salesPaymentService = new SalesPaymentService();
+        $this->contactService = new ContactService();
     }
 
     public function mount()
@@ -140,7 +144,7 @@ class Cashier extends Page implements HasForms, HasTable
         return '';
     }
 
-    public function create($saveAndPay = true): void
+    public function storeSalesInvoice($saveAndPay = true): void
     {
         $this->form->validate();
         $record = $this->form->getRawState();
@@ -154,9 +158,10 @@ class Cashier extends Page implements HasForms, HasTable
         try {
             $invoice = $this->salesInvoiceService->storeSalesInvoice($record);
             $this->data['transaksi_no'] = /* '123'; */ $invoice['transaksi_no'];
-            $this->data['kontak_nama'] = $invoice['nama_customer'] ?: Kontak::find($record['id_kontak'], 'nama')->nama;
-            $this->data['tanggal'] = /* date('Y-m-d H:i:s'); */$invoice['tanggal'];
-            $this->data['id_penjualan'] = /* 23; */$invoice['id_penjualan'];
+            $this->data['kontak_nama'] = /* null; */ $invoice['nama_customer'] ?: Kontak::find($record['id_kontak'], 'nama')->nama;
+            $this->data['tanggal'] = /* date('Y-m-d H:i:s'); */ $invoice['tanggal'];
+            $this->data['id_penjualan'] = /* 23; */ $invoice['id_penjualan'];
+            $this->data['payment_method'] = 'tunai';
             if ($saveAndPay) {
                 $this->mountAction('payment');
             } else {
@@ -179,7 +184,7 @@ class Cashier extends Page implements HasForms, HasTable
         }
     }
 
-    public function createPayment($record): void 
+    public function storeSalesInvoicePayment($record): void 
     {
         $data = [
             'id_kontak' => $record['id_kontak'],
@@ -204,6 +209,25 @@ class Cashier extends Page implements HasForms, HasTable
             Notification::make()
                 ->title('Internal Server Error')
                 ->body($th->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    public function storeContactCustomer($record)
+    {
+        $record['jenis_kontak'] = 'customer';
+        try {
+            $contact  = $this->contactService->storeContact($record);
+            Notification::make()
+                ->title('Sukses menambahkan pelanggan')
+                ->success()
+                ->send();
+            return $contact->id_kontak;
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Internal Server Error')
+                ->body($e->getMessage())
                 ->danger()
                 ->send();
         }
@@ -418,32 +442,79 @@ class Cashier extends Page implements HasForms, HasTable
                                 }
                             ]
                         ]),
-                    \Filament\Forms\Components\Split::make([
-                        Select::make('id_kontak')
-                            ->label('Member')
-                            ->rules('required|numeric')
-                            ->placeholder('Pilih pelanggan')
-                            ->searchable()
-                            ->options(
-                                Kontak::where('jenis_kontak', 'customer')
-                                    ->get()
-                                    ->pluck('nama', 'id_kontak')
-                                    ->unique()
-                            )
-                            ->live()
-                            ->required()
-                            ->default(function () {
-                                $kontak = Kontak::where('jenis_kontak', 'customer')->orderBy('id_kontak')->first();
-                                return $kontak->id_kontak;
-                            })
-                            ->afterStateUpdated(function ($get, $set) {
-                                $namaCustomer = Kontak::find($get('id_kontak'))?->nama;
-                                $set('nama_customer', $namaCustomer);
-                            })
-                            ->native(false),
-                        TextInput::make('nama_customer')
-                            ->label('Nama pelanggan'),
-                    ]),
+                    Hidden::make('id_kontak')
+                        ->default(function () {
+                            $kontak = Kontak::where('jenis_kontak', 'customer')->orderBy('id_kontak')->first();
+                            return $kontak->id_kontak;
+                        }),
+                    TextInput::make('nama_customer')
+                        ->prefixAction(
+                            Action::make('detail_customer')
+                                ->modalWidth('md')
+                                ->label('')
+                                ->color('gray')
+                                ->form([
+                                    Select::make('id_kontak')
+                                        ->label('Pilih pelanggan')
+                                        ->rules('required|numeric')
+                                        ->placeholder('Pilih pelanggan')
+                                        ->searchable()
+                                        ->optionsLimit(5)
+                                        ->options(
+                                            Kontak::where('jenis_kontak', 'customer')
+                                                ->get()
+                                                ->pluck('nama', 'id_kontak')
+                                                ->unique()
+                                        )
+                                        ->live()
+                                        ->required()
+                                        ->createOptionModalHeading('Daftar Member')
+                                        ->createOptionForm([
+                                            \Filament\Forms\Components\Grid::make([
+                                                'default' => 1,
+                                                'md' => 2
+                                            ])
+                                            ->schema([
+                                                TextInput::make('nama')->required(),
+                                                TextInput::make('nohp')->required()
+                                                    ->label('No. HP'),
+                                                Select::make('gender')->required()
+                                                    ->label('Jenis kelamin')
+                                                    ->options([
+                                                        'LK' => 'Laki-laki',
+                                                        'PR' => 'Perempuan'
+                                                    ])
+                                                    ->default('LK')
+                                                    ->native(false),
+                                                Textarea::make('alamat')
+                                                    ->columnSpan([
+                                                        'default' => 1,
+                                                        'md' => 2
+                                                    ])
+                                            ]),
+                                        ])
+                                        ->createOptionAction(function (Action $action) {
+                                            $action->modalWidth('lg');
+                                        })
+                                        ->createOptionUsing(function ($data) {
+                                            return $this->storeContactCustomer($data);
+                                        })
+                                        ->native(false)
+                                ])
+                                ->fillForm(function ($get) {
+                                    return [
+                                        'id_kontak' => $get('id_kontak')
+                                    ];
+                                })
+                                ->tooltip('Pelanggan')
+                                ->icon('heroicon-m-user')
+                                ->action(function ($data, Set $set) {
+                                    $customer = Kontak::find($data['id_kontak']);
+                                    $set('nama_customer', $customer?->nama);
+                                    $set('id_kontak', $customer?->id_kontak);
+                                })
+                        )
+                        ->label('Nama pelanggan'),
                     \Filament\Forms\Components\Split::make([
                         TextInput::make('total')
                             ->numeric()
@@ -494,7 +565,7 @@ class Cashier extends Page implements HasForms, HasTable
                                 'class' => 'w-full',
                             ])
                             ->action(function () {
-                                $this->create(false);
+                                $this->storeSalesInvoice(false);
                             })
                             ->color('gray')
                     ])
@@ -822,7 +893,7 @@ class Cashier extends Page implements HasForms, HasTable
             ])
             ->action(function () {
                 $record = $this->getMountedActionForm($this->getMountedAction())->getRawState();
-                $this->createPayment($record);
+                $this->storeSalesInvoicePayment($record);
             })
             ->fillForm($this->data)
             ->modalSubmitAction(false)
