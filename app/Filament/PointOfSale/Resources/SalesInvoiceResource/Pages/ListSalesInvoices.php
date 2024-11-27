@@ -7,6 +7,7 @@ use App\Models\Penjualan;
 use Filament\Actions;
 use Filament\Resources\Components\Tab;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Facades\FilamentView;
 use Illuminate\Support\Facades\DB;
 
 class ListSalesInvoices extends ListRecords
@@ -18,24 +19,28 @@ class ListSalesInvoices extends ListRecords
         return 'Daftar';
     }
 
+    public function mount(): void
+    {
+        parent::mount();
+        FilamentView::registerRenderHook(\Filament\View\PanelsRenderHook::SCRIPTS_AFTER, function () {
+            return '<script>' . <<<'JS'
+                function printDiv(selector) {
+                    const printContent = document.querySelector(selector).innerHTML;
+                    // Buat window baru
+                    const printWindow = window.open("", "_blank", "width=800,height=800");
+                    printWindow.document.open();
+                    printWindow.document.write(`${printContent}`);
+                    printWindow.window.print();
+                    setTimeout(() => {
+                        printWindow.document.close();
+                    }, 10);
+                }
+            JS . '</script>';
+        });
+    }
+
     public function getTabs(): array
     {
-        /* $tabs = ['all' => Tab::make('All')->badge($this->getModel()::count())];
- 
-        $tiers = Tier::orderBy('order_column', 'asc')
-            ->withCount('customers')
-            ->get();
- 
-        foreach ($tiers as $tier) {
-            $name = $tier->name;
-            $slug = str($name)->slug()->toString();
- 
-            $tabs[$slug] = Tab::make($name)
-                ->badge($tier->customers_count)
-                ->modifyQueryUsing(function ($query) use ($tier) {
-                    return $query->where('tier_id', $tier->id);
-                });
-        } */
         $countStatusPenjualan = Penjualan::addSelect([DB::raw('count(*) as all'), DB::raw("count(*) filter (where toko_griyanaura.f_getsisatagihanpenjualan(transaksi_no) > 0) as belumlunas"), DB::raw("count(*) filter (where toko_griyanaura.f_getsisatagihanpenjualan(transaksi_no) <= 0) as lunas")])->where('jenis', 'invoice')->first();
         $tabs = [
             'all' => Tab::make('Semua')

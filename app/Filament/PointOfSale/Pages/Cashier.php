@@ -670,7 +670,7 @@ class Cashier extends Page implements HasForms, HasTable
                             return $row->gudang?->nama ? ("Gudang {$row->gudang?->nama}") : 'Tidak distok';
                         })
                         ->default('Tidak distok')
-                        ->color('success')
+                        ->color('gray')
                         ->extraAttributes([
                             'class' => 'whitespace-nowrap'
                         ])

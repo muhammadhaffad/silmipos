@@ -8,13 +8,21 @@ use App\Models\Penjualan;
 use Filament\Forms;
 use Filament\Forms\Components\Actions;
 use Filament\Forms\Components\Actions\Action;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
@@ -101,8 +109,51 @@ class SalesInvoiceResource extends Resource
                     ->sortable(),
             ])
             ->filters([
-                //
+                Filter::make('sales_at')
+                    ->form([
+                        DatePicker::make('sales_from')
+                            ->label('Dari tanggal')
+                            ->native(false)
+                            ->displayFormat('d M Y')
+                            ->locale('id')
+                            ->placeholder('Pilih tanggal'),
+                        DatePicker::make('sales_until')
+                            ->label('Sampai tanggal')
+                            ->native(false)
+                            ->displayFormat('d M Y')
+                            ->locale('id')
+                            ->placeholder('Pilih tanggal')
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['sales_from'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('tanggal', '>=', $date),
+                            )
+                            ->when(
+                                $data['sales_until'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('tanggal', '<=', $date),
+                            );
+                    })
+                    ->indicateUsing(function (array $data): array {
+                        $indicators = [];
+                 
+                        if ($data['sales_from'] ?? null) {
+                            $indicators[] = \Filament\Tables\Filters\Indicator::make('Penjualan dari ' . \Carbon\Carbon::parse($data['sales_from'])->toFormattedDateString())
+                                ->removeField('sales_from');
+                        }
+                 
+                        if ($data['sales_until'] ?? null) {
+                            $indicators[] = \Filament\Tables\Filters\Indicator::make('Penjualan sampai ' . \Carbon\Carbon::parse($data['sales_until'])->toFormattedDateString())
+                                ->removeField('sales_until');
+                        }
+                 
+                        return $indicators;
+                    })
             ])
+            ->filtersTriggerAction(function (\Filament\Tables\Actions\Action $action) {
+                $action->icon('heroicon-m-adjustments-horizontal');
+            })
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\Action::make('print')
@@ -125,8 +176,8 @@ class SalesInvoiceResource extends Resource
                                 ->alpineClickHandler("printDiv('.print-only')")
                         ])
                     ])
-                    ->mountUsing(function ($arguments, $form) {
-                        $penjualan = \App\Models\Penjualan::with('penjualanDetail.produkVarian', 'kontak')->where('id_penjualan', $arguments['record']['id_penjualan'])->withSum('penjualanBayar as nominalbayar', 'nominal')->withSum('penjualanBayar as kembalian', 'kembalian')->first();
+                    ->mountUsing(function ($arguments, $form, $record) {
+                        $penjualan = \App\Models\Penjualan::with('penjualanDetail.produkVarian', 'kontak')->where('id_penjualan', $record->id_penjualan)->withSum('penjualanBayar as nominalbayar', 'nominal')->withSum('penjualanBayar as kembalian', 'kembalian')->first();
                         $form->fill($penjualan->toArray());
                     })
                     ->extraModalWindowAttributes([
