@@ -15,12 +15,65 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Facades\FilamentView;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
 class EditSalesInvoice extends EditRecord
 {
     protected static string $resource = SalesInvoiceResource::class;
+
+    public function mount(int|string $record): void
+    {
+        parent::mount($record);
+        FilamentView::registerRenderHook(PanelsRenderHook::BODY_END, function () {
+            return '<script>' . <<<'JS'
+                    function waitForElm(selector, callback) {
+                        const observer = new MutationObserver(function (mutations, mutationInstance) {
+                            const elm = document.querySelector(selector);
+                            if (elm) {
+                                callback(elm);
+                                mutationInstance.disconnect();
+                            }
+                        });
+                        observer.observe(document, {
+                            childList: true,
+                            subtree:   true
+                        });
+                    }
+                    window.addEventListener('searchItems', (e) => {
+                        const items = e.detail[0].items;
+                        const search = document.getElementById('data.search').value;
+                        console.info(search);
+                        if (items) {
+                            Object.entries(items).forEach(entry => {
+                                const [key, value] = entry;
+                                // console.log(key, value);
+                                waitForElm(`[x-sortable-item="${key}"]`, function (elm) {
+                                    if (! `${value.nama_produk} ${value.nama_varian}`.toLowerCase().includes(search.toLowerCase())) {
+                                        elm.classList.add('hidden');
+                                    } else {
+                                        elm.classList.remove('hidden');
+                                    }
+                                });
+                            });
+                        }
+                    });
+                    function printDiv(selector) {
+                        const printContent = document.querySelector(selector).innerHTML;
+                        // Buat window baru
+                        const printWindow = window.open("", "_blank", "width=800,height=800");
+                        printWindow.document.open();
+                        printWindow.document.write(`${printContent}`);
+                        printWindow.window.print();
+                        setTimeout(() => {
+                            printWindow.document.close();
+                        }, 10);
+                    }
+            JS . '</script>';
+        });
+    }
 
     protected function getHeaderActions(): array
     {
