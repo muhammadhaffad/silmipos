@@ -27,51 +27,46 @@ class EditSalesInvoice extends EditRecord
     public function mount(int|string $record): void
     {
         parent::mount($record);
-        FilamentView::registerRenderHook(PanelsRenderHook::BODY_END, function () {
-            return '<script>' . <<<'JS'
-                    function waitForElm(selector, callback) {
-                        const observer = new MutationObserver(function (mutations, mutationInstance) {
-                            const elm = document.querySelector(selector);
-                            if (elm) {
-                                callback(elm);
-                                mutationInstance.disconnect();
-                            }
-                        });
-                        observer.observe(document, {
-                            childList: true,
-                            subtree:   true
-                        });
+        FilamentView::registerRenderHook(PanelsRenderHook::STYLES_AFTER, function () {
+            return '<style>' . <<<'CSS'
+                    .table-repeater-container {
+                        overflow-x: scroll;
                     }
-                    window.addEventListener('searchItems', (e) => {
-                        const items = e.detail[0].items;
-                        const search = document.getElementById('data.search').value;
-                        console.info(search);
-                        if (items) {
-                            Object.entries(items).forEach(entry => {
-                                const [key, value] = entry;
-                                // console.log(key, value);
-                                waitForElm(`[x-sortable-item="${key}"]`, function (elm) {
-                                    if (! `${value.nama_produk} ${value.nama_varian}`.toLowerCase().includes(search.toLowerCase())) {
-                                        elm.classList.add('hidden');
-                                    } else {
-                                        elm.classList.remove('hidden');
-                                    }
-                                });
-                            });
+                    .table-repeater-container tr td {
+                        vertical-align: top;
+                    }
+                    .table-repeater-container td:nth-child(1), .table-repeater-container th:nth-child(1) {
+                        position: sticky;
+                        z-index: 50;
+                        left: 0px;
+                    }
+                    .table-repeater-container td:last-child, .table-repeater-container th:last-child {
+                        position: sticky;
+                        z-index: 50;
+                        right: 0px;
+                    }
+            CSS . '</style>';
+        });
+        FilamentView::registerRenderHook(PanelsRenderHook::SCRIPTS_AFTER, function () {
+            return '<script>' . <<<'JS'
+                function waitForElm(selector, callback) {
+                    const observer = new MutationObserver(function (mutations, mutationInstance) {
+                        const elm = document.querySelector(selector);
+                        if (elm) {
+                            callback(elm);
+                            mutationInstance.disconnect();
                         }
                     });
-                    function printDiv(selector) {
-                        const printContent = document.querySelector(selector).innerHTML;
-                        // Buat window baru
-                        const printWindow = window.open("", "_blank", "width=800,height=800");
-                        printWindow.document.open();
-                        printWindow.document.write(`${printContent}`);
-                        printWindow.window.print();
-                        setTimeout(() => {
-                            printWindow.document.close();
-                        }, 10);
-                    }
-            JS . '</script>';
+                    observer.observe(document, {
+                        childList: true,
+                        subtree:   true
+                    });
+                }
+
+                waitForElm(`.table-repeater-container`, function (elm) {
+                    console.info(elm);
+                });
+            JS . '</script>'; 
         });
     }
 
@@ -160,6 +155,9 @@ class EditSalesInvoice extends EditRecord
                                     ->getSearchResultsUsing(function ($search) {
                                         return ProdukVarian::withLabelVarian()->where('varian', 'ilike', "%{$search}%")->orWhere('kode_produkvarian', 'ilike', "%{$search}%")->limit(10)->get()->pluck('varian', 'kode_produkvarian');
                                     })
+                                    ->extraAttributes([
+                                        'ax-load-src' => 'asdfasdfasdf'
+                                    ])
                                     ->optionsLimit(10)
                                     ->searchable()
                                     ->native(false)
@@ -259,7 +257,7 @@ class EditSalesInvoice extends EditRecord
                     ])
                     ->columns(3)
                     ->extraAttributes([
-                        'class' => ' [&_.table-repeater-container_tr_td]:!align-top [&_.table-repeater-container_td:nth-child(1)]:!sticky [&_.table-repeater-container_td:nth-child(1)]:dark:!bg-gray-900 [&_.table-repeater-container_td:nth-child(1)]:!z-50 [&_.table-repeater-container_td:nth-child(1)]:!left-0 [&_.table-repeater-container_th:nth-child(1)]:!sticky [&_.table-repeater-container_th:nth-child(1)]:!left-0 [&_.table-repeater-container_th:nth-child(1)]:dark:!bg-gray-900 [&_.table-repeater-container_th:nth-child(1)]:!z-50 [&_.table-repeater-container_td:last-child]:!sticky [&_.table-repeater-container_td:last-child]:dark:!bg-gray-900 [&_.table-repeater-container_td:last-child]:!z-50 [&_.table-repeater-container_td:last-child]:!right-0 [&_.table-repeater-container_th:last-child]:!sticky [&_.table-repeater-container_th:last-child]:!right-0 [&_.table-repeater-container_th:last-child]:dark:!bg-gray-900 [&_.table-repeater-container_th:last-child]:!z-50 [&_.table-repeater-container_td>*]:md:!w-[120px] [&_.table-repeater-container_td:nth-child(1)>*]:md:!w-[220px] [&_.table-repeater-container_td:last-child>*]:md:!w-[40px] '
+                        'class' => '[&_.table-repeater-container_td:nth-child(1)]:dark:!bg-gray-900 [&_.table-repeater-container_th:nth-child(1)]:dark:!bg-gray-900 [&_.table-repeater-container_td:last-child]:dark:!bg-gray-900 [&_.table-repeater-container_th:last-child]:dark:!bg-gray-900 [&_.table-repeater-container_td>*]:md:!w-[120px] [&_.table-repeater-container_td:nth-child(1)>*]:md:!w-[220px] [&_.table-repeater-container_td:last-child>*]:md:!w-[40px]'
                     ])
             ]);
     }
