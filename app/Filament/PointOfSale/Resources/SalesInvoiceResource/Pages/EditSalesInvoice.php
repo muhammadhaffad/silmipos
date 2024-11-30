@@ -37,12 +37,12 @@ class EditSalesInvoice extends EditRecord
                     }
                     .table-repeater-container td:nth-child(1), .table-repeater-container th:nth-child(1) {
                         position: sticky;
-                        z-index: 50;
+                        z-index: 10;
                         left: 0px;
                     }
                     .table-repeater-container td:last-child, .table-repeater-container th:last-child {
                         position: sticky;
-                        z-index: 50;
+                        z-index: 10;
                         right: 0px;
                     }
             CSS . '</style>';
@@ -135,6 +135,7 @@ class EditSalesInvoice extends EditRecord
                             ])
                             ->schema([
                                 Select::make('kode_produkvarian')
+                                    ->view('filament.pages.point-of-sale.components.select')
                                     ->live(true)
                                     ->afterStateUpdated(function ($record, $get, $set) {
                                         if ($record == null) {
@@ -165,6 +166,7 @@ class EditSalesInvoice extends EditRecord
                                         return $record != null;
                                     }),
                                 Select::make('id_gudang')
+                                    ->view('filament.pages.point-of-sale.components.select')
                                     ->label('Gudang')
                                     ->live(true)
                                     ->afterStateUpdated(function ($record, $get, $set) {
@@ -257,7 +259,18 @@ class EditSalesInvoice extends EditRecord
                     ])
                     ->columns(3)
                     ->extraAttributes([
-                        'class' => '[&_.table-repeater-container_td:nth-child(1)]:dark:!bg-gray-900 [&_.table-repeater-container_th:nth-child(1)]:dark:!bg-gray-900 [&_.table-repeater-container_td:last-child]:dark:!bg-gray-900 [&_.table-repeater-container_th:last-child]:dark:!bg-gray-900 [&_.table-repeater-container_td>*]:md:!w-[120px] [&_.table-repeater-container_td:nth-child(1)>*]:md:!w-[220px] [&_.table-repeater-container_td:last-child>*]:md:!w-[40px]'
+                        'class' => '
+                        [&_.table-repeater-container_td:nth-child(1)]:dark:!bg-gray-900 
+                        [&_.table-repeater-container_th:nth-child(1)]:dark:!bg-gray-900 
+                        [&_.table-repeater-container_td:last-child]:dark:!bg-gray-900 
+                        [&_.table-repeater-container_th:last-child]:dark:!bg-gray-900
+                        [&_.table-repeater-container_td:nth-child(1)]:!bg-white 
+                        [&_.table-repeater-container_th:nth-child(1)]:!bg-gray-100 
+                        [&_.table-repeater-container_td:last-child]:!bg-white
+                        [&_.table-repeater-container_th:last-child]:!bg-gray-100 
+                        [&_.table-repeater-container_td>*]:md:!w-[120px] 
+                        [&_.table-repeater-container_td:nth-child(1)>*]:md:!w-[220px] 
+                        [&_.table-repeater-container_td:last-child>*]:md:!w-[40px]'
                     ])
             ]);
     }
