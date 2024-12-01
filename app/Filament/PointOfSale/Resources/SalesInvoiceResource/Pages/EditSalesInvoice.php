@@ -124,7 +124,17 @@ class EditSalesInvoice extends EditRecord
                                     ->locale('id')
                                     ->native(false)
                             ]),
+                        \Filament\Forms\Components\Actions::make([
+                            \Filament\Forms\Components\Actions\Action::make('tambah_item')
+                                ->label('Tambah baris')
+                                ->icon('heroicon-m-plus')
+                                ->color('gray')
+                                ->action(function () {
+                                    $this->dispatchFormEvent('penjualanDetail::add_item');
+                                })
+                        ]),
                         TableRepeater::make('detail_penjualan')
+                            ->label('')
                             ->headers([
                                 Header::make('Produk')->width('220px'),
                                 Header::make('Gudang')->width('120px'),
@@ -156,9 +166,6 @@ class EditSalesInvoice extends EditRecord
                                     ->getSearchResultsUsing(function ($search) {
                                         return ProdukVarian::withLabelVarian()->where('varian', 'ilike', "%{$search}%")->orWhere('kode_produkvarian', 'ilike', "%{$search}%")->limit(10)->get()->pluck('varian', 'kode_produkvarian');
                                     })
-                                    ->extraAttributes([
-                                        'ax-load-src' => 'asdfasdfasdf'
-                                    ])
                                     ->optionsLimit(10)
                                     ->searchable()
                                     ->native(false)
@@ -255,6 +262,22 @@ class EditSalesInvoice extends EditRecord
                             ->saveRelationshipsUsing(function ($state) {
                                 return [];
                             })
+                            ->addable(false)
+                            ->registerListeners([
+                                'penjualanDetail::add_item' => [
+                                    function (Repeater $component): void {
+                                        $newUuid = $component->generateUuid();
+                                        $items = array_merge(
+                                          [$newUuid => []],
+                                          $component->getState(),
+                                        );
+                                        $component->state($items);
+                                        $component->getChildComponentContainer($newUuid)->fill();
+                                        $component->collapsed(false, shouldMakeComponentCollapsible: false);
+                                        $component->callAfterStateUpdated();
+                                    }
+                                ]
+                            ])
                             ->columnSpanFull()
                     ])
                     ->columns(3)

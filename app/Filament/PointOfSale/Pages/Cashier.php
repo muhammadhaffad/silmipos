@@ -55,8 +55,8 @@ class Cashier extends Page implements HasForms, HasTable
     use InteractWithTabsTrait;
     use HasTabs;
 
-    protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
-    protected static ?string $navigationLabel = 'Point of Sale';
+    protected static ?string $navigationIcon = 'fas-cash-register';
+    protected static ?string $navigationLabel = 'Kasir';
     protected static ?string $title = null;
     protected static string $view = 'filament.pages.point-of-sale.cashier';
     public ?array $data = [];
