@@ -8,21 +8,45 @@ use App\Models\ProdukVarian;
 use Awcodes\TableRepeater\Components\TableRepeater;
 use Awcodes\TableRepeater\Header;
 use Filament\Actions;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Enums\Alignment;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 
 class EditSalesInvoice extends EditRecord
 {
     protected static string $resource = SalesInvoiceResource::class;
+    protected static ?string $title = 'Ubah Invoice Penjualan';
+    public static string|Alignment $formActionsAlignment = Alignment::End;
+
+    protected function getCancelFormAction(): Action
+    {
+        return parent::getCancelFormAction()
+            ->label('Batal');
+    }
+
+    protected function getSaveFormAction(): Action
+    {
+        return parent::getSaveFormAction()
+            ->label('Simpan Perubahan');   
+    }
+
+    public function getBreadcrumb(): string
+    {
+        return 'Ubah';
+    }
 
     public function mount(int|string $record): void
     {
@@ -73,7 +97,9 @@ class EditSalesInvoice extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            Actions\DeleteAction::make(),
+            Actions\DeleteAction::make()
+                ->label('Hapus Invoice')
+                ->icon('heroicon-s-trash'),
         ];
     }
 
@@ -138,10 +164,10 @@ class EditSalesInvoice extends EditRecord
                             ->headers([
                                 Header::make('Produk')->width('220px'),
                                 Header::make('Gudang')->width('120px'),
-                                Header::make('Qty')->width('120px'),
-                                Header::make('Harga')->width('120px'),
-                                Header::make('Diskon')->width('120px'),
-                                Header::make('Total')->width('120px'),
+                                Header::make('Qty')->width('100px'),
+                                Header::make('Harga')->width('150px'),
+                                Header::make('Diskon')->width('150px'),
+                                Header::make('Total')->width('150px'),
                             ])
                             ->schema([
                                 Select::make('kode_produkvarian')
@@ -233,6 +259,7 @@ class EditSalesInvoice extends EditRecord
                                     })
                                     ->numeric(),
                                 TextInput::make('harga')
+                                    ->prefix('Rp')
                                     ->live(debounce: 500)
                                     ->numeric()
                                     ->formatStateUsing(function ($state) {
@@ -243,11 +270,13 @@ class EditSalesInvoice extends EditRecord
                                     ->formatStateUsing(function ($state) {
                                         return \number($state);
                                     })
+                                    ->suffix('%')
                                     ->default(0)
                                     ->numeric()
                                     ->maxValue(100)
                                     ->minValue(0),
                                 TextInput::make('total')
+                                    ->prefix('Rp')
                                     ->placeholder(function ($get, $set) {
                                         $set('total', (int)((int)($get('harga')) * (float)($get('qty')) * (1 - (float)($get('diskon')) / 100)));
                                     })
@@ -278,7 +307,56 @@ class EditSalesInvoice extends EditRecord
                                     }
                                 ]
                             ])
-                            ->columnSpanFull()
+                            ->columnSpanFull(),
+                        \Filament\Forms\Components\Grid::make(3)
+                            ->schema([
+                                Placeholder::make('subtotal')
+                                    ->columnStart([
+                                        'default' => 1,
+                                        'lg' => 3
+                                    ])
+                                    ->content(function ($set, $get) {
+                                        $map = Arr::map($get('detail_penjualan'), function ($item) {
+                                            return $item['total'];
+                                        });
+                                        return 'Rp' . number_format(array_sum($map), 0, ',', '.');
+                                    })
+                                    ->extraAttributes([
+                                        'class' => 'text-end'
+                                    ])
+                                    ->inlineLabel(),
+                                TextInput::make('diskon')
+                                    ->live(debounce: 500)
+                                    ->formatStateUsing(function ($state) {
+                                        return number($state);
+                                    })
+                                    ->columnStart([
+                                        'default' => 1,
+                                        'lg' => 3
+                                    ])
+                                    ->suffix('%')
+                                    ->extraAttributes([
+                                        'class' => 'max-w-[120px] ms-auto'
+                                    ])
+                                    ->inlineLabel(),
+                                Placeholder::make('Total')
+                                    ->columnStart([
+                                        'default' => 1,
+                                        'lg' => 3
+                                    ])
+                                    ->content(function ($set, $get) {
+                                        $map = Arr::map($get('detail_penjualan'), function ($item) {
+                                            return $item['total'];
+                                        });
+                                        return 'Rp' . number_format((int)(array_sum($map) * (1 - min((float)($get('diskon')), 100)/100)), 0, ',', '.');
+                                    })
+                                    ->extraAttributes([
+                                        'class' => 'text-end'
+                                    ])
+                                    ->inlineLabel(),
+                                Textarea::make('catatan')
+                                    ->rows(4)
+                            ])
                     ])
                     ->columns(3)
                     ->extraAttributes([
@@ -291,9 +369,13 @@ class EditSalesInvoice extends EditRecord
                         [&_.table-repeater-container_th:nth-child(1)]:!bg-gray-100 
                         [&_.table-repeater-container_td:last-child]:!bg-white
                         [&_.table-repeater-container_th:last-child]:!bg-gray-100 
-                        [&_.table-repeater-container_td>*]:md:!w-[120px] 
                         [&_.table-repeater-container_td:nth-child(1)>*]:md:!w-[220px] 
-                        [&_.table-repeater-container_td:last-child>*]:md:!w-[40px]'
+                        [&_.table-repeater-container_td:nth-child(2)>*]:md:!w-[100px] 
+                        [&_.table-repeater-container_td:nth-child(3)>*]:md:!w-[100px] 
+                        [&_.table-repeater-container_td:nth-child(4)>*]:md:!w-[150px] 
+                        [&_.table-repeater-container_td:nth-child(5)>*]:md:!w-[100px] 
+                        [&_.table-repeater-container_td:nth-child(6)>*]:md:!w-[150px] 
+                        [&_.table-repeater-container_td:nth-child(7)>*]:md:!w-[40px]'
                     ])
             ]);
     }
