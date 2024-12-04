@@ -6,6 +6,7 @@ use App\Models\Penjualan;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Support\Enums\Alignment;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -18,13 +19,32 @@ class PenjualanBayarRelationManager extends RelationManager
     protected static string $relationship = 'penjualanBayar';
     protected static ?string $title = 'Pembayaran';
 
+    protected function storeSalesPayment($data, $model) {
+        dump($model);
+        return [];
+    }
+
     public function form(Form $form): Form
     {
         return $form
             ->schema([
+                Forms\Components\ToggleButtons::make('payment_method')
+                    ->label('Metode Pembayaran')
+                    ->extraAttributes([
+                        'class' => ''
+                    ])
+                    ->default([
+                        'tunai'
+                    ])
+                    ->required()
+                    ->columnSpanFull()
+                    ->gridDirection('row')
+                    ->options(\App\Filament\PointOfSale\Enums\PaymentMethod::class),
                 Forms\Components\TextInput::make('nominal')
                     ->required()
-                    ->maxLength(255),
+                    ->maxLength(255)
+                    ->columnSpanFull()
+                    ->prefix('Rp'),
             ]);
     }
 
@@ -51,7 +71,15 @@ class PenjualanBayarRelationManager extends RelationManager
                     ->icon('heroicon-m-plus')
                     ->label('Tambah pembayaran')
                     ->disabled(!($penjualan->sisatagihan > 0))
-                    ->modalWidth('md'),
+                    ->modalWidth('md')
+                    ->modalFooterActionsAlignment(Alignment::End)
+                    ->createAnother(false)
+                    ->modalCancelActionLabel('Batal')
+                    ->modalSubmitActionLabel('Simpan')
+                    ->modalHeading('Tambah Pembayaran')
+                    ->using(function ($data, $model) {
+                        $this->storeSalesPayment($data, $model);
+                    }),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
@@ -61,6 +89,9 @@ class PenjualanBayarRelationManager extends RelationManager
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
-            ]);
+            ])
+            ->emptyStateHeading('Belum ada pembayaran')
+            ->emptyStateDescription('Silahkan buat pembayaran terlebih dahulu')
+            ->modelLabel('pembayaran');
     }
 }

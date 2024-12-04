@@ -155,6 +155,7 @@ class SalesInvoiceResource extends Resource
                 $action->icon('heroicon-m-adjustments-horizontal');
             })
             ->actions([
+                Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\Action::make('print')
                     ->tooltip('Print receipt')
@@ -212,6 +213,7 @@ class SalesInvoiceResource extends Resource
             'index' => Pages\ListSalesInvoices::route('/'),
             'create' => Pages\CreateSalesInvoice::route('/create'),
             'edit' => Pages\EditSalesInvoice::route('/{record}/edit'),
+            'view' => Pages\ViewSalesInvoice::route('/{record}')
         ];
     }
 }

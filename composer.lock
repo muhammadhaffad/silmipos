@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "280c2ee01b3730db04402a41e3d34098",
+    "content-hash": "dc84ed16b3eb3ecae0e38a42180dff04",
     "packages": [
         {
             "name": "anourvalar/eloquent-serialize",
@@ -2361,6 +2361,75 @@
                 }
             ],
             "time": "2023-12-03T19:50:20+00:00"
+        },
+        {
+            "name": "icetalker/filament-table-repeatable-entry",
+            "version": "v1.0.3",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/icetalker/filament-table-repeatable-entry.git",
+                "reference": "24f2cb7edd6e3b21a4f74e46a8b5ad8ee3f70e30"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/icetalker/filament-table-repeatable-entry/zipball/24f2cb7edd6e3b21a4f74e46a8b5ad8ee3f70e30",
+                "reference": "24f2cb7edd6e3b21a4f74e46a8b5ad8ee3f70e30",
+                "shasum": ""
+            },
+            "require": {
+                "filament/infolists": "^3.0||3.0-stable",
+                "illuminate/contracts": "^10.0|^11.0",
+                "php": "^8.1",
+                "spatie/laravel-package-tools": "^1.14.0"
+            },
+            "require-dev": {
+                "laravel/pint": "^1.0",
+                "nunomaduro/collision": "^7.9",
+                "orchestra/testbench": "^8.0",
+                "pestphp/pest": "^2.0",
+                "pestphp/pest-plugin-arch": "^2.0",
+                "pestphp/pest-plugin-laravel": "^2.0"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "aliases": {
+                        "FilamentTableRepeatableEntry": "Icetalker\\FilamentTableRepeatableEntry\\Facades\\FilamentTableRepeatableEntry"
+                    },
+                    "providers": [
+                        "Icetalker\\FilamentTableRepeatableEntry\\FilamentTableRepeatableEntryServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Icetalker\\FilamentTableRepeatableEntry\\": "src",
+                    "Icetalker\\FilamentTableRepeatableEntry\\Database\\Factories\\": "database/factories"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Martin Hwang",
+                    "email": "termlong.com@gmail.com",
+                    "role": "Developer"
+                }
+            ],
+            "description": "Display Filament RepeatableEntry as table",
+            "homepage": "https://github.com/icetalker/filament-table-repeatable-entry",
+            "keywords": [
+                "filament-table-repeatable-entry",
+                "icetalker",
+                "laravel"
+            ],
+            "support": {
+                "issues": "https://github.com/icetalker/filament-table-repeatable-entry/issues",
+                "source": "https://github.com/icetalker/filament-table-repeatable-entry/tree/v1.0.3"
+            },
+            "time": "2024-08-28T14:15:58+00:00"
         },
         {
             "name": "kirschbaum-development/eloquent-power-joins",

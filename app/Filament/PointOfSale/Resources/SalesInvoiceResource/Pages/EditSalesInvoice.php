@@ -162,12 +162,12 @@ class EditSalesInvoice extends EditRecord
                         TableRepeater::make('detail_penjualan')
                             ->label('')
                             ->headers([
-                                Header::make('Produk')->width('220px'),
-                                Header::make('Gudang')->width('120px'),
-                                Header::make('Qty')->width('100px'),
-                                Header::make('Harga')->width('150px'),
-                                Header::make('Diskon')->width('150px'),
-                                Header::make('Total')->width('150px'),
+                                Header::make('Produk')->width('220px;font-size: .875rem;'),
+                                Header::make('Gudang')->width('120px;font-size: .875rem;'),
+                                Header::make('Qty')->width('100px;font-size: .875rem;'),
+                                Header::make('Harga')->width('150px;font-size: .875rem;'),
+                                Header::make('Diskon')->width('150px;font-size: .875rem;'),
+                                Header::make('Total')->width('150px;font-size: .875rem;'),
                             ])
                             ->schema([
                                 Select::make('kode_produkvarian')
