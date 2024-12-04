@@ -354,6 +354,18 @@ class EditSalesInvoice extends EditRecord
                                         'class' => 'text-end'
                                     ])
                                     ->inlineLabel(),
+                                Placeholder::make('Sisa tagihan')
+                                    ->columnStart([
+                                        'default' => 1,
+                                        'lg' => 3
+                                    ])
+                                    ->content(function ($get) {
+                                        return 'Rp' . number_format($get('sisatagihan'), 0, ',', '.');
+                                    })
+                                    ->extraAttributes([
+                                        'class' => 'text-end'
+                                    ])
+                                    ->inlineLabel(),
                                 Textarea::make('catatan')
                                     ->rows(4)
                             ])
@@ -378,6 +390,13 @@ class EditSalesInvoice extends EditRecord
                         [&_.table-repeater-container_td:nth-child(7)>*]:md:!w-[40px]'
                     ])
             ]);
+    }
+
+    public function getRelationManagers(): array
+    {
+        return [
+            \App\Filament\PointOfSale\Resources\SalesInvoiceResource\RelationManagers\PenjualanBayarRelationManager::class
+        ];
     }
 
     // protected function mutateFormDataBeforeFill(array $data): array

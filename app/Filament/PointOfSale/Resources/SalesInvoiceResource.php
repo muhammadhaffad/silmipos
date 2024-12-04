@@ -194,6 +194,11 @@ class SalesInvoiceResource extends Resource
             ]);
     }
 
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->select()->addSelect(DB::raw('toko_griyanaura.f_getsisatagihanpenjualan(transaksi_no) as sisatagihan'));
+    }
+
     public static function getRelations(): array
     {
         return [

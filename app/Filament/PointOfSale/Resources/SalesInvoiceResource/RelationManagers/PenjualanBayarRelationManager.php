@@ -2,17 +2,21 @@
 
 namespace App\Filament\PointOfSale\Resources\SalesInvoiceResource\RelationManagers;
 
+use App\Models\Penjualan;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Facades\DB;
 
 class PenjualanBayarRelationManager extends RelationManager
 {
     protected static string $relationship = 'penjualanBayar';
+    protected static ?string $title = 'Pembayaran';
 
     public function form(Form $form): Form
     {
@@ -26,16 +30,28 @@ class PenjualanBayarRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
+        $penjualan = DB::select('select toko_griyanaura.f_getsisatagihanpenjualan(?) as sisatagihan',[$this->getOwnerRecord()->transaksi_no])[0];
         return $table
             ->recordTitleAttribute('nominal')
             ->columns([
-                Tables\Columns\TextColumn::make('nominal'),
+                Tables\Columns\TextColumn::make('nominal')
+                    ->formatStateUsing(function ($record) {
+                        return 'Rp' . \number_format($record->nominal + $record->kembalian, 0, ',', '.');
+                    }),
+                Tables\Columns\TextColumn::make('kembalian')
+                    ->formatStateUsing(function ($state) {
+                        return 'Rp' . \number_format($state, 0, ',', '.');
+                    })
             ])
             ->filters([
                 //
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make(),
+                Tables\Actions\CreateAction::make()
+                    ->icon('heroicon-m-plus')
+                    ->label('Tambah pembayaran')
+                    ->disabled(!($penjualan->sisatagihan > 0))
+                    ->modalWidth('md'),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
