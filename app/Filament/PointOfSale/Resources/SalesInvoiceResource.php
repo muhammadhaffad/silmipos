@@ -33,7 +33,7 @@ class SalesInvoiceResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Invoice Penjualan';
 
-    protected static ?string $navigationIcon = 'heroicon-s-shopping-bag';
+    protected static ?string $navigationIcon = 'fas-bag-shopping';
 
     protected static ?string $navigationLabel = 'Penjualan';
 
@@ -155,8 +155,12 @@ class SalesInvoiceResource extends Resource
                 $action->icon('heroicon-m-adjustments-horizontal');
             })
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make()
+                    ->iconButton()
+                    ->tooltip('Lihat'),
+                Tables\Actions\EditAction::make()
+                    ->iconButton()
+                    ->tooltip('Ubah'),
                 Tables\Actions\Action::make('print')
                     ->tooltip('Print receipt')
                     ->icon('heroicon-m-printer')

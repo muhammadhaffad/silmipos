@@ -130,6 +130,7 @@ class SalesInvoiceService
             'tanggal' => 'required|date_format:Y-m-d H:i:s',
             'diskon' => 'nullable|numeric',
             'catatan' => 'nullable|string',
+            'nama_customer' => 'nullable|string',
             'penjualanDetail' => 'required|array',
             'penjualanDetail.*.kode_produkvarian' => 'nullable|string',
             'penjualanDetail.*.qty' => 'required|numeric',
@@ -147,7 +148,8 @@ class SalesInvoiceService
                 'id_kontak' => $request['id_kontak'],
                 'tanggal' => $request['tanggal'],
                 'diskon' => $request['diskon'],
-                'catatan' => $request['catatan']
+                'catatan' => $request['catatan'],
+                'nama_customer' => @$request['nama_customer']
             ]);
             $penjualan->refresh();
             $oldItem = $penjualan->penjualanDetail->keyBy('id_penjualandetail');

@@ -5,11 +5,13 @@ namespace App\Filament\PointOfSale\Resources\SalesInvoiceResource\Pages;
 use App\Filament\PointOfSale\Resources\SalesInvoiceResource;
 use App\Models\Gudang;
 use App\Models\ProdukVarian;
+use App\Services\Core\Sales\SalesInvoiceService;
 use Awcodes\TableRepeater\Components\TableRepeater;
 use Awcodes\TableRepeater\Header;
 use Filament\Actions;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Section;
@@ -17,6 +19,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Facades\FilamentView;
@@ -30,6 +33,13 @@ class EditSalesInvoice extends EditRecord
     protected static string $resource = SalesInvoiceResource::class;
     protected static ?string $title = 'Ubah Invoice Penjualan';
     public static string|Alignment $formActionsAlignment = Alignment::End;
+    public array $deletedItems = [];
+    protected $salesInvoiceService;
+
+    public function __construct()
+    {
+        $this->salesInvoiceService = new SalesInvoiceService;
+    }
 
     protected function getCancelFormAction(): Action
     {
@@ -40,7 +50,7 @@ class EditSalesInvoice extends EditRecord
     protected function getSaveFormAction(): Action
     {
         return parent::getSaveFormAction()
-            ->label('Simpan Perubahan');   
+            ->label('Simpan Perubahan');
     }
 
     public function getBreadcrumb(): string
@@ -90,13 +100,17 @@ class EditSalesInvoice extends EditRecord
                 waitForElm(`.table-repeater-container`, function (elm) {
                     console.info(elm);
                 });
-            JS . '</script>'; 
+            JS . '</script>';
         });
     }
 
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('Kembali')
+                ->color('gray')
+                ->icon('heroicon-s-arrow-left')
+                ->url(url()->route('filament.pos.resources.sales-invoices.index')),
             Actions\DeleteAction::make()
                 ->label('Hapus Invoice')
                 ->icon('heroicon-s-trash'),
@@ -122,6 +136,7 @@ class EditSalesInvoice extends EditRecord
                                     ->relationship('kontak', 'nama')
                                     ->label('Pelanggan')
                                     ->disabled()
+                                    ->dehydrated()
                                     ->columnSpan(1),
                                 TextInput::make('nama_customer')
                                     ->label('Nama pelanggan')
@@ -129,7 +144,7 @@ class EditSalesInvoice extends EditRecord
                             ]),
                         \Filament\Forms\Components\Grid::make(3)
                             ->schema([
-                                DatePicker::make('tanggal')
+                                DateTimePicker::make('tanggal')
                                     ->label('Tanggal')
                                     ->disabled()
                                     ->columnStart([
@@ -137,11 +152,13 @@ class EditSalesInvoice extends EditRecord
                                         'lg' => 3
                                     ])
                                     ->displayFormat('d M Y')
+                                    ->dehydrated()
                                     ->locale('id')
                                     ->native(false),
-                                DatePicker::make('tanggaltempo')
+                                DateTimePicker::make('tanggaltempo')
                                     ->label('Tanggal jatuh tempo')
                                     ->disabled()
+                                    ->dehydrated()
                                     ->columnStart([
                                         'default' => 1,
                                         'lg' => 3
@@ -159,7 +176,7 @@ class EditSalesInvoice extends EditRecord
                                     $this->dispatchFormEvent('penjualanDetail::add_item');
                                 })
                         ]),
-                        TableRepeater::make('detail_penjualan')
+                        TableRepeater::make('penjualanDetail')
                             ->label('')
                             ->headers([
                                 Header::make('Produk')->width('220px;font-size: .875rem;'),
@@ -197,7 +214,8 @@ class EditSalesInvoice extends EditRecord
                                     ->native(false)
                                     ->disabled(function ($record) {
                                         return $record != null;
-                                    }),
+                                    })
+                                    ->dehydrated(),
                                 Select::make('id_gudang')
                                     ->view('filament.pages.point-of-sale.components.select')
                                     ->label('Gudang')
@@ -297,8 +315,8 @@ class EditSalesInvoice extends EditRecord
                                     function (Repeater $component): void {
                                         $newUuid = $component->generateUuid();
                                         $items = array_merge(
-                                          [$newUuid => []],
-                                          $component->getState(),
+                                            [$newUuid => []],
+                                            $component->getState(),
                                         );
                                         $component->state($items);
                                         $component->getChildComponentContainer($newUuid)->fill();
@@ -307,6 +325,15 @@ class EditSalesInvoice extends EditRecord
                                     }
                                 ]
                             ])
+                            ->deleteAction(function ($action) {
+                                $action->before(function ($state, $arguments) {
+                                    $deletedItem = $state[$arguments['item']];
+                                    if (isset($deletedItem['id_penjualandetail'])) {
+                                        $deletedItem['_remove_'] = 1;
+                                        $this->deletedItems[] = $deletedItem;
+                                    }
+                                });
+                            })
                             ->columnSpanFull(),
                         \Filament\Forms\Components\Grid::make(3)
                             ->schema([
@@ -316,7 +343,7 @@ class EditSalesInvoice extends EditRecord
                                         'lg' => 3
                                     ])
                                     ->content(function ($set, $get) {
-                                        $map = Arr::map($get('detail_penjualan'), function ($item) {
+                                        $map = Arr::map($get('penjualanDetail'), function ($item) {
                                             return $item['total'];
                                         });
                                         return 'Rp' . number_format(array_sum($map), 0, ',', '.');
@@ -345,22 +372,10 @@ class EditSalesInvoice extends EditRecord
                                         'lg' => 3
                                     ])
                                     ->content(function ($set, $get) {
-                                        $map = Arr::map($get('detail_penjualan'), function ($item) {
+                                        $map = Arr::map($get('penjualanDetail'), function ($item) {
                                             return $item['total'];
                                         });
-                                        return 'Rp' . number_format((int)(array_sum($map) * (1 - min((float)($get('diskon')), 100)/100)), 0, ',', '.');
-                                    })
-                                    ->extraAttributes([
-                                        'class' => 'text-end'
-                                    ])
-                                    ->inlineLabel(),
-                                Placeholder::make('Sisa tagihan')
-                                    ->columnStart([
-                                        'default' => 1,
-                                        'lg' => 3
-                                    ])
-                                    ->content(function ($get) {
-                                        return 'Rp' . number_format($get('sisatagihan'), 0, ',', '.');
+                                        return 'Rp' . number_format((int)(array_sum($map) * (1 - min((float)($get('diskon')), 100) / 100)), 0, ',', '.');
                                     })
                                     ->extraAttributes([
                                         'class' => 'text-end'
@@ -392,13 +407,6 @@ class EditSalesInvoice extends EditRecord
             ]);
     }
 
-    public function getRelationManagers(): array
-    {
-        return [
-            \App\Filament\PointOfSale\Resources\SalesInvoiceResource\RelationManagers\PenjualanBayarRelationManager::class
-        ];
-    }
-
     // protected function mutateFormDataBeforeFill(array $data): array
     // {
     //     dd($data);
@@ -406,7 +414,44 @@ class EditSalesInvoice extends EditRecord
 
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        dump($data);
-        return $record;
+        $penjualanDetail = array();
+        foreach ($data['penjualanDetail'] as $key => $item) {
+            $item['_remove_'] = 0;
+            if (isset($item['id_penjualandetail'])) {
+                $penjualanDetail[$item['id_penjualandetail']] = $item;
+            } else {
+                $item['id_penjualandetail'] = null;
+                $penjualanDetail['new_' . $key] = $item;
+            }
+        }
+        foreach ($this->deletedItems as $key => $item) {
+            if (isset($item['id_penjualandetail'])) {
+                $penjualanDetail[$item['id_penjualandetail']] = $item;
+            }
+        }
+        $data['penjualanDetail'] = $penjualanDetail;
+        try {
+            $invoice = $this->salesInvoiceService->updateSalesInvoice($this->record->id_penjualan, $data);
+            $this->fillForm();
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Notification::make()
+                ->title('422 Unprocessable Entity, please contact developer.')
+                ->danger()
+                ->send();
+            $this->halt();
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('500 Internal Server Error, please contact developer.')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+            $this->halt();
+        }
+        return $invoice;
     }
+
+    protected function getSavedNotificationTitle(): ?string
+    {
+        return 'Berhasil mengubah invoice penjualan.';
+    } 
 }

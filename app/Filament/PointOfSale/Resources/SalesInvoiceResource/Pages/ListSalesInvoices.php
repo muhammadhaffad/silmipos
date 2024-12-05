@@ -64,7 +64,7 @@ class ListSalesInvoices extends ListRecords
         return [
             Actions\CreateAction::make()
                 ->icon('heroicon-m-plus')
-                ->label('Penjualan'),
+                ->label('Buat Penjualan'),
         ];
     }
 }

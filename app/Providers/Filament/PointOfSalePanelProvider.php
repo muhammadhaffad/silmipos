@@ -61,7 +61,8 @@ class PointOfSalePanelProvider extends PanelProvider
             ->sidebarCollapsibleOnDesktop(function () {
                 return \request()->is('pos/cashier');
             })
-            ->viteTheme('resources/css/app.css');
+            ->viteTheme('resources/css/app.css')
+            ->readOnlyRelationManagersOnResourceViewPagesByDefault(false);
     }
 
     public function register() : void

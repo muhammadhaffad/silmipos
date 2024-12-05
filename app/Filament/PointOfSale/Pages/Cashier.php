@@ -182,6 +182,13 @@ class Cashier extends Page implements HasForms, HasTable
                 ->title('422 Unprocessable Entity, please contact developer.')
                 ->danger()
                 ->send();
+            $this->halt();
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('500 Internal Server Error, please contact developer.')
+                ->danger()
+                ->send();
+            $this->halt();
         }
     }
 
@@ -212,6 +219,7 @@ class Cashier extends Page implements HasForms, HasTable
                 ->body($th->getMessage())
                 ->danger()
                 ->send();
+            $this->halt();
         }
     }
 
@@ -231,6 +239,7 @@ class Cashier extends Page implements HasForms, HasTable
                 ->body($e->getMessage())
                 ->danger()
                 ->send();
+            $this->halt();
         }
     }
 
