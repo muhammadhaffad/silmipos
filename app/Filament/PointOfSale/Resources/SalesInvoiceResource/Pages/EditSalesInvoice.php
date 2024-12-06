@@ -10,7 +10,6 @@ use Awcodes\TableRepeater\Components\TableRepeater;
 use Awcodes\TableRepeater\Header;
 use Filament\Actions;
 use Filament\Actions\Action;
-use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
@@ -113,7 +112,10 @@ class EditSalesInvoice extends EditRecord
                 ->url(url()->route('filament.pos.resources.sales-invoices.index')),
             Actions\DeleteAction::make()
                 ->label('Hapus Invoice')
-                ->icon('heroicon-s-trash'),
+                ->icon('heroicon-s-trash')
+                ->action(function ($record) {
+                    $this->deleteSalesInvoice($record);
+                }),
         ];
     }
 
@@ -448,6 +450,23 @@ class EditSalesInvoice extends EditRecord
             $this->halt();
         }
         return $invoice;
+    }
+
+    protected function deleteSalesInvoice($record) {
+        try {
+            $this->salesInvoiceService->deleteSalesInvoice($record->id_penjualan);
+            Notification::make()
+                ->title('Berhasil menghapus invoice penjualan')
+                ->success()
+                ->send();
+            \redirect()->route('filament.pos.resources.sales-invoices.index');
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Gagal menghapus invoice penjualan')
+                ->body($e->getMessage())
+                ->warning()
+                ->send();
+        }
     }
 
     protected function getSavedNotificationTitle(): ?string

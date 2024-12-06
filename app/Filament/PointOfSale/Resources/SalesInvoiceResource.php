@@ -5,6 +5,7 @@ namespace App\Filament\PointOfSale\Resources;
 use App\Filament\PointOfSale\Resources\SalesInvoiceResource\Pages;
 use App\Filament\PointOfSale\Resources\SalesInvoiceResource\RelationManagers;
 use App\Models\Penjualan;
+use App\Services\Core\Sales\SalesInvoiceService;
 use Filament\Forms;
 use Filament\Forms\Components\Actions;
 use Filament\Forms\Components\Actions\Action;
@@ -16,6 +17,7 @@ use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
@@ -36,6 +38,13 @@ class SalesInvoiceResource extends Resource
     protected static ?string $navigationIcon = 'fas-bag-shopping';
 
     protected static ?string $navigationLabel = 'Penjualan';
+
+    protected $salesInvoiceService;
+
+    public function __construct()
+    {
+        $this->salesInvoiceService = new SalesInvoiceService;
+    }
 
     public static function form(Form $form): Form
     {
@@ -161,7 +170,14 @@ class SalesInvoiceResource extends Resource
                 Tables\Actions\EditAction::make()
                     ->iconButton()
                     ->tooltip('Ubah'),
+                Tables\Actions\DeleteAction::make()
+                    ->iconButton()
+                    ->tooltip('Hapus')
+                    ->action(function ($record, $livewire) {
+                        app($livewire->getResource())->deleteSalesInvoice($record);
+                    }),
                 Tables\Actions\Action::make('print')
+                    ->color('warning')
                     ->tooltip('Print receipt')
                     ->icon('heroicon-m-printer')
                     ->iconButton()
@@ -194,9 +210,15 @@ class SalesInvoiceResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->requiresConfirmation()
+                        ->label('Hapus Penjualan')
+                        ->action(function ($records, $livewire) {
+                            app($livewire->getResource())->deleteBulkSalesInvoice($records);
+                        }),
                 ]),
-            ]);
+            ])
+            ->selectCurrentPageOnly();
     }
 
     public static function getEloquentQuery(): Builder
@@ -219,5 +241,46 @@ class SalesInvoiceResource extends Resource
             'edit' => Pages\EditSalesInvoice::route('/{record}/edit'),
             'view' => Pages\ViewSalesInvoice::route('/{record}')
         ];
+    }
+
+    protected function deleteSalesInvoice($record) {
+        try {
+            $this->salesInvoiceService->deleteSalesInvoice($record->id_penjualan);
+            Notification::make()
+                ->title('Berhasil menghapus invoice penjualan')
+                ->success()
+                ->send();
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Gagal menghapus invoice penjualan')
+                ->body($e->getMessage())
+                ->warning()
+                ->send();
+        }
+    }
+
+    protected function deleteBulkSalesInvoice($records) {
+        $fails = 0;
+        $success = 0;
+        foreach ($records as $record) {
+            try {
+                $this->salesInvoiceService->deleteSalesInvoice($record->id_penjualan);
+                $success++;
+            } catch (\Exception $e) {
+                $fails++;
+            }
+        }
+        if ($fails > 0) {
+            Notification::make()
+                ->title("Terdapat $success item berhasil dihapus.")
+                ->body("$fails item gagal dihapus.")
+                ->warning()
+                ->send();
+        } else {
+            Notification::make()
+                ->title('Semua item berhasil dihapus.')
+                ->success()
+                ->send();
+        }
     }
 }

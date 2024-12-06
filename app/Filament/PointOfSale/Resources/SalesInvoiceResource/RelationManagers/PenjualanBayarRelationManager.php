@@ -3,8 +3,10 @@
 namespace App\Filament\PointOfSale\Resources\SalesInvoiceResource\RelationManagers;
 
 use App\Models\Penjualan;
+use App\Services\Core\Sales\SalesPaymentService;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Support\Enums\Alignment;
 use Filament\Tables;
@@ -18,10 +20,11 @@ class PenjualanBayarRelationManager extends RelationManager
 {
     protected static string $relationship = 'penjualanBayar';
     protected static ?string $title = 'Pembayaran';
+    protected $salesPaymentService;
 
-    protected function storeSalesPayment($data, $model) {
-        dump($model);
-        return [];
+    public function __construct()
+    {
+        $this->salesPaymentService = new SalesPaymentService;
     }
 
     public function form(Form $form): Form
@@ -75,14 +78,38 @@ class PenjualanBayarRelationManager extends RelationManager
                     ->modalFooterActionsAlignment(Alignment::End)
                     ->createAnother(false)
                     ->modalCancelActionLabel('Batal')
-                    ->modalSubmitActionLabel('Simpan')
+                    ->modalSubmitActionLabel('Bayar')
                     ->modalHeading('Tambah Pembayaran')
-                    ->using(function ($data, $model) {
-                        $this->storeSalesPayment($data, $model);
+                    ->action(function ($data, $model) {
+                        $this->storeSalesInvoicePayment($data, $model);
+                    })
+                    ->after(function ($livewire) { 
+                        $livewire->dispatch('refreshFormPenjualan');
                     }),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->modalWidth('md')
+                    ->modalHeading('Ubah nominal bayar')
+                    ->modalCancelActionLabel('Batal')
+                    ->modalSubmitActionLabel('Simpan')
+                    ->modalFooterActionsAlignment(Alignment::End)
+                    ->form([
+                        Forms\Components\TextInput::make('nominal')
+                            ->formatStateUsing(function ($get) {
+                                return $get('nominal') + $get('kembalian');
+                            })
+                            ->required()
+                            ->maxLength(255)
+                            ->columnSpanFull()
+                            ->prefix('Rp')
+                    ])
+                    ->action(function ($data, $model, $record) {
+                        $this->updateSalesInvoicePayment($data, $model, $record);
+                    })
+                    ->after(function ($livewire) { 
+                        $livewire->dispatch('refreshFormPenjualan');
+                    }),
                 Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
@@ -93,5 +120,65 @@ class PenjualanBayarRelationManager extends RelationManager
             ->emptyStateHeading('Belum ada pembayaran')
             ->emptyStateDescription('Silahkan buat pembayaran terlebih dahulu')
             ->modelLabel('pembayaran');
+    }
+
+    protected function updateSalesInvoicePayment($data, $model, $record) {
+        $record->load('penjualanPembayaran');
+        $payment = $record->penjualanPembayaran;
+        $data = [
+            'tanggal' => $payment->tanggal,
+            'catatan' => null,
+            'penjualanAlokasiPembayaran' => [
+                [
+                    'id_penjualanalokasipembayaran' => $record->id_penjualanalokasipembayaran,
+                    'id_penjualan' => (string)$this->getOwnerRecord()->id_penjualan,
+                    'nominalbayar' => (int)$data['nominal'],
+                    '_remove_' => 0
+                ],
+            ],
+            'total' => (int)$data['nominal']
+        ];
+        try {
+            $payment = $this->salesPaymentService->updatePayment($payment->id_penjualanpembayaran, $data);
+            Notification::make()
+                ->title('Sukses mengubah nominal pembayaran')
+                ->success()
+                ->send();
+            return $payment->penjualanAlokasiPembayaran->first();
+        } catch (\Exception $th) {
+            Notification::make()
+                ->title('Internal Server Error')
+                ->body($th->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+    protected function storeSalesInvoicePayment($data, $model) {
+        $data = [
+            'id_kontak' => $this->getOwnerRecord()->id_kontak,
+            'tanggal' => \date('Y-m-d H:i:s'),
+            'catatan' => null,
+            'penjualanAlokasiPembayaran' => [
+                [
+                    'id_penjualan' => (string)$this->getOwnerRecord()->id_penjualan,
+                    'nominalbayar' => (int)$data['nominal']
+                ],
+            ],
+            'total' => (int)$data['nominal']
+        ];
+        try {
+            $payment = $this->salesPaymentService->storePayment($data);
+            Notification::make()
+                ->title('Sukses melakukan pembayaran')
+                ->success()
+                ->send();
+            return $payment->penjualanAlokasiPembayaran->first();
+        } catch (\Exception $th) {
+            Notification::make()
+                ->title('Internal Server Error')
+                ->body($th->getMessage())
+                ->danger()
+                ->send();
+        }
     }
 }

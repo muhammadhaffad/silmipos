@@ -16,6 +16,7 @@ class ViewSalesInvoice extends ViewRecord
 {
     protected static string $resource = SalesInvoiceResource::class;
     protected static ?string $title = 'Detail Invoice Penjualan';
+    protected $listeners = ['refreshFormPenjualan' => 'refreshForm'];
 
     public function mount(int|string $record): void
     {
@@ -187,5 +188,9 @@ class ViewSalesInvoice extends ViewRecord
         return [
             \App\Filament\PointOfSale\Resources\SalesInvoiceResource\RelationManagers\PenjualanBayarRelationManager::class
         ];
+    }
+
+    public function refreshForm() {
+        $this->mount($this->record->id_penjualan);
     }
 }

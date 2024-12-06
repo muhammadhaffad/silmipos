@@ -18,4 +18,9 @@ class PenjualanAlokasiPembayaran extends Model
     {
         return $this->hasOne(Penjualan::class, 'id_penjualan', 'id_penjualaninvoice');
     }
+
+    public function penjualanPembayaran()
+    {
+        return $this->belongsTo(PenjualanPembayaran::class, 'id_penjualanpembayaran', 'id_penjualanpembayaran');
+    }
 }
