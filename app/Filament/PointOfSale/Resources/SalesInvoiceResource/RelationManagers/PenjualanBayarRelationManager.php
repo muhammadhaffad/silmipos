@@ -57,6 +57,12 @@ class PenjualanBayarRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute('nominal')
             ->columns([
+                Tables\Columns\TextColumn::make('tanggal')
+                    ->label('Tanggal Pembayaran')
+                    ->formatStateUsing(function ($state) {
+                        \Carbon\Carbon::setLocale('id');
+                        return \Carbon\Carbon::parse($state)->translatedFormat('D, d F Y H:i:s');
+                    }),
                 Tables\Columns\TextColumn::make('nominal')
                     ->formatStateUsing(function ($record) {
                         return 'Rp' . \number_format($record->nominal + $record->kembalian, 0, ',', '.');
@@ -110,7 +116,14 @@ class PenjualanBayarRelationManager extends RelationManager
                     ->after(function ($livewire) { 
                         $livewire->dispatch('refreshFormPenjualan');
                     }),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->modalHeading('Delete Payment')
+                    ->action(function ($record) {
+                        $this->deleteSalesInvoicePayment($record);
+                    })
+                    ->after(function ($livewire) { 
+                        $livewire->dispatch('refreshFormPenjualan');
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -122,6 +135,34 @@ class PenjualanBayarRelationManager extends RelationManager
             ->modelLabel('pembayaran');
     }
 
+    protected function storeSalesInvoicePayment($data, $model) {
+        $data = [
+            'id_kontak' => $this->getOwnerRecord()->id_kontak,
+            'tanggal' => \date('Y-m-d H:i:s'),
+            'catatan' => null,
+            'penjualanAlokasiPembayaran' => [
+                [
+                    'id_penjualan' => (string)$this->getOwnerRecord()->id_penjualan,
+                    'nominalbayar' => (int)$data['nominal']
+                ],
+            ],
+            'total' => (int)$data['nominal']
+        ];
+        try {
+            $payment = $this->salesPaymentService->storePayment($data);
+            Notification::make()
+                ->title('Sukses melakukan pembayaran')
+                ->success()
+                ->send();
+            return $payment->penjualanAlokasiPembayaran->first();
+        } catch (\Exception $th) {
+            Notification::make()
+                ->title('Internal Server Error')
+                ->body($th->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
     protected function updateSalesInvoicePayment($data, $model, $record) {
         $record->load('penjualanPembayaran');
         $payment = $record->penjualanPembayaran;
@@ -153,23 +194,13 @@ class PenjualanBayarRelationManager extends RelationManager
                 ->send();
         }
     }
-    protected function storeSalesInvoicePayment($data, $model) {
-        $data = [
-            'id_kontak' => $this->getOwnerRecord()->id_kontak,
-            'tanggal' => \date('Y-m-d H:i:s'),
-            'catatan' => null,
-            'penjualanAlokasiPembayaran' => [
-                [
-                    'id_penjualan' => (string)$this->getOwnerRecord()->id_penjualan,
-                    'nominalbayar' => (int)$data['nominal']
-                ],
-            ],
-            'total' => (int)$data['nominal']
-        ];
+    protected function deleteSalesInvoicePayment($record) {
+        $record->load('penjualanPembayaran');
+        $payment = $record->penjualanPembayaran;
         try {
-            $payment = $this->salesPaymentService->storePayment($data);
+            $payment = $this->salesPaymentService->deletePayment($payment->id_penjualanpembayaran);
             Notification::make()
-                ->title('Sukses melakukan pembayaran')
+                ->title('Sukses menghapus nominal pembayaran')
                 ->success()
                 ->send();
             return $payment->penjualanAlokasiPembayaran->first();

@@ -85,30 +85,31 @@ class SalesInvoiceResource extends Resource
                         })
                         ->orWhere('nama_customer', 'ilike', "%{$search}%");
                     }),
-                TextColumn::make('sisatagihan')
+                TextColumn::make('status')
                     ->label('Status')
-                    ->formatStateUsing(function ($state) {
-                        if ($state > 0) {
-                            return 'Belum Lunas';
+                    ->default(function ($record) {
+                        if ($record->sisatagihan > 0) {
+                            return 'BELUM LUNAS';
                         } else {
-                            return 'Lunas';
+                            return 'LUNAS';
                         }
                     })
                     ->badge()
-                    ->color(function ($state) {
-                        if ($state > 0) {
+                    ->color(function ($record) {
+                        if ($record->sisatagihan > 0) {
                             return 'danger';
                         } else {
                             return 'success';
                         }
-                    })
-                    ->tooltip(function ($state) {
-                        if ($state > 0) {
-                            return 'Sisa tagihan: Rp' . number_format($state, 0, ',', '.');
-                        }
                     }),
                 TextColumn::make('catatan')
                     ->default('-'),
+                TextColumn::make('sisatagihan')
+                    ->label('Sisa tagihan')
+                    ->formatStateUsing(function ($state) {
+                        return 'Rp' . number_format($state, 0, ',', '.');
+                    })
+                    ->sortable(),
                 TextColumn::make('grandtotal')
                     ->label('Grand total')
                     ->formatStateUsing(function ($state) {

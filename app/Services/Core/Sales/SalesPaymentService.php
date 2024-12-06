@@ -241,6 +241,7 @@ class SalesPaymentService
             $pembayaran->delete();
             Transaksi::where('id_transaksi', $pembayaran->id_transaksi)->delete();
             DB::commit();   
+            return $pembayaran;
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
